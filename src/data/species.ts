@@ -1,0 +1,22 @@
+export const speciesList: string[] = [
+  "Blåmes",
+  "Grönfink",
+  "Koltrast",
+  "Lövsångare",
+  "Rådjur",
+  "Älg",
+  "Räv",
+  "Gråsparv",
+  "Sädesärla",
+  "Skata",
+  "Björktrast",
+  "Talgoxe",
+  "Sidensvans",
+  "Stare",
+  "Trana",
+  "Ringduva",
+  "Korp",
+  "Ormvråk",
+  "Bofink",
+  "Näktergal"
+];

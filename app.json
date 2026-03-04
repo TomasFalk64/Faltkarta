@@ -1,0 +1,33 @@
+{
+  "expo": {
+    "name": "Fältkarta",
+    "slug": "faltkarta",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Fältkarta behöver GPS för att visa din position på kartan.",
+        "NSPhotoLibraryUsageDescription": "Fältkarta behöver åtkomst till bilder för att lägga till foton till observationer."
+      }
+    },
+    "android": {
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "READ_EXTERNAL_STORAGE"
+      ]
+    },
+    "web": {
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-document-picker",
+      "expo-location"
+    ]
+  }
+}
