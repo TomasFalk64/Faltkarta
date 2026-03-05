@@ -163,6 +163,17 @@ export function MapListScreen({ navigation }: Props) {
             </Pressable>
             <Pressable
               style={styles.menuActionBtn}
+              onPress={() => {
+                if (!menuMap) return;
+                const selected = menuMap;
+                setMenuMap(null);
+                navigation.navigate("Export", { mapId: selected.id });
+              }}
+            >
+              <Text style={styles.menuActionText}>Exportera</Text>
+            </Pressable>
+            <Pressable
+              style={styles.menuActionBtn}
               onPress={async () => {
                 if (!menuMap) return;
                 const selected = menuMap;
@@ -170,7 +181,7 @@ export function MapListScreen({ navigation }: Props) {
                 await onShareMap(selected);
               }}
             >
-              <Text style={styles.menuActionText}>Exportera</Text>
+              <Text style={styles.menuActionText}>Dela GeoTIFF</Text>
             </Pressable>
             <Pressable
               style={[styles.menuActionBtn, styles.menuDangerBtn]}

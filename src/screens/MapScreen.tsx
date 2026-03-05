@@ -5,26 +5,18 @@ import { RootStackParamList } from "../navigation/types";
 import { MapCanvas } from "../components/MapCanvas";
 import { ObservationModal } from "../components/ObservationModal";
 import { useGps } from "../hooks/useGps";
-import {
-  addObservation,
-  loadMaps,
-  loadObservationsForMap,
-  loadSettings,
-  upsertMap,
-} from "../storage/storage";
+import { addObservation, loadMaps, loadObservationsForMap, loadSettings } from "../storage/storage";
 import { LatLon, MapItem, Observation, PolygonObservation, PointObservation } from "../types/models";
 import { distanceMeters } from "../services/coords";
-import { ensureGeoTiffPreview } from "../services/files";
 import { makeId } from "../utils/id";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Map">;
 
-export function MapScreen({ route, navigation }: Props) {
+export function MapScreen({ route }: Props) {
   const { mapId } = route.params;
   const [map, setMap] = useState<MapItem | null>(null);
   const [observations, setObservations] = useState<Observation[]>([]);
   const [centerCoord, setCenterCoord] = useState<LatLon>({ lat: 62.0, lon: 16.0 });
-  const [followMe, setFollowMe] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [rotationResetSignal, setRotationResetSignal] = useState(0);
   const [showPointModal, setShowPointModal] = useState(false);
@@ -44,15 +36,7 @@ export function MapScreen({ route, navigation }: Props) {
         loadSettings(),
       ]);
       const current = maps.find((m) => m.id === mapId) ?? null;
-      if (current) {
-        const withPreview = await ensureGeoTiffPreview(current);
-        if (withPreview.thumbnailUri && !current.thumbnailUri) {
-          await upsertMap(withPreview);
-        }
-        setMap(withPreview);
-      } else {
-        setMap(null);
-      }
+      setMap(current);
       setObservations(obs);
       setGpsPingSeconds(settings.gpsPingSeconds);
       if (current?.bbox) {
@@ -70,29 +54,16 @@ export function MapScreen({ route, navigation }: Props) {
     if (lastGpsRef.current) {
       const dtSec = (now - lastGpsRef.current.ts) / 1000;
       const jump = distanceMeters(lastGpsRef.current.pos, gpsPos);
-      if (followMe && dtSec < 10 && jump > 80) {
-        setFollowMe(false);
-        showToast("Folj mig av");
-      }
+      if (dtSec < 2 && jump > 200) return;
     }
     lastGpsRef.current = { pos: gpsPos, ts: now };
-    if (followMe) {
-      setCenterCoord(gpsPos);
-    }
-  }, [gpsPos, followMe]);
+  }, [gpsPos]);
 
   const crosshairPos = centerCoord;
 
   function showToast(message: string) {
     setToast(message);
     setTimeout(() => setToast(null), 1500);
-  }
-
-  function onManualPan() {
-    if (followMe) {
-      setFollowMe(false);
-      showToast("Folj mig av");
-    }
   }
 
   function onCenterToGps() {
@@ -179,29 +150,20 @@ export function MapScreen({ route, navigation }: Props) {
         onPanGeoDelta={(dLat, dLon) =>
           setCenterCoord((prev) => ({ lat: prev.lat + dLat, lon: prev.lon + dLon }))
         }
-        onManualPan={onManualPan}
+        onManualPan={() => {}}
         resetRotationSignal={rotationResetSignal}
       />
 
       <View style={styles.northWrap}>
         <Pressable style={styles.northBtn} onPress={() => setRotationResetSignal((s) => s + 1)}>
-          <Text style={styles.northText}>↑</Text>
+          <View style={styles.compassIcon}>
+            <View style={styles.compassNeedleUp} />
+            <View style={styles.compassNeedleDown} />
+          </View>
         </Pressable>
       </View>
 
       <View style={styles.controls}>
-        <Pressable style={styles.mainBtn} onPress={onCenterToGps}>
-          <Text style={styles.mainBtnText}>Centrera</Text>
-        </Pressable>
-        <Pressable
-          style={[styles.mainBtn, followMe ? styles.followOn : styles.followOff]}
-          onPress={() => setFollowMe((v) => !v)}
-        >
-          <Text style={styles.mainBtnText}>{followMe ? "Foljer" : "Folj mig"}</Text>
-        </Pressable>
-        <Pressable style={styles.mainBtn} onPress={() => setShowPointModal(true)}>
-          <Text style={styles.mainBtnText}>Registrera punkt</Text>
-        </Pressable>
         <Pressable
           style={[styles.mainBtn, polygonMode ? styles.polyOn : undefined]}
           onPress={() => {
@@ -209,10 +171,13 @@ export function MapScreen({ route, navigation }: Props) {
             if (polygonMode) setDraftPolygon([]);
           }}
         >
-          <Text style={styles.mainBtnText}>Polygonlage</Text>
+          <Text style={styles.mainBtnIcon}>⬠</Text>
         </Pressable>
-        <Pressable style={styles.mainBtn} onPress={() => navigation.navigate("Export", { mapId })}>
-          <Text style={styles.mainBtnText}>Export</Text>
+        <Pressable style={styles.mainBtn} onPress={onCenterToGps}>
+          <Text style={styles.mainBtnIcon}>↗</Text>
+        </Pressable>
+        <Pressable style={styles.mainBtn} onPress={() => setShowPointModal(true)}>
+          <Text style={styles.mainBtnIcon}>📍</Text>
         </Pressable>
       </View>
 
@@ -258,66 +223,74 @@ export function MapScreen({ route, navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#000",
-  },
-  centered: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  northWrap: {
-    position: "absolute",
-    right: 10,
-    top: 10,
-  },
+  container: { flex: 1, backgroundColor: "#000" },
+  centered: { flex: 1, justifyContent: "center", alignItems: "center" },
+  northWrap: { position: "absolute", right: 10, top: 10 },
   northBtn: {
-    backgroundColor: "rgba(0,0,0,0.62)",
+    backgroundColor: "#005f73",
     borderRadius: 8,
     paddingVertical: 8,
     paddingHorizontal: 10,
     alignItems: "center",
     minWidth: 58,
   },
-  northText: {
-    color: "#fff",
-    fontSize: 26,
-    fontWeight: "800",
+  compassIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: "#ffffff",
+    backgroundColor: "#f8f8f8",
+    alignItems: "center",
+    justifyContent: "center",
+    position: "relative",
+  },
+  compassNeedleUp: {
+    width: 0,
+    height: 0,
+    borderLeftWidth: 6,
+    borderRightWidth: 6,
+    borderBottomWidth: 11,
+    borderLeftColor: "transparent",
+    borderRightColor: "transparent",
+    borderBottomColor: "#d62828",
+    position: "absolute",
+    top: 2,
+  },
+  compassNeedleDown: {
+    width: 0,
+    height: 0,
+    borderLeftWidth: 6,
+    borderRightWidth: 6,
+    borderTopWidth: 11,
+    borderLeftColor: "transparent",
+    borderRightColor: "transparent",
+    borderTopColor: "#ffffff",
+    position: "absolute",
+    bottom: 2,
   },
   controls: {
     position: "absolute",
-    left: 8,
-    right: 8,
-    bottom: 10,
-    flexDirection: "row",
-    flexWrap: "wrap",
+    right: 10,
+    top: 78,
+    flexDirection: "column",
     gap: 8,
+    alignItems: "center",
   },
   mainBtn: {
     backgroundColor: "#005f73",
     borderRadius: 10,
-    paddingVertical: 11,
-    paddingHorizontal: 10,
+    width: 58,
+    height: 50,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  followOn: {
-    backgroundColor: "#0a9396",
-  },
-  followOff: {
-    backgroundColor: "#9b2226",
-  },
-  polyOn: {
-    backgroundColor: "#ca6702",
-  },
-  mainBtnText: {
-    color: "#fff",
-    fontWeight: "700",
-    fontSize: 13,
-  },
+  polyOn: { backgroundColor: "#ca6702" },
+  mainBtnIcon: { color: "#fff", fontWeight: "700", fontSize: 20, lineHeight: 22 },
   secondaryControls: {
     position: "absolute",
-    right: 8,
-    bottom: 76,
+    right: 76,
+    top: 78,
     gap: 8,
     alignItems: "flex-end",
   },
@@ -327,10 +300,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 8,
   },
-  secondaryText: {
-    color: "#fff",
-    fontWeight: "600",
-  },
+  secondaryText: { color: "#fff", fontWeight: "600" },
   toast: {
     position: "absolute",
     alignSelf: "center",
@@ -340,10 +310,7 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
     borderRadius: 8,
   },
-  toastText: {
-    color: "#fff",
-    fontWeight: "600",
-  },
+  toastText: { color: "#fff", fontWeight: "600" },
   gpsError: {
     position: "absolute",
     top: 46,
@@ -353,8 +320,5 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 8,
   },
-  gpsErrorText: {
-    color: "#fff",
-    fontWeight: "700",
-  },
+  gpsErrorText: { color: "#fff", fontWeight: "700" },
 });

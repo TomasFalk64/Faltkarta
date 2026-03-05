@@ -1,8 +1,7 @@
-import React, { useMemo } from "react";
-import { Image, StyleSheet, Text, View } from "react-native";
+import React, { useMemo, useRef, useState } from "react";
+import { Image, PanResponder, StyleSheet, Text, View } from "react-native";
 import Svg, { Circle, Polyline } from "react-native-svg";
 import { LatLon, MapItem, Observation } from "../types/models";
-import { latLonToImagePoint } from "../services/mapProjection";
 
 type Props = {
   map: MapItem;
@@ -20,17 +19,87 @@ type Props = {
 const VIRTUAL_IMAGE_WIDTH = 1200;
 const VIRTUAL_IMAGE_HEIGHT = 1200;
 
-export function MapCanvas({ map, imageUri, gpsPos, observations, draftPolygon }: Props) {
+const METERS_PER_LAT_DEG = 111320;
+const METERS_PER_PIXEL = 1.5;
+
+export function MapCanvas({
+  map,
+  imageUri,
+  centerCoord,
+  gpsPos,
+  observations,
+  draftPolygon,
+  onPanGeoDelta,
+  onManualPan,
+}: Props) {
   const pointMarkers = useMemo(() => observations.filter((o) => o.kind === "point"), [observations]);
   const polygonObs = useMemo(() => observations.filter((o) => o.kind === "polygon"), [observations]);
+  const [drag, setDrag] = useState({ x: 0, y: 0 });
+  const dragRef = useRef({ x: 0, y: 0 });
+  const anchorRef = useRef<LatLon>(centerCoord);
 
-  const gpsPoint = gpsPos
-    ? latLonToImagePoint(map, gpsPos, VIRTUAL_IMAGE_WIDTH, VIRTUAL_IMAGE_HEIGHT)
-    : null;
+  const anchorMetersPerLonDeg = Math.max(
+    1,
+    Math.abs(111320 * Math.cos((anchorRef.current.lat * Math.PI) / 180))
+  );
+
+  const mapShift = useMemo(() => {
+    const eastMeters = (centerCoord.lon - anchorRef.current.lon) * anchorMetersPerLonDeg;
+    const northMeters = (centerCoord.lat - anchorRef.current.lat) * METERS_PER_LAT_DEG;
+    return {
+      x: -eastMeters / METERS_PER_PIXEL,
+      y: northMeters / METERS_PER_PIXEL,
+    };
+  }, [anchorMetersPerLonDeg, centerCoord.lat, centerCoord.lon]);
+
+  const toLocalPoint = useMemo(() => {
+    return (p: LatLon) => {
+      const eastMeters = (p.lon - anchorRef.current.lon) * anchorMetersPerLonDeg;
+      const northMeters = (p.lat - anchorRef.current.lat) * METERS_PER_LAT_DEG;
+      return {
+        x: VIRTUAL_IMAGE_WIDTH / 2 + eastMeters / METERS_PER_PIXEL,
+        y: VIRTUAL_IMAGE_HEIGHT / 2 - northMeters / METERS_PER_PIXEL,
+      };
+    };
+  }, [anchorMetersPerLonDeg]);
+
+  const gpsPoint = gpsPos ? toLocalPoint(gpsPos) : null;
+
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponder: (_, gs) => Math.abs(gs.dx) > 2 || Math.abs(gs.dy) > 2,
+        onPanResponderMove: (_, gs) => {
+          const next = { x: gs.dx, y: gs.dy };
+          dragRef.current = next;
+          setDrag(next);
+        },
+        onPanResponderRelease: () => {
+          const dx = dragRef.current.x;
+          const dy = dragRef.current.y;
+          dragRef.current = { x: 0, y: 0 };
+          setDrag({ x: 0, y: 0 });
+          if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
+          onManualPan();
+          const eastMeters = -dx * METERS_PER_PIXEL;
+          const northMeters = dy * METERS_PER_PIXEL;
+          const deltaLon = eastMeters / anchorMetersPerLonDeg;
+          const deltaLat = northMeters / METERS_PER_LAT_DEG;
+          onPanGeoDelta(deltaLat, deltaLon);
+        },
+      }),
+    [anchorMetersPerLonDeg, onManualPan, onPanGeoDelta]
+  );
 
   return (
-    <View style={styles.wrapper}>
-      <View style={styles.layer}>
+    <View style={styles.wrapper} {...panResponder.panHandlers}>
+      <View
+        style={[
+          styles.layer,
+          { transform: [{ translateX: mapShift.x + drag.x }, { translateY: mapShift.y + drag.y }] },
+        ]}
+      >
         {imageUri ? (
           <Image source={{ uri: imageUri }} style={styles.image} resizeMode="cover" />
         ) : (
@@ -44,7 +113,7 @@ export function MapCanvas({ map, imageUri, gpsPos, observations, draftPolygon }:
           {polygonObs.map((obs) => {
             if (obs.kind !== "polygon") return null;
             const points = obs.wgs84
-              .map((p) => latLonToImagePoint(map, p, VIRTUAL_IMAGE_WIDTH, VIRTUAL_IMAGE_HEIGHT))
+              .map((p) => toLocalPoint(p))
               .map((p) => `${p.x},${p.y}`)
               .join(" ");
             return (
@@ -61,7 +130,7 @@ export function MapCanvas({ map, imageUri, gpsPos, observations, draftPolygon }:
           {draftPolygon.length > 1 && (
             <Polyline
               points={draftPolygon
-                .map((p) => latLonToImagePoint(map, p, VIRTUAL_IMAGE_WIDTH, VIRTUAL_IMAGE_HEIGHT))
+                .map((p) => toLocalPoint(p))
                 .map((p) => `${p.x},${p.y}`)
                 .join(" ")}
               stroke="#0a9396"
@@ -71,7 +140,7 @@ export function MapCanvas({ map, imageUri, gpsPos, observations, draftPolygon }:
           )}
 
           {draftPolygon.map((p, i) => {
-            const pt = latLonToImagePoint(map, p, VIRTUAL_IMAGE_WIDTH, VIRTUAL_IMAGE_HEIGHT);
+            const pt = toLocalPoint(p);
             return <Circle key={`draft-${i}`} cx={pt.x} cy={pt.y} r={5} fill="#0a9396" />;
           })}
         </Svg>
@@ -80,7 +149,7 @@ export function MapCanvas({ map, imageUri, gpsPos, observations, draftPolygon }:
 
         {pointMarkers.map((obs) => {
           if (obs.kind !== "point") return null;
-          const pt = latLonToImagePoint(map, obs.wgs84, VIRTUAL_IMAGE_WIDTH, VIRTUAL_IMAGE_HEIGHT);
+          const pt = toLocalPoint(obs.wgs84);
           return <View key={obs.id} style={[styles.pointDot, { left: pt.x - 5, top: pt.y - 5 }]} />;
         })}
       </View>

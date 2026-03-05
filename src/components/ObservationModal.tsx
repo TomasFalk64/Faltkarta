@@ -33,7 +33,7 @@ export function ObservationModal({ visible, title, onClose, onSave }: Props) {
   const suggestions = useMemo(() => {
     const q = species.trim().toLowerCase();
     if (!q) return [];
-    return speciesList.filter((s) => s.toLowerCase().includes(q)).slice(0, 6);
+    return speciesList.filter((s) => s.toLowerCase().startsWith(q)).slice(0, 3);
   }, [species]);
 
   async function addPhoto() {
