@@ -14,7 +14,7 @@ import {
 } from "../storage/storage";
 import { LatLon, MapItem, Observation, PolygonObservation, PointObservation } from "../types/models";
 import { distanceMeters } from "../services/coords";
-import { pickPreviewImageForMap } from "../services/files";
+import { ensureGeoTiffPreview } from "../services/files";
 import { makeId } from "../utils/id";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Map">;
@@ -45,7 +45,15 @@ export function MapScreen({ route, navigation }: Props) {
         loadSettings(),
       ]);
       const current = maps.find((m) => m.id === mapId) ?? null;
-      setMap(current);
+      if (current) {
+        const withPreview = await ensureGeoTiffPreview(current);
+        if (withPreview.thumbnailUri && !current.thumbnailUri) {
+          await upsertMap(withPreview);
+        }
+        setMap(withPreview);
+      } else {
+        setMap(null);
+      }
       setObservations(obs);
       setGpsPingSeconds(settings.gpsPingSeconds);
       if (current?.bbox) {
@@ -157,15 +165,6 @@ export function MapScreen({ route, navigation }: Props) {
     setDraftPolygon((prev) => [...prev, crosshairPos]);
   }
 
-  async function attachPreviewImage() {
-    if (!map) return;
-    const uri = await pickPreviewImageForMap(map.id);
-    if (!uri) return;
-    const updated = { ...map, thumbnailUri: uri };
-    await upsertMap(updated);
-    setMap(updated);
-  }
-
   if (!map) {
     return (
       <View style={styles.centered}>
@@ -230,9 +229,6 @@ export function MapScreen({ route, navigation }: Props) {
       </View>
 
       <View style={styles.secondaryControls}>
-        <Pressable style={styles.secondaryBtn} onPress={attachPreviewImage}>
-          <Text style={styles.secondaryText}>Koppla bakgrundsbild</Text>
-        </Pressable>
         {polygonMode && (
           <>
             <Pressable style={styles.secondaryBtn} onPress={addPolygonVertex}>
