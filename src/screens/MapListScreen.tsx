@@ -39,10 +39,14 @@ export function MapListScreen({ navigation }: Props) {
   );
 
   async function onImport() {
-    const item = await pickAndImportGeoTiff();
-    if (!item) return;
-    const next = await upsertMap(item);
-    setMaps(next);
+    try {
+      const item = await pickAndImportGeoTiff();
+      if (!item) return;
+      const next = await upsertMap(item);
+      setMaps(next);
+    } catch (error) {
+      Alert.alert("Importfel", String(error));
+    }
   }
 
   async function onShareMap(item: MapItem) {

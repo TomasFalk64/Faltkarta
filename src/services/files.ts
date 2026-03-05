@@ -1,4 +1,4 @@
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 import * as DocumentPicker from "expo-document-picker";
 import { Alert } from "react-native";
 import { MapItem } from "../types/models";
@@ -24,7 +24,7 @@ async function ensureDir(uri: string) {
 export async function pickAndImportGeoTiff(): Promise<MapItem | null> {
   await ensureDataDirs();
   const result = await DocumentPicker.getDocumentAsync({
-    type: ["image/tiff", "application/octet-stream", "*/*"],
+    type: "*/*",
     multiple: false,
     copyToCacheDirectory: true,
   });
