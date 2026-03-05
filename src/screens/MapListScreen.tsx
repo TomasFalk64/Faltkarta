@@ -25,6 +25,8 @@ export function MapListScreen({ navigation }: Props) {
   const [gpsPingSeconds, setGpsPingSeconds] = useState("3");
   const [renameMap, setRenameMap] = useState<MapItem | null>(null);
   const [renameValue, setRenameValue] = useState("");
+  const [showSettings, setShowSettings] = useState(false);
+  const [menuMap, setMenuMap] = useState<MapItem | null>(null);
 
   const refresh = useCallback(async () => {
     const [allMaps, settings] = await Promise.all([loadMaps(), loadSettings()]);
@@ -51,7 +53,7 @@ export function MapListScreen({ navigation }: Props) {
 
   async function onShareMap(item: MapItem) {
     if (!(await Sharing.isAvailableAsync())) {
-      Alert.alert("Delning", "Share sheet stöds inte på denna enhet.");
+      Alert.alert("Delning", "Share sheet stods inte pa denna enhet.");
       return;
     }
     await Sharing.shareAsync(item.fileUri, {
@@ -62,21 +64,7 @@ export function MapListScreen({ navigation }: Props) {
   }
 
   function onOpenMenu(item: MapItem) {
-    Alert.alert(item.name, "Välj åtgärd", [
-      { text: "Byt namn", onPress: () => openRename(item) },
-      { text: "Exportera", onPress: () => onShareMap(item) },
-      {
-        text: "Ta bort",
-        style: "destructive",
-        onPress: async () => {
-          await deleteIfExists(item.fileUri);
-          if (item.thumbnailUri) await deleteIfExists(item.thumbnailUri);
-          const next = await removeMap(item.id);
-          setMaps(next);
-        },
-      },
-      { text: "Avbryt", style: "cancel" },
-    ]);
+    setMenuMap(item);
   }
 
   function openRename(item: MapItem) {
@@ -106,26 +94,11 @@ export function MapListScreen({ navigation }: Props) {
 
   return (
     <View style={styles.container}>
-      <View style={styles.settingsCard}>
-        <Text style={styles.settingsTitle}>GPS ping-frekvens (sekunder)</Text>
-        <View style={styles.settingsRow}>
-          <TextInput
-            value={gpsPingSeconds}
-            onChangeText={setGpsPingSeconds}
-            style={styles.pingInput}
-            keyboardType="number-pad"
-          />
-          <Pressable style={styles.saveBtn} onPress={onSavePing}>
-            <Text style={styles.saveBtnText}>Spara</Text>
-          </Pressable>
-        </View>
-      </View>
-
       <FlatList
         data={maps}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
-        ListEmptyComponent={<Text style={styles.emptyText}>Inga kartor ännu. Tryck + för import.</Text>}
+        ListEmptyComponent={<Text style={styles.emptyText}>Inga kartor an nu. Tryck + for import.</Text>}
         renderItem={({ item }) => (
           <Pressable style={styles.mapRow} onPress={() => navigation.navigate("Map", { mapId: item.id })}>
             {item.thumbnailUri ? (
@@ -152,6 +125,10 @@ export function MapListScreen({ navigation }: Props) {
         <Text style={styles.fabText}>+</Text>
       </Pressable>
 
+      <Pressable style={styles.infoFab} onPress={() => setShowSettings(true)}>
+        <Text style={styles.infoFabText}>i</Text>
+      </Pressable>
+
       <Modal transparent visible={!!renameMap} onRequestClose={() => setRenameMap(null)} animationType="fade">
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
@@ -168,6 +145,82 @@ export function MapListScreen({ navigation }: Props) {
           </View>
         </View>
       </Modal>
+
+      <Modal transparent visible={!!menuMap} onRequestClose={() => setMenuMap(null)} animationType="fade">
+        <View style={styles.modalBackdrop}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setMenuMap(null)} />
+          <View style={styles.menuModalCard}>
+            <Text style={styles.modalTitle}>{menuMap?.name ?? "Karta"}</Text>
+            <Pressable
+              style={styles.menuActionBtn}
+              onPress={() => {
+                if (!menuMap) return;
+                setMenuMap(null);
+                openRename(menuMap);
+              }}
+            >
+              <Text style={styles.menuActionText}>Byt namn</Text>
+            </Pressable>
+            <Pressable
+              style={styles.menuActionBtn}
+              onPress={async () => {
+                if (!menuMap) return;
+                const selected = menuMap;
+                setMenuMap(null);
+                await onShareMap(selected);
+              }}
+            >
+              <Text style={styles.menuActionText}>Exportera</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.menuActionBtn, styles.menuDangerBtn]}
+              onPress={async () => {
+                if (!menuMap) return;
+                const selected = menuMap;
+                setMenuMap(null);
+                await deleteIfExists(selected.fileUri);
+                if (selected.thumbnailUri) await deleteIfExists(selected.thumbnailUri);
+                const next = await removeMap(selected.id);
+                setMaps(next);
+              }}
+            >
+              <Text style={styles.menuActionText}>Ta bort</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal transparent visible={showSettings} onRequestClose={() => setShowSettings(false)} animationType="fade">
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Installningar</Text>
+            <Text style={styles.settingsTitle}>GPS ping-frekvens (sekunder)</Text>
+            <View style={styles.settingsRow}>
+              <TextInput
+                value={gpsPingSeconds}
+                onChangeText={setGpsPingSeconds}
+                style={styles.pingInput}
+                keyboardType="number-pad"
+              />
+              <Pressable
+                style={styles.saveBtn}
+                onPress={async () => {
+                  await onSavePing();
+                  setShowSettings(false);
+                }}
+              >
+                <Text style={styles.saveBtnText}>Spara</Text>
+              </Pressable>
+            </View>
+            <Pressable
+              onPress={() => setShowSettings(false)}
+              style={[styles.modalBtn, styles.cancelBtn, styles.closeOnlyBtn]}
+            >
+              <Text style={styles.modalBtnText}>Stang</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -176,12 +229,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#f4f0e7",
-  },
-  settingsCard: {
-    margin: 12,
-    padding: 12,
-    borderRadius: 12,
-    backgroundColor: "#fff",
   },
   settingsTitle: {
     fontWeight: "700",
@@ -282,6 +329,25 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     marginTop: -1,
   },
+  infoFab: {
+    position: "absolute",
+    left: 20,
+    bottom: 20,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    borderWidth: 2,
+    borderColor: "#005f73",
+    backgroundColor: "#fff",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  infoFabText: {
+    color: "#005f73",
+    fontSize: 22,
+    fontWeight: "800",
+    lineHeight: 22,
+  },
   modalBackdrop: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.35)",
@@ -324,5 +390,30 @@ const styles = StyleSheet.create({
     color: "#fff",
     textAlign: "center",
     fontWeight: "700",
+  },
+  menuModalCard: {
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    padding: 12,
+    width: "86%",
+    alignSelf: "center",
+  },
+  menuActionBtn: {
+    backgroundColor: "#005f73",
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    marginTop: 8,
+  },
+  menuDangerBtn: {
+    backgroundColor: "#9b2226",
+  },
+  menuActionText: {
+    color: "#fff",
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  closeOnlyBtn: {
+    marginTop: 10,
   },
 });
