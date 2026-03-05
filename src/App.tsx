@@ -1,6 +1,7 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { NavigationContainer, DefaultTheme } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import { LogBox } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { MapListScreen } from "./screens/MapListScreen";
@@ -23,6 +24,12 @@ const theme = {
 };
 
 export default function App() {
+  useEffect(() => {
+    LogBox.ignoreLogs([
+      "[Reanimated] Reduced motion setting is enabled on this device.",
+    ]);
+  }, []);
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>

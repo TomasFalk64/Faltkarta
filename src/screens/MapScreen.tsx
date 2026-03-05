@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { RootStackParamList } from "../navigation/types";
@@ -26,7 +26,6 @@ export function MapScreen({ route, navigation }: Props) {
   const [centerCoord, setCenterCoord] = useState<LatLon>({ lat: 62.0, lon: 16.0 });
   const [followMe, setFollowMe] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
-  const [rotationDeg, setRotationDeg] = useState(0);
   const [rotationResetSignal, setRotationResetSignal] = useState(0);
   const [showPointModal, setShowPointModal] = useState(false);
   const [showPolygonModal, setShowPolygonModal] = useState(false);
@@ -83,11 +82,6 @@ export function MapScreen({ route, navigation }: Props) {
   }, [gpsPos, followMe]);
 
   const crosshairPos = centerCoord;
-
-  const topRightLabel = useMemo(
-    () => `${crosshairPos.lat.toFixed(5)}, ${crosshairPos.lon.toFixed(5)}`,
-    [crosshairPos]
-  );
 
   function showToast(message: string) {
     setToast(message);
@@ -186,18 +180,12 @@ export function MapScreen({ route, navigation }: Props) {
           setCenterCoord((prev) => ({ lat: prev.lat + dLat, lon: prev.lon + dLon }))
         }
         onManualPan={onManualPan}
-        onRotationChanged={setRotationDeg}
         resetRotationSignal={rotationResetSignal}
       />
 
-      <View style={styles.infoChip}>
-        <Text style={styles.infoText}>{topRightLabel}</Text>
-      </View>
-
       <View style={styles.northWrap}>
         <Pressable style={styles.northBtn} onPress={() => setRotationResetSignal((s) => s + 1)}>
-          <Text style={styles.northText}>N</Text>
-          <Text style={styles.northSub}>{Math.round(rotationDeg)}°</Text>
+          <Text style={styles.northText}>↑</Text>
         </Pressable>
       </View>
 
@@ -232,7 +220,7 @@ export function MapScreen({ route, navigation }: Props) {
         {polygonMode && (
           <>
             <Pressable style={styles.secondaryBtn} onPress={addPolygonVertex}>
-              <Text style={styles.secondaryText}>+ Lägg till punkt ({draftPolygon.length})</Text>
+              <Text style={styles.secondaryText}>+ Lagg till punkt ({draftPolygon.length})</Text>
             </Pressable>
             <Pressable style={styles.secondaryBtn} onPress={() => setShowPolygonModal(true)}>
               <Text style={styles.secondaryText}>Klar polygon</Text>
@@ -279,19 +267,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  infoChip: {
-    position: "absolute",
-    top: 10,
-    left: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    backgroundColor: "rgba(0,0,0,0.58)",
-    borderRadius: 8,
-  },
-  infoText: {
-    color: "#fff",
-    fontWeight: "600",
-  },
   northWrap: {
     position: "absolute",
     right: 10,
@@ -307,12 +282,8 @@ const styles = StyleSheet.create({
   },
   northText: {
     color: "#fff",
-    fontSize: 18,
+    fontSize: 26,
     fontWeight: "800",
-  },
-  northSub: {
-    color: "#fff",
-    fontSize: 11,
   },
   controls: {
     position: "absolute",

@@ -6,7 +6,6 @@ import {
   TextInput,
   StyleSheet,
   Pressable,
-  FlatList,
   Image,
   ScrollView,
 } from "react-native";
@@ -84,15 +83,11 @@ export function ObservationModal({ visible, title, onClose, onSave }: Props) {
             />
             {suggestions.length > 0 && (
               <View style={styles.suggestions}>
-                <FlatList
-                  data={suggestions}
-                  keyExtractor={(item) => item}
-                  renderItem={({ item }) => (
-                    <Pressable onPress={() => setSpecies(item)} style={styles.suggestionItem}>
-                      <Text>{item}</Text>
-                    </Pressable>
-                  )}
-                />
+                {suggestions.map((item) => (
+                  <Pressable key={item} onPress={() => setSpecies(item)} style={styles.suggestionItem}>
+                    <Text>{item}</Text>
+                  </Pressable>
+                ))}
               </View>
             )}
             <TextInput
