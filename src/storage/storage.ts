@@ -44,7 +44,10 @@ export async function loadObservationsByMapId(): Promise<Record<string, Observat
   if (!raw) {
     return {};
   }
-  return JSON.parse(raw) as Record<string, Observation[]>;
+  const parsed = JSON.parse(raw) as Record<string, Observation[]>;
+  return Object.fromEntries(
+    Object.entries(parsed).map(([mapId, list]) => [mapId, list.map(normalizeObservation)])
+  );
 }
 
 export async function saveObservationsByMapId(value: Record<string, Observation[]>) {
@@ -53,16 +56,44 @@ export async function saveObservationsByMapId(value: Record<string, Observation[
 
 export async function loadObservationsForMap(mapId: string): Promise<Observation[]> {
   const byMap = await loadObservationsByMapId();
-  return byMap[mapId] ?? [];
+  return (byMap[mapId] ?? []).map(normalizeObservation);
 }
 
 export async function addObservation(obs: Observation): Promise<Observation[]> {
   const byMap = await loadObservationsByMapId();
   const list = byMap[obs.mapId] ?? [];
-  const next = [obs, ...list];
+  const next = [normalizeObservation(obs), ...list.map(normalizeObservation)];
   byMap[obs.mapId] = next;
   await saveObservationsByMapId(byMap);
   return next;
+}
+
+export async function updateObservation(updated: Observation): Promise<Observation[]> {
+  const byMap = await loadObservationsByMapId();
+  const list = byMap[updated.mapId] ?? [];
+  const normalizedUpdated = normalizeObservation(updated);
+  const next = list.map((obs) => (obs.id === updated.id ? normalizedUpdated : normalizeObservation(obs)));
+  byMap[updated.mapId] = next;
+  await saveObservationsByMapId(byMap);
+  return next;
+}
+
+export async function deleteObservation(mapId: string, observationId: string): Promise<Observation[]> {
+  const byMap = await loadObservationsByMapId();
+  const list = byMap[mapId] ?? [];
+  const next = list.filter((obs) => obs.id !== observationId);
+  byMap[mapId] = next;
+  await saveObservationsByMapId(byMap);
+  return next;
+}
+
+function normalizeObservation(obs: Observation): Observation {
+  if (obs.kind !== "point") return obs;
+  return {
+    ...obs,
+    localName: obs.localName ?? "",
+    accuracyMeters: obs.accuracyMeters ?? null,
+  };
 }
 
 export async function loadSettings(): Promise<AppSettings> {

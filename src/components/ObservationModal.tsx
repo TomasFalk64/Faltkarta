@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Modal,
   View,
@@ -12,23 +12,75 @@ import {
 import * as ImagePicker from "expo-image-picker";
 import { speciesList } from "../data/species";
 
+type ModalPayload = {
+  species: string;
+  notes: string;
+  photoUris: string[];
+  localName?: string;
+  accuracyMeters?: number | null;
+};
+
 type Props = {
   visible: boolean;
   title: string;
   onClose: () => void;
-  onSave: (payload: {
-    species: string;
-    count: number;
-    notes: string;
-    photoUris: string[];
-  }) => void;
+  onSave: (payload: ModalPayload) => void;
+  initialValues?: ModalPayload;
+  onDelete?: () => void;
+  sessionToken?: number;
+  showPointMetaFields?: boolean;
 };
 
-export function ObservationModal({ visible, title, onClose, onSave }: Props) {
+export function ObservationModal({
+  visible,
+  title,
+  onClose,
+  onSave,
+  initialValues,
+  onDelete,
+  sessionToken,
+  showPointMetaFields = false,
+}: Props) {
   const [species, setSpecies] = useState("");
-  const [count, setCount] = useState("1");
   const [notes, setNotes] = useState("");
   const [photoUris, setPhotoUris] = useState<string[]>([]);
+  const [localName, setLocalName] = useState("");
+  const [accuracyMeters, setAccuracyMeters] = useState("");
+  const wasVisibleRef = useRef(false);
+  const lastSessionTokenRef = useRef<number | undefined>(undefined);
+
+  useEffect(() => {
+    if (sessionToken !== undefined) {
+      if (lastSessionTokenRef.current !== sessionToken) {
+        setSpecies(initialValues?.species ?? "");
+        setNotes(initialValues?.notes ?? "");
+        setPhotoUris(initialValues?.photoUris ?? []);
+        setLocalName(initialValues?.localName ?? "");
+        setAccuracyMeters(
+          initialValues?.accuracyMeters === null || initialValues?.accuracyMeters === undefined
+            ? ""
+            : String(initialValues.accuracyMeters)
+        );
+        lastSessionTokenRef.current = sessionToken;
+      }
+      wasVisibleRef.current = visible;
+      return;
+    }
+
+    const openedNow = visible && !wasVisibleRef.current;
+    if (openedNow) {
+      setSpecies(initialValues?.species ?? "");
+      setNotes(initialValues?.notes ?? "");
+      setPhotoUris(initialValues?.photoUris ?? []);
+      setLocalName(initialValues?.localName ?? "");
+      setAccuracyMeters(
+        initialValues?.accuracyMeters === null || initialValues?.accuracyMeters === undefined
+          ? ""
+          : String(initialValues.accuracyMeters)
+      );
+    }
+    wasVisibleRef.current = visible;
+  }, [initialValues, sessionToken, visible]);
 
   const suggestions = useMemo(() => {
     const q = species.trim().toLowerCase();
@@ -50,21 +102,28 @@ export function ObservationModal({ visible, title, onClose, onSave }: Props) {
     }
   }
 
+  function removePhotoAt(index: number) {
+    setPhotoUris((prev) => prev.filter((_, i) => i !== index));
+  }
+
   function resetAndClose() {
     setSpecies("");
-    setCount("1");
     setNotes("");
     setPhotoUris([]);
+    setLocalName("");
+    setAccuracyMeters("");
     onClose();
   }
 
   function submit() {
-    const parsedCount = Number.parseInt(count, 10);
+    const parsedAccuracy = Number.parseFloat(accuracyMeters.replace(",", "."));
     onSave({
       species: species.trim(),
-      count: Number.isFinite(parsedCount) && parsedCount > 0 ? parsedCount : 1,
       notes: notes.trim(),
       photoUris,
+      localName: localName.trim(),
+      accuracyMeters:
+        Number.isFinite(parsedAccuracy) && parsedAccuracy >= 0 ? Math.round(parsedAccuracy) : null,
     });
     resetAndClose();
   }
@@ -74,7 +133,7 @@ export function ObservationModal({ visible, title, onClose, onSave }: Props) {
       <View style={styles.backdrop}>
         <View style={styles.card}>
           <Text style={styles.title}>{title}</Text>
-          <ScrollView>
+          <ScrollView keyboardShouldPersistTaps="handled">
             <TextInput
               value={species}
               onChangeText={setSpecies}
@@ -91,32 +150,59 @@ export function ObservationModal({ visible, title, onClose, onSave }: Props) {
               </View>
             )}
             <TextInput
-              value={count}
-              onChangeText={setCount}
-              style={styles.input}
-              keyboardType="number-pad"
-              placeholder="Antal"
-            />
-            <TextInput
               value={notes}
               onChangeText={setNotes}
               style={[styles.input, styles.notes]}
               placeholder="Beskrivning"
               multiline
             />
+            {showPointMetaFields && (
+              <>
+                <TextInput
+                  value={localName}
+                  onChangeText={setLocalName}
+                  style={styles.input}
+                  placeholder="Lokalnamn"
+                />
+                <TextInput
+                  value={accuracyMeters}
+                  onChangeText={setAccuracyMeters}
+                  style={styles.input}
+                  placeholder="Noggrannhet (m)"
+                  keyboardType="decimal-pad"
+                />
+              </>
+            )}
             <Pressable style={styles.photoBtn} onPress={addPhoto}>
-              <Text style={styles.photoBtnText}>Lägg till foto</Text>
+              <Text style={styles.photoBtnText}>Lagg till foto</Text>
             </Pressable>
             <View style={styles.photoRow}>
-              {photoUris.map((uri) => (
-                <Image key={uri} source={{ uri }} style={styles.photo} />
+              {photoUris.map((uri, index) => (
+                <Pressable key={`${uri}-${index}`} onPress={() => removePhotoAt(index)} style={styles.photoWrap}>
+                  <Image source={{ uri }} style={styles.photo} />
+                  <View style={styles.removeBadge}>
+                    <Text style={styles.removeBadgeText}>x</Text>
+                  </View>
+                </Pressable>
               ))}
             </View>
           </ScrollView>
           <View style={styles.actions}>
-            <Pressable style={[styles.actionBtn, styles.cancelBtn]} onPress={resetAndClose}>
-              <Text style={styles.actionText}>Avbryt</Text>
-            </Pressable>
+            {onDelete ? (
+              <Pressable
+                style={[styles.actionBtn, styles.deleteBtn]}
+                onPress={() => {
+                  onDelete();
+                  resetAndClose();
+                }}
+              >
+                <Text style={styles.actionText}>Radera</Text>
+              </Pressable>
+            ) : (
+              <Pressable style={[styles.actionBtn, styles.cancelBtn]} onPress={resetAndClose}>
+                <Text style={styles.actionText}>Avbryt</Text>
+              </Pressable>
+            )}
             <Pressable
               style={[styles.actionBtn, styles.saveBtn]}
               onPress={submit}
@@ -190,10 +276,32 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: 8,
   },
+  photoWrap: {
+    position: "relative",
+  },
   photo: {
     width: 62,
     height: 62,
     borderRadius: 6,
+  },
+  removeBadge: {
+    position: "absolute",
+    top: -6,
+    right: -6,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: "#9b2226",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#fff",
+  },
+  removeBadgeText: {
+    color: "#fff",
+    fontWeight: "700",
+    fontSize: 12,
+    lineHeight: 12,
   },
   actions: {
     flexDirection: "row",
@@ -211,6 +319,9 @@ const styles = StyleSheet.create({
   },
   saveBtn: {
     backgroundColor: "#0a9396",
+  },
+  deleteBtn: {
+    backgroundColor: "#9b2226",
   },
   actionText: {
     color: "#fff",

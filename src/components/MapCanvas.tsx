@@ -1,6 +1,7 @@
-import React, { useMemo, useRef, useState } from "react";
-import { Image, PanResponder, StyleSheet, Text, View } from "react-native";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { Image, PanResponder, Pressable, StyleSheet, Text, View } from "react-native";
 import Svg, { Circle, Polyline } from "react-native-svg";
+import { imagePointToLatLon, latLonToImagePoint } from "../services/mapProjection";
 import { LatLon, MapItem, Observation } from "../types/models";
 
 type Props = {
@@ -12,15 +13,17 @@ type Props = {
   draftPolygon: LatLon[];
   onPanGeoDelta: (deltaLat: number, deltaLon: number) => void;
   onManualPan: () => void;
-  onRotationChanged?: (deg: number) => void;
-  resetRotationSignal: number;
+  onPressPoint?: (observationId: string) => void;
 };
 
 const VIRTUAL_IMAGE_WIDTH = 1200;
 const VIRTUAL_IMAGE_HEIGHT = 1200;
-
-const METERS_PER_LAT_DEG = 111320;
-const METERS_PER_PIXEL = 1.5;
+const BASE_GPS_DOT_SIZE = 28;
+const BASE_POINT_DOT_SIZE = 20;
+const BASE_POINT_TOUCH_SIZE = 28;
+const MIN_GPS_DOT_SCREEN_SIZE = 20;
+const MIN_POINT_DOT_SCREEN_SIZE = 16;
+const MIN_POINT_TOUCH_SCREEN_SIZE = 28;
 
 export function MapCanvas({
   map,
@@ -31,73 +34,151 @@ export function MapCanvas({
   draftPolygon,
   onPanGeoDelta,
   onManualPan,
+  onPressPoint,
 }: Props) {
   const pointMarkers = useMemo(() => observations.filter((o) => o.kind === "point"), [observations]);
   const polygonObs = useMemo(() => observations.filter((o) => o.kind === "polygon"), [observations]);
   const [drag, setDrag] = useState({ x: 0, y: 0 });
-  const dragRef = useRef({ x: 0, y: 0 });
-  const anchorRef = useRef<LatLon>(centerCoord);
+  const [scale, setScale] = useState(1);
 
-  const anchorMetersPerLonDeg = Math.max(
-    1,
-    Math.abs(111320 * Math.cos((anchorRef.current.lat * Math.PI) / 180))
+  const panStepRef = useRef({ x: 0, y: 0 });
+  const modeRef = useRef<"none" | "pan" | "pinch">("none");
+  const pinchRef = useRef({ startDistance: 1, startScale: 1 });
+  const centerRef = useRef(centerCoord);
+  const scaleRef = useRef(scale);
+  const touchedPanRef = useRef(false);
+  const pendingDragResetRef = useRef(false);
+
+  useEffect(() => {
+    centerRef.current = centerCoord;
+  }, [centerCoord]);
+  useEffect(() => {
+    scaleRef.current = scale;
+  }, [scale]);
+
+  const centerImagePoint = useMemo(
+    () => latLonToImagePoint(map, centerCoord, VIRTUAL_IMAGE_WIDTH, VIRTUAL_IMAGE_HEIGHT),
+    [map, centerCoord]
+  );
+  const committedShiftX = VIRTUAL_IMAGE_WIDTH / 2 - centerImagePoint.x;
+  const committedShiftY = VIRTUAL_IMAGE_HEIGHT / 2 - centerImagePoint.y;
+
+  const toLocalPoint = useMemo(
+    () => (p: LatLon) => latLonToImagePoint(map, p, VIRTUAL_IMAGE_WIDTH, VIRTUAL_IMAGE_HEIGHT),
+    [map]
   );
 
-  const mapShift = useMemo(() => {
-    const eastMeters = (centerCoord.lon - anchorRef.current.lon) * anchorMetersPerLonDeg;
-    const northMeters = (centerCoord.lat - anchorRef.current.lat) * METERS_PER_LAT_DEG;
-    return {
-      x: -eastMeters / METERS_PER_PIXEL,
-      y: northMeters / METERS_PER_PIXEL,
-    };
-  }, [anchorMetersPerLonDeg, centerCoord.lat, centerCoord.lon]);
-
-  const toLocalPoint = useMemo(() => {
-    return (p: LatLon) => {
-      const eastMeters = (p.lon - anchorRef.current.lon) * anchorMetersPerLonDeg;
-      const northMeters = (p.lat - anchorRef.current.lat) * METERS_PER_LAT_DEG;
-      return {
-        x: VIRTUAL_IMAGE_WIDTH / 2 + eastMeters / METERS_PER_PIXEL,
-        y: VIRTUAL_IMAGE_HEIGHT / 2 - northMeters / METERS_PER_PIXEL,
-      };
-    };
-  }, [anchorMetersPerLonDeg]);
-
   const gpsPoint = gpsPos ? toLocalPoint(gpsPos) : null;
+  const safeScale = Math.max(0.01, scale);
+  const gpsDotSize = Math.max(BASE_GPS_DOT_SIZE, MIN_GPS_DOT_SCREEN_SIZE / safeScale);
+  const pointDotSize = Math.max(BASE_POINT_DOT_SIZE, MIN_POINT_DOT_SCREEN_SIZE / safeScale);
+  const pointTouchSize = Math.max(BASE_POINT_TOUCH_SIZE, MIN_POINT_TOUCH_SCREEN_SIZE / safeScale);
 
   const panResponder = useMemo(
     () =>
       PanResponder.create({
         onStartShouldSetPanResponder: () => true,
         onMoveShouldSetPanResponder: (_, gs) => Math.abs(gs.dx) > 2 || Math.abs(gs.dy) > 2,
-        onPanResponderMove: (_, gs) => {
-          const next = { x: gs.dx, y: gs.dy };
-          dragRef.current = next;
-          setDrag(next);
+        onPanResponderGrant: (evt) => {
+          touchedPanRef.current = false;
+          const touches = evt.nativeEvent.touches;
+          if (touches.length >= 2) {
+            modeRef.current = "pinch";
+            pinchRef.current = {
+              startDistance: touchDistance(touches[0], touches[1]),
+              startScale: scaleRef.current,
+            };
+          } else {
+            modeRef.current = "pan";
+            panStepRef.current = { x: 0, y: 0 };
+          }
         },
-        onPanResponderRelease: () => {
-          const dx = dragRef.current.x;
-          const dy = dragRef.current.y;
-          dragRef.current = { x: 0, y: 0 };
+        onPanResponderMove: (evt, gs) => {
+          const touches = evt.nativeEvent.touches;
+          if (touches.length >= 2) {
+            if (modeRef.current !== "pinch") {
+              modeRef.current = "pinch";
+              pinchRef.current = {
+                startDistance: touchDistance(touches[0], touches[1]),
+                startScale: scaleRef.current,
+              };
+              return;
+            }
+            const d = touchDistance(touches[0], touches[1]);
+            const ratio = d / Math.max(1, pinchRef.current.startDistance);
+            setScale(clamp(pinchRef.current.startScale * ratio, 0.5, 4));
+            return;
+          }
+          panStepRef.current = { x: gs.dx, y: gs.dy };
+          setDrag({ x: gs.dx, y: gs.dy });
+          if (!touchedPanRef.current) {
+            onManualPan();
+            touchedPanRef.current = true;
+          }
+        },
+        onPanResponderRelease: (_, gs) => {
+          if (modeRef.current === "pan") {
+            const dx = gs.dx;
+            const dy = gs.dy;
+            if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) {
+              const currentCenter = centerRef.current;
+              const currentCenterPx = latLonToImagePoint(
+                map,
+                currentCenter,
+                VIRTUAL_IMAGE_WIDTH,
+                VIRTUAL_IMAGE_HEIGHT
+              );
+              const safeScale = Math.max(0.01, scaleRef.current);
+              const nextCenterPx = {
+                x: currentCenterPx.x - dx / safeScale,
+                y: currentCenterPx.y - dy / safeScale,
+              };
+              const nextCenter = imagePointToLatLon(
+                map,
+                nextCenterPx,
+                VIRTUAL_IMAGE_WIDTH,
+                VIRTUAL_IMAGE_HEIGHT
+              );
+              onPanGeoDelta(nextCenter.lat - currentCenter.lat, nextCenter.lon - currentCenter.lon);
+              pendingDragResetRef.current = true;
+            } else {
+              setDrag({ x: 0, y: 0 });
+            }
+          } else {
+            setDrag({ x: 0, y: 0 });
+          }
+          modeRef.current = "none";
+          panStepRef.current = { x: 0, y: 0 };
+          touchedPanRef.current = false;
+        },
+        onPanResponderTerminate: () => {
+          modeRef.current = "none";
+          panStepRef.current = { x: 0, y: 0 };
+          touchedPanRef.current = false;
           setDrag({ x: 0, y: 0 });
-          if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
-          onManualPan();
-          const eastMeters = -dx * METERS_PER_PIXEL;
-          const northMeters = dy * METERS_PER_PIXEL;
-          const deltaLon = eastMeters / anchorMetersPerLonDeg;
-          const deltaLat = northMeters / METERS_PER_LAT_DEG;
-          onPanGeoDelta(deltaLat, deltaLon);
         },
       }),
-    [anchorMetersPerLonDeg, onManualPan, onPanGeoDelta]
+    [map, onManualPan, onPanGeoDelta]
   );
+
+  useEffect(() => {
+    if (!pendingDragResetRef.current) return;
+    setDrag({ x: 0, y: 0 });
+    pendingDragResetRef.current = false;
+  }, [centerCoord]);
 
   return (
     <View style={styles.wrapper} {...panResponder.panHandlers}>
       <View
         style={[
           styles.layer,
-          { transform: [{ translateX: mapShift.x + drag.x }, { translateY: mapShift.y + drag.y }] },
+          {
+            transform: [
+              { scale },
+              { translateX: committedShiftX + drag.x },
+              { translateY: committedShiftY + drag.y },
+            ],
+          },
         ]}
       >
         {imageUri ? (
@@ -145,12 +226,50 @@ export function MapCanvas({
           })}
         </Svg>
 
-        {gpsPoint && <View style={[styles.gpsDot, { left: gpsPoint.x - 7, top: gpsPoint.y - 7 }]} />}
+        {gpsPoint && (
+          <View
+            style={[
+              styles.gpsDot,
+              {
+                width: gpsDotSize,
+                height: gpsDotSize,
+                borderRadius: gpsDotSize / 2,
+                left: gpsPoint.x - gpsDotSize / 2,
+                top: gpsPoint.y - gpsDotSize / 2,
+              },
+            ]}
+          />
+        )}
 
         {pointMarkers.map((obs) => {
           if (obs.kind !== "point") return null;
           const pt = toLocalPoint(obs.wgs84);
-          return <View key={obs.id} style={[styles.pointDot, { left: pt.x - 5, top: pt.y - 5 }]} />;
+          return (
+            <Pressable
+              key={obs.id}
+              onPress={() => onPressPoint?.(obs.id)}
+              style={[
+                styles.pointTouch,
+                {
+                  width: pointTouchSize,
+                  height: pointTouchSize,
+                  left: pt.x - pointTouchSize / 2,
+                  top: pt.y - pointTouchSize / 2,
+                },
+              ]}
+            >
+              <View
+                style={[
+                  styles.pointDot,
+                  {
+                    width: pointDotSize,
+                    height: pointDotSize,
+                    borderRadius: pointDotSize / 2,
+                  },
+                ]}
+              />
+            </Pressable>
+          );
         })}
       </View>
 
@@ -160,6 +279,16 @@ export function MapCanvas({
       </View>
     </View>
   );
+}
+
+function touchDistance(a: { pageX: number; pageY: number }, b: { pageX: number; pageY: number }): number {
+  const dx = b.pageX - a.pageX;
+  const dy = b.pageY - a.pageY;
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
+function clamp(v: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, v));
 }
 
 const styles = StyleSheet.create({
@@ -222,20 +351,18 @@ const styles = StyleSheet.create({
   },
   gpsDot: {
     position: "absolute",
-    width: 14,
-    height: 14,
-    borderRadius: 7,
     backgroundColor: "#3a86ff",
     borderWidth: 2,
     borderColor: "#e6f0ff",
   },
   pointDot: {
-    position: "absolute",
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: "#ee9b00",
+    backgroundColor: "#d62828",
     borderWidth: 1,
     borderColor: "#fff",
+  },
+  pointTouch: {
+    position: "absolute",
+    alignItems: "center",
+    justifyContent: "center",
   },
 });

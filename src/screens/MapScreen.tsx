@@ -1,13 +1,20 @@
-import React, { useEffect, useRef, useState } from "react";
-import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { RootStackParamList } from "../navigation/types";
 import { MapCanvas } from "../components/MapCanvas";
 import { ObservationModal } from "../components/ObservationModal";
 import { useGps } from "../hooks/useGps";
-import { addObservation, loadMaps, loadObservationsForMap, loadSettings } from "../storage/storage";
+import {
+  addObservation,
+  deleteObservation,
+  loadMaps,
+  loadObservationsForMap,
+  loadSettings,
+  updateObservation,
+} from "../storage/storage";
 import { LatLon, MapItem, Observation, PolygonObservation, PointObservation } from "../types/models";
-import { distanceMeters } from "../services/coords";
+import { averageLatLon, distanceMeters } from "../services/coords";
 import { makeId } from "../utils/id";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Map">;
@@ -18,15 +25,19 @@ export function MapScreen({ route }: Props) {
   const [observations, setObservations] = useState<Observation[]>([]);
   const [centerCoord, setCenterCoord] = useState<LatLon>({ lat: 62.0, lon: 16.0 });
   const [toast, setToast] = useState<string | null>(null);
-  const [rotationResetSignal, setRotationResetSignal] = useState(0);
   const [showPointModal, setShowPointModal] = useState(false);
   const [showPolygonModal, setShowPolygonModal] = useState(false);
+  const [showPointList, setShowPointList] = useState(false);
+  const [pointModalSession, setPointModalSession] = useState(0);
+  const [polygonModalSession, setPolygonModalSession] = useState(0);
+  const [editingPoint, setEditingPoint] = useState<PointObservation | null>(null);
   const [polygonMode, setPolygonMode] = useState(false);
   const [draftPolygon, setDraftPolygon] = useState<LatLon[]>([]);
   const [gpsPingSeconds, setGpsPingSeconds] = useState(3);
 
   const { gpsPos, error: gpsError } = useGps({ pingSeconds: gpsPingSeconds });
   const lastGpsRef = useRef<{ pos: LatLon; ts: number } | null>(null);
+  const gpsTrailRef = useRef<Array<{ pos: LatLon; ts: number }>>([]);
 
   useEffect(() => {
     (async () => {
@@ -57,13 +68,31 @@ export function MapScreen({ route }: Props) {
       if (dtSec < 2 && jump > 200) return;
     }
     lastGpsRef.current = { pos: gpsPos, ts: now };
+    gpsTrailRef.current = [...gpsTrailRef.current, { pos: gpsPos, ts: now }]
+      .filter((item) => now - item.ts <= 60_000)
+      .slice(-20);
   }, [gpsPos]);
 
   const crosshairPos = centerCoord;
+  const pointList = useMemo(
+    () =>
+      observations
+        .filter((obs): obs is PointObservation => obs.kind === "point")
+        .sort((a, b) => b.dateISO.localeCompare(a.dateISO)),
+    [observations]
+  );
 
   function showToast(message: string) {
     setToast(message);
     setTimeout(() => setToast(null), 1500);
+  }
+
+  function clampToMapBounds(coord: LatLon): LatLon {
+    if (!map?.bbox) return coord;
+    return {
+      lat: Math.max(map.bbox.minLat, Math.min(map.bbox.maxLat, coord.lat)),
+      lon: Math.max(map.bbox.minLon, Math.min(map.bbox.maxLon, coord.lon)),
+    };
   }
 
   function onCenterToGps() {
@@ -71,35 +100,63 @@ export function MapScreen({ route }: Props) {
       showToast("Ingen GPS-position annu");
       return;
     }
-    setCenterCoord(gpsPos);
+    setCenterCoord(clampToMapBounds(gpsPos));
+  }
+
+  function estimateGpsAccuracyMeters(): number | null {
+    const samples = gpsTrailRef.current.map((s) => s.pos);
+    if (samples.length < 3) return null;
+    const center = averageLatLon(samples);
+    const avgDist = samples.reduce((sum, p) => sum + distanceMeters(p, center), 0) / samples.length;
+    return Math.max(1, Math.round(avgDist));
   }
 
   async function onAddPoint(payload: {
     species: string;
-    count: number;
     notes: string;
     photoUris: string[];
+    localName?: string;
+    accuracyMeters?: number | null;
   }) {
     if (!map) return;
-    const obs: PointObservation = {
-      id: makeId("obs"),
-      mapId: map.id,
-      kind: "point",
-      species: payload.species,
-      count: payload.count,
-      notes: payload.notes,
-      photoUris: payload.photoUris,
-      dateISO: new Date().toISOString(),
-      wgs84: crosshairPos,
-    };
-    const next = await addObservation(obs);
+    const obs: PointObservation = editingPoint
+      ? {
+          ...editingPoint,
+          species: payload.species,
+          notes: payload.notes,
+          photoUris: payload.photoUris,
+          localName: payload.localName?.trim() || map.name,
+          accuracyMeters: payload.accuracyMeters ?? null,
+        }
+      : {
+          id: makeId("obs"),
+          mapId: map.id,
+          kind: "point",
+          species: payload.species,
+          count: 1,
+          notes: payload.notes,
+          photoUris: payload.photoUris,
+          localName: payload.localName?.trim() || map.name,
+          accuracyMeters: payload.accuracyMeters ?? estimateGpsAccuracyMeters(),
+          dateISO: new Date().toISOString(),
+          wgs84: crosshairPos,
+        };
+    const next = editingPoint ? await updateObservation(obs) : await addObservation(obs);
     setObservations(next);
-    showToast("Punkt sparad");
+    setEditingPoint(null);
+    showToast(editingPoint ? "Punkt uppdaterad" : "Punkt sparad");
+  }
+
+  async function onDeletePoint() {
+    if (!map || !editingPoint) return;
+    const next = await deleteObservation(map.id, editingPoint.id);
+    setObservations(next);
+    setEditingPoint(null);
+    showToast("Punkt raderad");
   }
 
   async function onAddPolygon(payload: {
     species: string;
-    count: number;
     notes: string;
     photoUris: string[];
   }) {
@@ -113,7 +170,7 @@ export function MapScreen({ route }: Props) {
       mapId: map.id,
       kind: "polygon",
       species: payload.species,
-      count: payload.count,
+      count: 1,
       notes: payload.notes,
       photoUris: payload.photoUris,
       dateISO: new Date().toISOString(),
@@ -148,19 +205,26 @@ export function MapScreen({ route }: Props) {
         observations={observations}
         draftPolygon={draftPolygon}
         onPanGeoDelta={(dLat, dLon) =>
-          setCenterCoord((prev) => ({ lat: prev.lat + dLat, lon: prev.lon + dLon }))
+          setCenterCoord((prev) => clampToMapBounds({ lat: prev.lat + dLat, lon: prev.lon + dLon }))
         }
         onManualPan={() => {}}
-        resetRotationSignal={rotationResetSignal}
+        onPressPoint={(id) => {
+          const obs = observations.find((o) => o.id === id);
+          if (obs && obs.kind === "point") {
+            setEditingPoint(obs);
+            setPointModalSession((v) => v + 1);
+            setShowPointModal(true);
+          }
+        }}
       />
 
       <View style={styles.northWrap}>
-        <Pressable style={styles.northBtn} onPress={() => setRotationResetSignal((s) => s + 1)}>
+        <View style={styles.northBtn}>
           <View style={styles.compassIcon}>
             <View style={styles.compassNeedleUp} />
             <View style={styles.compassNeedleDown} />
           </View>
-        </Pressable>
+        </View>
       </View>
 
       <View style={styles.controls}>
@@ -176,8 +240,18 @@ export function MapScreen({ route }: Props) {
         <Pressable style={styles.mainBtn} onPress={onCenterToGps}>
           <Text style={styles.mainBtnIcon}>↗</Text>
         </Pressable>
-        <Pressable style={styles.mainBtn} onPress={() => setShowPointModal(true)}>
+        <Pressable
+          style={styles.mainBtn}
+          onPress={() => {
+            setEditingPoint(null);
+            setPointModalSession((v) => v + 1);
+            setShowPointModal(true);
+          }}
+        >
           <Text style={styles.mainBtnIcon}>📍</Text>
+        </Pressable>
+        <Pressable style={styles.mainBtn} onPress={() => setShowPointList((v) => !v)}>
+          <Text style={styles.mainBtnIcon}>≡</Text>
         </Pressable>
       </View>
 
@@ -187,7 +261,13 @@ export function MapScreen({ route }: Props) {
             <Pressable style={styles.secondaryBtn} onPress={addPolygonVertex}>
               <Text style={styles.secondaryText}>+ Lagg till punkt ({draftPolygon.length})</Text>
             </Pressable>
-            <Pressable style={styles.secondaryBtn} onPress={() => setShowPolygonModal(true)}>
+            <Pressable
+              style={styles.secondaryBtn}
+              onPress={() => {
+                setPolygonModalSession((v) => v + 1);
+                setShowPolygonModal(true);
+              }}
+            >
               <Text style={styles.secondaryText}>Klar polygon</Text>
             </Pressable>
           </>
@@ -206,17 +286,80 @@ export function MapScreen({ route }: Props) {
         </View>
       )}
 
+      {showPointList && (
+        <View style={styles.pointListWrap}>
+          <View style={styles.pointListCard}>
+            <View style={styles.pointListHeader}>
+              <Text style={styles.pointListTitle}>Alla punkter ({pointList.length})</Text>
+              <Pressable style={styles.pointListCloseBtn} onPress={() => setShowPointList(false)}>
+                <Text style={styles.pointListCloseText}>Stang</Text>
+              </Pressable>
+            </View>
+            <ScrollView style={styles.pointListScroll} contentContainerStyle={styles.pointListContent}>
+              {pointList.length === 0 ? (
+                <Text style={styles.pointListEmpty}>Inga punkter sparade.</Text>
+              ) : (
+                pointList.map((obs) => (
+                  <Pressable
+                    key={obs.id}
+                    style={styles.pointListItem}
+                    onPress={() => {
+                      setShowPointList(false);
+                      setEditingPoint(obs);
+                      setPointModalSession((v) => v + 1);
+                      setShowPointModal(true);
+                    }}
+                  >
+                    <Text style={styles.pointListItemSpecies}>{obs.species}</Text>
+                    {!!obs.localName && (
+                      <Text style={styles.pointListItemMeta}>{obs.localName}</Text>
+                    )}
+                    {obs.accuracyMeters !== null && (
+                      <Text style={styles.pointListItemMeta}>Noggrannhet: {obs.accuracyMeters} m</Text>
+                    )}
+                  </Pressable>
+                ))
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      )}
+
       <ObservationModal
         visible={showPointModal}
-        onClose={() => setShowPointModal(false)}
+        onClose={() => {
+          setShowPointModal(false);
+          setEditingPoint(null);
+        }}
         onSave={onAddPoint}
-        title="Ny punktobservation"
+        onDelete={editingPoint ? onDeletePoint : undefined}
+        initialValues={
+          editingPoint
+            ? {
+                species: editingPoint.species,
+                notes: editingPoint.notes,
+                photoUris: editingPoint.photoUris,
+                localName: editingPoint.localName,
+                accuracyMeters: editingPoint.accuracyMeters,
+              }
+            : {
+                species: "",
+                notes: "",
+                photoUris: [],
+                localName: map.name,
+                accuracyMeters: estimateGpsAccuracyMeters(),
+              }
+        }
+        title={editingPoint ? "Redigera punkt" : "Ny punktobservation"}
+        sessionToken={pointModalSession}
+        showPointMetaFields
       />
       <ObservationModal
         visible={showPolygonModal}
         onClose={() => setShowPolygonModal(false)}
         onSave={onAddPolygon}
         title="Ny polygonobservation"
+        sessionToken={polygonModalSession}
       />
     </View>
   );
@@ -227,12 +370,9 @@ const styles = StyleSheet.create({
   centered: { flex: 1, justifyContent: "center", alignItems: "center" },
   northWrap: { position: "absolute", right: 10, top: 10 },
   northBtn: {
-    backgroundColor: "#005f73",
-    borderRadius: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
+    paddingVertical: 2,
+    paddingHorizontal: 2,
     alignItems: "center",
-    minWidth: 58,
   },
   compassIcon: {
     width: 28,
@@ -321,4 +461,43 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   gpsErrorText: { color: "#fff", fontWeight: "700" },
+  pointListWrap: {
+    position: "absolute",
+    right: 76,
+    top: 78,
+    width: 250,
+    maxHeight: 360,
+  },
+  pointListCard: {
+    backgroundColor: "rgba(0,0,0,0.82)",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.18)",
+    padding: 10,
+  },
+  pointListHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
+  pointListTitle: { color: "#fff", fontWeight: "700" },
+  pointListCloseBtn: {
+    backgroundColor: "#8a939b",
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  pointListCloseText: { color: "#fff", fontWeight: "700" },
+  pointListScroll: { maxHeight: 300 },
+  pointListContent: { gap: 8 },
+  pointListEmpty: { color: "#d9d9d9" },
+  pointListItem: {
+    backgroundColor: "rgba(255,255,255,0.1)",
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 7,
+  },
+  pointListItemSpecies: { color: "#fff", fontWeight: "700" },
+  pointListItemMeta: { color: "#d9d9d9", marginTop: 2, fontSize: 12 },
 });
