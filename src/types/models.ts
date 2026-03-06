@@ -6,6 +6,7 @@ export type LatLon = {
 export type MapItem = {
   id: string;
   name: string;
+  importName?: string;
   fileUri: string;
   thumbnailUri?: string;
   createdAt: string;

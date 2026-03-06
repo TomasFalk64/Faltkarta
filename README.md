@@ -1,20 +1,46 @@
-# Fältkarta (Expo / React Native)
+﻿# Fältkarta (Expo / React Native)
 
-MVP-app för offline fältkarta:
-- Import av GeoTIFF (`.tif/.tiff`) till lokal lagring
-- Kartvisning via kopplad lokal bakgrundsbild (PNG/JPG) i appen
-- GPS-prick, korshår, centrera, följ mig
-- Punkt- och polygonobservationer med artförslag och foto
-- Export till Artportalen (TSV i urklipp) och CSV för Excel via Share Sheet
+Fältkarta är en mobilapp för att dokumentera artobservationer i fält på egna kartor, även utan uppkoppling.
 
-## MVP-anteckning om GeoTIFF-rendering
-Expo-renderar inte GeoTIFF direkt i denna MVP. Flödet är:
-1. Importera GeoTIFF (lagras lokalt)
-2. Koppla en separat PNG/JPG som visningsbild för kartan
+## Vad appen gör
+- Importerar GeoTIFF-kartor (`.tif/.tiff`) till lokal lagring i appen.
+- Visar karta med GPS-prick och stöd för att centrera kartan till din position.
+- Låter dig registrera punkt- och polygonobservationer med artnamn, anteckningar och foton.
+- Exporterar registrerade observationer till Artportalen (TSV) eller till Excel via CSV.
 
-Det ger en stabil och körbar grund i Expo.
+## Kartunderlag
+- Kartor kan laddas ner från till exempel `Skogsmonitor.se` och importeras i appen som GeoTIFF.
+- Appen försöker läsa georeferens (bbox/koordinatsystem) från GeoTIFF-metadata.
+- Om en karta saknar korrekt georeferens blir GPS-placering och koordinatkoppling osäker.
 
-## RUN
+## Vilka data som samlas i appen
+För varje observation sparas lokalt i appen:
+- Artnamn
+- Typ av observation (`point` eller `polygon`)
+- Antal
+- Datum/tid (`dateISO`)
+- Position i WGS84 (lat/lon)
+  - Punkt: exakt punkt
+  - Polygon: flera hörnpunkter
+- Lokalnamn (punktobservation)
+- Noggrannhet i meter (punktobservation)
+- Beskrivning/anteckning
+- Foton (URI till lokala filer)
+
+## Koordinatsystem
+- Intern lagring av observationspositioner: `WGS84` (`EPSG:4326`, lat/lon).
+- Export till Artportalen använder `SWEREF 99 TM` (`EPSG:3006`) som Ost/Nord.
+- CSV-export innehåller både WGS84 och SWEREF 99 TM.
+- För polygoner används en representativ punkt (medelpunkt av polygonens koordinater) i exporten.
+
+## Export
+- Artportalen:
+  - Appen bygger en TSV-sträng och kopierar den till urklipp.
+  - Därefter öppnas `https://www.artportalen.se/ importera fynd` , `https://www.artportalen.se/ImportSighting` så data kan klistras in där.
+- Excel/CSV:
+  - Appen skapar en CSV-fil och öppnar operativsystemets delningsdialog.
+
+## Kör appen lokalt
 1. Installera beroenden:
 ```bash
 npm install
@@ -25,12 +51,15 @@ npm start
 ```
 3. Kör på enhet/emulator via Expo Go eller `a` (Android) / `i` (iOS) i terminalen.
 
-## Struktur
+## Projektstruktur
 - `src/screens/MapListScreen.tsx` - kartlista, import, meny, GPS-frekvens
 - `src/screens/MapScreen.tsx` - kartvy, GPS, korshår, observationer, polygon
-- `src/screens/ExportScreen.tsx` - TSV/CSV-export
-- `src/components/MapCanvas.tsx` - pan/zoom/rotate + overlays
+- `src/screens/ExportScreen.tsx` - export till Artportalen/CSV
+- `src/components/MapCanvas.tsx` - kartlager, pan/zoom och overlays
 - `src/components/ObservationModal.tsx` - formulär för observation
-- `src/storage/storage.ts` - AsyncStorage-lager
-- `src/services/coords.ts` - proj4 SWEREF 99 TM
-- `src/services/export.ts` - TSV/CSV + clipboard/share/browser
+- `src/storage/storage.ts` - lokalt AsyncStorage-lager
+- `src/services/coords.ts` - koordinatkonvertering (WGS84 <-> SWEREF99TM)
+- `src/services/export.ts` - exportlogik (TSV/CSV, urklipp, delning, webbläsare)
+
+## Licens
+Detta projekt är licensierat under MIT License. Se [LICENSE](LICENSE).

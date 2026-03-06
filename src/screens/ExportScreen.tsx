@@ -4,7 +4,13 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { RootStackParamList } from "../navigation/types";
 import { loadMaps, loadObservationsForMap } from "../storage/storage";
 import { Observation } from "../types/models";
-import { buildArtportalenTsv, buildCsv, copyTsvAndOpenArtportalen, saveCsvAndShare } from "../services/export";
+import {
+  buildArtportalenTsv,
+  buildCsv,
+  copyTsvAndOpenArtportalen,
+  saveCsvAndComposeEmail,
+  saveCsvAndShare,
+} from "../services/export";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Export">;
 
@@ -44,6 +50,19 @@ export function ExportScreen({ route }: Props) {
     Alert.alert("Sparad", `Fil skapad:\n${path}`);
   }
 
+  async function onEmailCsv() {
+    if (!observations.length) {
+      Alert.alert("Export", "Inga observationer att exportera.");
+      return;
+    }
+    const csv = buildCsv(observations);
+    const result = await saveCsvAndComposeEmail(mapName, csv);
+    if (!result.opened) {
+      Alert.alert("E-post", `E-post ar inte tillgangligt pa enheten.\nFilen sparades:\n${result.path}`);
+      return;
+    }
+  }
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Exportera observationer</Text>
@@ -56,6 +75,9 @@ export function ExportScreen({ route }: Props) {
       </Pressable>
       <Pressable style={[styles.primaryBtn, styles.altBtn]} onPress={onSaveCsv}>
         <Text style={styles.primaryText}>Spara till Excel (CSV)</Text>
+      </Pressable>
+      <Pressable style={[styles.primaryBtn, styles.mailBtn]} onPress={onEmailCsv}>
+        <Text style={styles.primaryText}>Skicka CSV via e-post</Text>
       </Pressable>
 
       <Text style={styles.previewTitle}>Förhandsvisning TSV</Text>
@@ -91,6 +113,9 @@ const styles = StyleSheet.create({
   },
   altBtn: {
     backgroundColor: "#ca6702",
+  },
+  mailBtn: {
+    backgroundColor: "#2a9d8f",
   },
   primaryText: {
     color: "#fff",

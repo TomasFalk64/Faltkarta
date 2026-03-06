@@ -1,6 +1,7 @@
 {
   "name": "faltkarta",
   "version": "1.0.0",
+  "license": "MIT",
   "private": true,
   "main": "index.js",
   "scripts": {
@@ -21,6 +22,7 @@
     "expo-file-system": "~19.0.21",
     "expo-image-picker": "~17.0.10",
     "expo-location": "~19.0.8",
+    "expo-mail-composer": "^55.0.8",
     "expo-sharing": "~14.0.8",
     "expo-web-browser": "~15.0.10",
     "proj4": "^2.12.1",

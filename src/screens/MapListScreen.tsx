@@ -12,7 +12,6 @@ import {
 } from "react-native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useFocusEffect } from "@react-navigation/native";
-import * as Sharing from "expo-sharing";
 import { RootStackParamList } from "../navigation/types";
 import { MapItem } from "../types/models";
 import { loadMaps, loadSettings, removeMap, saveSettings, upsertMap } from "../storage/storage";
@@ -51,18 +50,6 @@ export function MapListScreen({ navigation }: Props) {
     }
   }
 
-  async function onShareMap(item: MapItem) {
-    if (!(await Sharing.isAvailableAsync())) {
-      Alert.alert("Delning", "Share sheet stods inte pa denna enhet.");
-      return;
-    }
-    await Sharing.shareAsync(item.fileUri, {
-      dialogTitle: "Exportera GeoTIFF",
-      mimeType: "image/tiff",
-      UTI: "public.tiff",
-    });
-  }
-
   function onOpenMenu(item: MapItem) {
     setMenuMap(item);
   }
@@ -92,6 +79,32 @@ export function MapListScreen({ navigation }: Props) {
     Alert.alert("Sparat", "GPS ping-frekvens uppdaterad.");
   }
 
+  function onOpenMap(item: MapItem) {
+    const importName = item.importName?.trim();
+    const currentName = item.name.trim();
+    const hasDefaultName = !!importName && currentName.localeCompare(importName, undefined, { sensitivity: "base" }) === 0;
+
+    if (!hasDefaultName) {
+      navigation.navigate("Map", { mapId: item.id });
+      return;
+    }
+
+    Alert.alert(
+      "Byt kartnamn?",
+      `Kartnamnet \"${item.name}\" kommer att användas som förslag på lokalnamn.`,
+      [
+        {
+          text: "Byt namn",
+          onPress: () => openRename(item),
+        },
+        {
+          text: "Fortsätt",
+          onPress: () => navigation.navigate("Map", { mapId: item.id }),
+        },
+      ]
+    );
+  }
+
   return (
     <View style={styles.container}>
       <FlatList
@@ -100,7 +113,7 @@ export function MapListScreen({ navigation }: Props) {
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={<Text style={styles.emptyText}>Inga kartor an nu. Tryck + for import.</Text>}
         renderItem={({ item }) => (
-          <Pressable style={styles.mapRow} onPress={() => navigation.navigate("Map", { mapId: item.id })}>
+          <Pressable style={styles.mapRow} onPress={() => onOpenMap(item)}>
             {item.thumbnailUri ? (
               <Image source={{ uri: item.thumbnailUri }} style={styles.thumb} />
             ) : (
@@ -173,17 +186,6 @@ export function MapListScreen({ navigation }: Props) {
               <Text style={styles.menuActionText}>Exportera</Text>
             </Pressable>
             <Pressable
-              style={styles.menuActionBtn}
-              onPress={async () => {
-                if (!menuMap) return;
-                const selected = menuMap;
-                setMenuMap(null);
-                await onShareMap(selected);
-              }}
-            >
-              <Text style={styles.menuActionText}>Dela GeoTIFF</Text>
-            </Pressable>
-            <Pressable
               style={[styles.menuActionBtn, styles.menuDangerBtn]}
               onPress={async () => {
                 if (!menuMap) return;
@@ -204,7 +206,16 @@ export function MapListScreen({ navigation }: Props) {
       <Modal transparent visible={showSettings} onRequestClose={() => setShowSettings(false)} animationType="fade">
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Installningar</Text>
+            <Text style={styles.modalTitle}>Kort guide</Text>
+            <View style={styles.helpBox}>
+              <Text style={styles.helpText}>Importera en GeoTIFF som karta. Du kan ha flera kartor.</Text>
+              <Text style={styles.helpText}>
+                Byt namn på kartan, namnet används som förslag på lokalnamn.
+              </Text>
+              <Text style={styles.helpText}>Öppna kartan och registrera punkter eller polygoner.</Text>
+              <Text style={styles.helpText}>Exportera till Artportalen eller Excel.</Text>
+            </View>
+            <Text style={styles.modalTitle}>Inställningar</Text>
             <Text style={styles.settingsTitle}>GPS ping-frekvens (sekunder)</Text>
             <View style={styles.settingsRow}>
               <TextInput
@@ -244,6 +255,20 @@ const styles = StyleSheet.create({
   settingsTitle: {
     fontWeight: "700",
     marginBottom: 8,
+  },
+  helpBox: {
+    backgroundColor: "#eef6f7",
+    borderColor: "#c8dde1",
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginBottom: 10,
+  },
+  helpText: {
+    color: "#22323b",
+    lineHeight: 18,
+    marginBottom: 4,
   },
   settingsRow: {
     flexDirection: "row",
@@ -325,7 +350,7 @@ const styles = StyleSheet.create({
   fab: {
     position: "absolute",
     right: 20,
-    bottom: 20,
+    bottom: 34,
     width: 62,
     height: 62,
     borderRadius: 31,
@@ -343,7 +368,7 @@ const styles = StyleSheet.create({
   infoFab: {
     position: "absolute",
     left: 20,
-    bottom: 20,
+    bottom: 34,
     width: 42,
     height: 42,
     borderRadius: 21,

@@ -61,6 +61,7 @@ export async function pickAndImportGeoTiff(): Promise<MapItem | null> {
   return {
     id,
     name: asset.name.replace(/\.(tif|tiff)$/i, ""),
+    importName: asset.name.replace(/\.(tif|tiff)$/i, ""),
     fileUri: targetUri,
     thumbnailUri: thumbnailUri ?? undefined,
     createdAt: new Date().toISOString(),

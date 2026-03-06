@@ -1,13 +1,15 @@
 import * as Clipboard from "expo-clipboard";
 import * as FileSystem from "expo-file-system/legacy";
+import * as MailComposer from "expo-mail-composer";
 import * as Sharing from "expo-sharing";
 import * as WebBrowser from "expo-web-browser";
+import { fromByteArray } from "base64-js";
 import { Observation } from "../types/models";
 import { averageLatLon, wgs84ToSweref99tm } from "./coords";
 import { exportDir } from "./files";
 
 function escapeCsv(value: string): string {
-  if (/[",\n]/.test(value)) {
+  if (/[;"\n]/.test(value)) {
     return `"${value.replace(/"/g, '""')}"`;
   }
   return value;
@@ -67,12 +69,12 @@ export function buildArtportalenTsv(observations: Observation[]): string {
 
 export async function copyTsvAndOpenArtportalen(tsv: string) {
   await Clipboard.setStringAsync(tsv);
-  await WebBrowser.openBrowserAsync("https://www.artportalen.se/");
+  await WebBrowser.openBrowserAsync("https://www.artportalen.se/ImportSighting");
 }
 
 export function buildCsv(observations: Observation[]): string {
   const header =
-    "Artnamn,Typ,Antal,Datum,Lat,Lon,SWEREF99TM_NordY,SWEREF99TM_OstX,Lokalnamn,Noggrannhet_m,Beskrivning,Foton";
+    "Artnamn;Typ;Antal;Datum;Lat;Lon;SWEREF99TM_NordY;SWEREF99TM_OstX;Lokalnamn;Noggrannhet_m;Beskrivning;Foton";
   const rows = observations.map((obs) => {
     const rep = observationToRepresentativeWgs84(obs);
     const sweref = wgs84ToSweref99tm(rep.lon, rep.lat);
@@ -90,9 +92,9 @@ export function buildCsv(observations: Observation[]): string {
       pointAccuracy(obs),
       escapeCsv(obs.notes),
       escapeCsv(photos),
-    ].join(",");
+    ].join(";");
   });
-  return [header, ...rows].join("\n");
+  return ["sep=;", header, ...rows].join("\r\n");
 }
 
 function pad2(value: number): string {
@@ -100,22 +102,58 @@ function pad2(value: number): string {
 }
 
 export async function saveCsvAndShare(mapName: string, csv: string): Promise<string> {
+  const path = await saveCsvFile(mapName, csv);
+  const canShare = await Sharing.isAvailableAsync();
+  if (canShare) {
+    await Sharing.shareAsync(path, {
+      mimeType: "text/csv",
+      dialogTitle: "Dela exportfil",
+    });
+  }
+  return path;
+}
+
+export async function saveCsvAndComposeEmail(
+  mapName: string,
+  csv: string
+): Promise<{ path: string; opened: boolean }> {
+  const path = await saveCsvFile(mapName, csv);
+  const canEmail = await MailComposer.isAvailableAsync();
+  if (!canEmail) {
+    return { path, opened: false };
+  }
+  await MailComposer.composeAsync({
+    subject: mapName,
+    body: `CSV-export fran Faltkarta for kartan "${mapName}".`,
+    attachments: [path],
+  });
+  return { path, opened: true };
+}
+
+async function saveCsvFile(mapName: string, csv: string): Promise<string> {
   const dir = exportDir();
   const dirInfo = await FileSystem.getInfoAsync(dir);
   if (!dirInfo.exists) {
     await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
   }
   const path = `${dir}/${mapName.replace(/[^\w\-.]/g, "_")}_${Date.now()}.csv`;
-  await FileSystem.writeAsStringAsync(path, csv, {
-    encoding: FileSystem.EncodingType.UTF8,
+  const utf16 = toUtf16LeWithBom(csv);
+  await FileSystem.writeAsStringAsync(path, fromByteArray(utf16), {
+    encoding: FileSystem.EncodingType.Base64,
   });
-  const canShare = await Sharing.isAvailableAsync();
-  if (canShare) {
-    await Sharing.shareAsync(path, {
-      mimeType: "text/csv",
-      dialogTitle: "Dela exportfil",
-      UTI: "public.comma-separated-values-text",
-    });
-  }
   return path;
+}
+
+function toUtf16LeWithBom(value: string): Uint8Array {
+  const out = new Uint8Array(2 + value.length * 2);
+  // UTF-16 LE BOM
+  out[0] = 0xff;
+  out[1] = 0xfe;
+  for (let i = 0; i < value.length; i++) {
+    const code = value.charCodeAt(i);
+    const idx = 2 + i * 2;
+    out[idx] = code & 0xff;
+    out[idx + 1] = (code >> 8) & 0xff;
+  }
+  return out;
 }
