@@ -1,7 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Image, PanResponder, Pressable, StyleSheet, Text, View } from "react-native";
 import Svg, { Circle, Polyline } from "react-native-svg";
-import { imagePointToLatLon, latLonToImagePoint } from "../services/mapProjection";
+import {
+  imagePointToLatLon,
+  isCoordInsideMapBounds,
+  latLonToImagePoint,
+} from "../services/mapProjection";
 import { LatLon, MapItem, Observation } from "../types/models";
 
 type Props = {
@@ -68,7 +72,7 @@ export function MapCanvas({
     [map]
   );
 
-  const gpsPoint = gpsPos ? toLocalPoint(gpsPos) : null;
+  const gpsPoint = gpsPos && isCoordInsideMapBounds(map, gpsPos) ? toLocalPoint(gpsPos) : null;
   const safeScale = Math.max(0.01, scale);
   const gpsDotSize = Math.max(BASE_GPS_DOT_SIZE, MIN_GPS_DOT_SCREEN_SIZE / safeScale);
   const pointDotSize = Math.max(BASE_POINT_DOT_SIZE, MIN_POINT_DOT_SCREEN_SIZE / safeScale);

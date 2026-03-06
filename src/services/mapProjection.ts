@@ -11,6 +11,34 @@ export function getMapBounds(map: MapItem) {
   return map.bbox ?? DEFAULT_BBOX;
 }
 
+export function hasMapBounds(map: MapItem): boolean {
+  return !!map.bbox && !isLegacyBounds(map.bbox);
+}
+
+export function isCoordInsideMapBounds(map: MapItem, point: LatLon): boolean {
+  if (!map.bbox || isLegacyBounds(map.bbox)) return false;
+  return (
+    point.lat >= map.bbox.minLat &&
+    point.lat <= map.bbox.maxLat &&
+    point.lon >= map.bbox.minLon &&
+    point.lon <= map.bbox.maxLon
+  );
+}
+
+function isLegacyBounds(bounds: {
+  minLat: number;
+  minLon: number;
+  maxLat: number;
+  maxLon: number;
+}): boolean {
+  return (
+    bounds.minLat === DEFAULT_BBOX.minLat &&
+    bounds.minLon === DEFAULT_BBOX.minLon &&
+    bounds.maxLat === DEFAULT_BBOX.maxLat &&
+    bounds.maxLon === DEFAULT_BBOX.maxLon
+  );
+}
+
 export function latLonToImagePoint(
   map: MapItem,
   point: LatLon,

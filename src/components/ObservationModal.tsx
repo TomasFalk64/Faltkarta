@@ -158,23 +158,29 @@ export function ObservationModal({
             />
             {showPointMetaFields && (
               <>
-                <TextInput
-                  value={localName}
-                  onChangeText={setLocalName}
-                  style={styles.input}
-                  placeholder="Lokalnamn"
-                />
-                <TextInput
-                  value={accuracyMeters}
-                  onChangeText={setAccuracyMeters}
-                  style={styles.input}
-                  placeholder="Noggrannhet (m)"
-                  keyboardType="decimal-pad"
-                />
+                <View style={styles.metaRow}>
+                  <Text style={styles.metaLabel}>Lokalnamn</Text>
+                  <TextInput
+                    value={localName}
+                    onChangeText={setLocalName}
+                    style={[styles.input, styles.metaInput]}
+                    placeholder="Ange lokalnamn"
+                  />
+                </View>
+                <View style={styles.metaRow}>
+                  <Text style={styles.metaLabel}>Noggrannhet (m)</Text>
+                  <TextInput
+                    value={accuracyMeters}
+                    onChangeText={setAccuracyMeters}
+                    style={[styles.input, styles.metaInput]}
+                    placeholder="Ange meter"
+                    keyboardType="decimal-pad"
+                  />
+                </View>
               </>
             )}
             <Pressable style={styles.photoBtn} onPress={addPhoto}>
-              <Text style={styles.photoBtnText}>Lagg till foto</Text>
+              <Text style={styles.photoBtnText}>Lägg till foto</Text>
             </Pressable>
             <View style={styles.photoRow}>
               {photoUris.map((uri, index) => (
@@ -246,6 +252,21 @@ const styles = StyleSheet.create({
   notes: {
     minHeight: 80,
     textAlignVertical: "top",
+  },
+  metaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 8,
+  },
+  metaLabel: {
+    width: 118,
+    fontWeight: "600",
+    color: "#23313a",
+  },
+  metaInput: {
+    flex: 1,
+    marginBottom: 0,
   },
   suggestions: {
     borderWidth: 1,

@@ -11,11 +11,13 @@ import {
   loadMaps,
   loadObservationsForMap,
   loadSettings,
+  upsertMap,
   updateObservation,
 } from "../storage/storage";
 import { LatLon, MapItem, Observation, PolygonObservation, PointObservation } from "../types/models";
 import { averageLatLon, distanceMeters } from "../services/coords";
 import { makeId } from "../utils/id";
+import { ensureMapGeorefBounds } from "../services/files";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Map">;
 
@@ -47,15 +49,19 @@ export function MapScreen({ route }: Props) {
         loadSettings(),
       ]);
       const current = maps.find((m) => m.id === mapId) ?? null;
-      setMap(current);
+      const hydrated = current ? await ensureMapGeorefBounds(current) : current;
+      if (hydrated && hydrated !== current) {
+        await upsertMap(hydrated);
+      }
       setObservations(obs);
       setGpsPingSeconds(settings.gpsPingSeconds);
-      if (current?.bbox) {
+      if (hydrated?.bbox) {
         setCenterCoord({
-          lat: (current.bbox.minLat + current.bbox.maxLat) / 2,
-          lon: (current.bbox.minLon + current.bbox.maxLon) / 2,
+          lat: (hydrated.bbox.minLat + hydrated.bbox.maxLat) / 2,
+          lon: (hydrated.bbox.minLon + hydrated.bbox.maxLon) / 2,
         });
       }
+      setMap(hydrated);
     })().catch((e) => Alert.alert("Fel", String(e)));
   }, [mapId]);
 
@@ -292,7 +298,7 @@ export function MapScreen({ route }: Props) {
             <View style={styles.pointListHeader}>
               <Text style={styles.pointListTitle}>Alla punkter ({pointList.length})</Text>
               <Pressable style={styles.pointListCloseBtn} onPress={() => setShowPointList(false)}>
-                <Text style={styles.pointListCloseText}>Stang</Text>
+                <Text style={styles.pointListCloseText}>Stäng</Text>
               </Pressable>
             </View>
             <ScrollView style={styles.pointListScroll} contentContainerStyle={styles.pointListContent}>
