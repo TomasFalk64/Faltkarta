@@ -27,6 +27,7 @@
     "expo-sharing": "~14.0.8",
     "expo-web-browser": "~15.0.10",
     "jszip": "^3.10.1",
+    "papaparse": "^5.5.3",
     "proj4": "^2.12.1",
     "react": "19.1.0",
     "react-native": "0.81.5",
@@ -42,6 +43,7 @@
   },
   "devDependencies": {
     "@babel/core": "^7.26.0",
+    "@types/papaparse": "^5.5.2",
     "@types/react": "~19.1.10",
     "babel-preset-expo": "~54.0.10",
     "typescript": "^5.7.2"

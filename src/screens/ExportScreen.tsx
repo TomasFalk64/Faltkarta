@@ -8,7 +8,7 @@ import {
   buildArtportalenTsv,
   buildCsv,
   copyTsvAndOpenArtportalen,
-  saveCsvAndComposeEmail,
+  saveCsvGeoJsonAndMapAndComposeEmail,
   saveCsvAndShare,
   saveZipBundleAndShare,
 } from "../services/export";
@@ -18,6 +18,7 @@ type Props = NativeStackScreenProps<RootStackParamList, "Export">;
 export function ExportScreen({ route }: Props) {
   const { mapId, mode } = route.params;
   const [mapName, setMapName] = useState("export");
+  const [mapFileUri, setMapFileUri] = useState<string | null>(null);
   const [observations, setObservations] = useState<Observation[]>([]);
   const [preview, setPreview] = useState("");
   const [showExcelModal, setShowExcelModal] = useState(false);
@@ -26,7 +27,10 @@ export function ExportScreen({ route }: Props) {
     (async () => {
       const [maps, obs] = await Promise.all([loadMaps(), loadObservationsForMap(mapId)]);
       const m = maps.find((item) => item.id === mapId);
-      if (m) setMapName(m.name);
+      if (m) {
+        setMapName(m.name);
+        setMapFileUri(m.fileUri);
+      }
       setObservations(obs);
       setPreview(buildArtportalenTsv(obs).slice(0, 600));
     })().catch((e) => Alert.alert("Fel", String(e)));
@@ -73,9 +77,9 @@ export function ExportScreen({ route }: Props) {
       return;
     }
     const csv = buildCsv(observations);
-    const result = await saveCsvAndComposeEmail(mapName, csv);
+    const result = await saveCsvGeoJsonAndMapAndComposeEmail(mapName, observations, csv, mapFileUri);
     if (!result.opened) {
-      Alert.alert("E-post", `E-post ar inte tillgangligt pa enheten.\nFilen sparades:\n${result.path}`);
+      Alert.alert("E-post", `E-post ar inte tillgangligt pa enheten.\nFiler sparades:\n${result.paths.join("\n")}`);
       return;
     }
   }

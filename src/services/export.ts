@@ -4,17 +4,11 @@ import * as MailComposer from "expo-mail-composer";
 import * as Sharing from "expo-sharing";
 import * as WebBrowser from "expo-web-browser";
 import JSZip from "jszip";
+import Papa from "papaparse";
 import { Observation, PointObservation } from "../types/models";
 import { averageLatLon, wgs84ToSweref99tm } from "./coords";
 import { exportDir } from "./files";
 import { photoFileNameFromRef, resolvePointPhotoUri, sanitizeForFileName } from "./photos";
-
-function escapeCsv(value: string): string {
-  if (/[;"\n]/.test(value)) {
-    return `"${value.replace(/"/g, '""')}"`;
-  }
-  return value;
-}
 
 function observationToRepresentativeWgs84(obs: Observation): { lat: number; lon: number } {
   if (obs.kind === "point") {
@@ -74,14 +68,26 @@ export async function copyTsvAndOpenArtportalen(tsv: string) {
 }
 
 export function buildCsv(observations: Observation[]): string {
-  const header =
-    "Artnamn;Typ;Antal;Datum;Lat;Lon;SWEREF99TM_NordY;SWEREF99TM_OstX;Lokalnamn;Noggrannhet_m;Beskrivning;Foton";
-  const rows = observations.map((obs) => {
+  const fields = [
+    "Artnamn",
+    "Typ",
+    "Antal",
+    "Datum",
+    "Lat",
+    "Lon",
+    "SWEREF99TM_NordY",
+    "SWEREF99TM_OstX",
+    "Lokalnamn",
+    "Noggrannhet_m",
+    "Beskrivning",
+    "Foton",
+  ];
+  const data = observations.map((obs) => {
     const rep = observationToRepresentativeWgs84(obs);
     const sweref = wgs84ToSweref99tm(rep.lon, rep.lat);
     const photos = obs.photoUris.map((name) => photoFileNameFromRef(name)).join("|");
     return [
-      escapeCsv(obs.species),
+      obs.species,
       obs.kind,
       String(obs.count),
       new Date(obs.dateISO).toISOString(),
@@ -89,13 +95,25 @@ export function buildCsv(observations: Observation[]): string {
       formatNumberForExcel(rep.lon, 7),
       formatNumberForExcel(sweref.y, 2),
       formatNumberForExcel(sweref.x, 2),
-      escapeCsv(pointLocalName(obs)),
+      pointLocalName(obs),
       pointAccuracy(obs),
-      escapeCsv(obs.notes),
-      escapeCsv(photos),
-    ].join(";");
+      obs.notes,
+      photos,
+    ];
   });
-  return ["sep=;", header, ...rows].join("\r\n");
+  const csvBody = Papa.unparse(
+    {
+      fields,
+      data,
+    },
+    {
+      delimiter: ";",
+      newline: "\r\n",
+      quotes: false,
+      skipEmptyLines: false,
+    }
+  );
+  return ensureUtf8Bom(`sep=;\r\n${csvBody}`);
 }
 
 function pad2(value: number): string {
@@ -129,6 +147,27 @@ export async function saveCsvAndComposeEmail(
     attachments: [path],
   });
   return { path, opened: true };
+}
+
+export async function saveCsvGeoJsonAndMapAndComposeEmail(
+  mapName: string,
+  observations: Observation[],
+  csv: string,
+  mapFileUri?: string | null
+): Promise<{ paths: string[]; opened: boolean }> {
+  const csvPath = await saveCsvFile(mapName, csv);
+  const bundlePath = await saveEmailBundleZip(mapName, observations, csv, mapFileUri);
+  const attachments = [csvPath, bundlePath];
+  const canEmail = await MailComposer.isAvailableAsync();
+  if (!canEmail) {
+    return { paths: attachments, opened: false };
+  }
+  await MailComposer.composeAsync({
+    subject: mapName,
+    body: `Export fran Faltkarta for kartan "${mapName}" (ZIP med CSV, GeoJSON och GeoTIFF).`,
+    attachments,
+  });
+  return { paths: attachments, opened: true };
 }
 
 export async function saveZipBundleAndShare(mapName: string, observations: Observation[]): Promise<string> {
@@ -182,6 +221,56 @@ async function saveCsvFile(mapName: string, csv: string): Promise<string> {
   const path = `${dir}/${mapName.replace(/[^\w\-.]/g, "_")}.csv`;
   await FileSystem.writeAsStringAsync(path, ensureUtf8Bom(csv), {
     encoding: FileSystem.EncodingType.UTF8,
+  });
+  return path;
+}
+
+async function saveGeoJsonFile(mapName: string, observations: Observation[]): Promise<string> {
+  const dir = exportDir();
+  const dirInfo = await FileSystem.getInfoAsync(dir);
+  if (!dirInfo.exists) {
+    await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
+  }
+  const safeMapName = sanitizeForFileName(mapName);
+  const path = `${dir}/${safeMapName}.geojson`;
+  await FileSystem.writeAsStringAsync(path, buildGeoJson(mapName, observations), {
+    encoding: FileSystem.EncodingType.UTF8,
+  });
+  return path;
+}
+
+async function saveEmailBundleZip(
+  mapName: string,
+  observations: Observation[],
+  csv: string,
+  mapFileUri?: string | null
+): Promise<string> {
+  const dir = exportDir();
+  const dirInfo = await FileSystem.getInfoAsync(dir);
+  if (!dirInfo.exists) {
+    await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
+  }
+  const safeMapName = sanitizeForFileName(mapName);
+  const zip = new JSZip();
+  zip.file(`${safeMapName}.csv`, ensureUtf8Bom(csv));
+  zip.file(`${safeMapName}.geojson`, buildGeoJson(mapName, observations));
+
+  if (mapFileUri) {
+    try {
+      const mapBase64 = await FileSystem.readAsStringAsync(mapFileUri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+      const ext = mapFileUri.toLowerCase().endsWith(".tiff") ? "tiff" : "tif";
+      zip.file(`${safeMapName}.${ext}`, mapBase64, { base64: true });
+    } catch {
+      // Continue without GeoTIFF if file cannot be read.
+    }
+  }
+
+  const zipBase64 = await zip.generateAsync({ type: "base64" });
+  const path = `${dir}/${safeMapName}_email.zip`;
+  await FileSystem.writeAsStringAsync(path, zipBase64, {
+    encoding: FileSystem.EncodingType.Base64,
   });
   return path;
 }
