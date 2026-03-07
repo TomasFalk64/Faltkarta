@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from "react";
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+﻿import React, { useEffect, useState } from "react";
+import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { RootStackParamList } from "../navigation/types";
 import { loadMaps, loadObservationsForMap } from "../storage/storage";
@@ -10,15 +10,17 @@ import {
   copyTsvAndOpenArtportalen,
   saveCsvAndComposeEmail,
   saveCsvAndShare,
+  saveZipBundleAndShare,
 } from "../services/export";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Export">;
 
 export function ExportScreen({ route }: Props) {
-  const { mapId } = route.params;
+  const { mapId, mode } = route.params;
   const [mapName, setMapName] = useState("export");
   const [observations, setObservations] = useState<Observation[]>([]);
   const [preview, setPreview] = useState("");
+  const [showExcelModal, setShowExcelModal] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -30,6 +32,21 @@ export function ExportScreen({ route }: Props) {
     })().catch((e) => Alert.alert("Fel", String(e)));
   }, [mapId]);
 
+  useEffect(() => {
+    if (!mode || !observations.length) return;
+    if (mode === "artportalen") {
+      void onCopyArtportalen();
+      return;
+    }
+    if (mode === "mail") {
+      void onEmailCsv();
+      return;
+    }
+    if (mode === "zip") {
+      void onExportZip();
+    }
+  }, [mode, observations.length]);
+
   async function onCopyArtportalen() {
     if (!observations.length) {
       Alert.alert("Export", "Inga observationer att exportera.");
@@ -37,7 +54,7 @@ export function ExportScreen({ route }: Props) {
     }
     const tsv = buildArtportalenTsv(observations);
     await copyTsvAndOpenArtportalen(tsv);
-    Alert.alert("Klart", "TSV kopierad till urklipp. Artportalen öppnad.");
+    Alert.alert("Klart", "TSV kopierad till urklipp. Artportalen oppnad.");
   }
 
   async function onSaveCsv() {
@@ -47,7 +64,7 @@ export function ExportScreen({ route }: Props) {
     }
     const csv = buildCsv(observations);
     const path = await saveCsvAndShare(mapName, csv);
-    Alert.alert("Sparad", `Fil skapad:\n${path}`);
+    Alert.alert("Sparad", path);
   }
 
   async function onEmailCsv() {
@@ -63,27 +80,69 @@ export function ExportScreen({ route }: Props) {
     }
   }
 
+  function onExportCsv() {
+    setShowExcelModal(true);
+  }
+
+  async function onExportZip() {
+    if (!observations.length) {
+      Alert.alert("Export", "Inga observationer att exportera.");
+      return;
+    }
+    const path = await saveZipBundleAndShare(mapName, observations);
+    Alert.alert("Sparad", `ZIP skapad:\n${path}`);
+  }
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Exportera observationer</Text>
       <Text style={styles.subtitle}>
-        {observations.length} observationer på kartan {mapName}
+        {observations.length} observationer pa kartan {mapName}
       </Text>
 
       <Pressable style={styles.primaryBtn} onPress={onCopyArtportalen}>
         <Text style={styles.primaryText}>Kopiera till Artportalen</Text>
       </Pressable>
-      <Pressable style={[styles.primaryBtn, styles.altBtn]} onPress={onSaveCsv}>
-        <Text style={styles.primaryText}>Spara till Excel (CSV)</Text>
+      <Pressable style={[styles.primaryBtn, styles.altBtn]} onPress={onExportCsv}>
+        <Text style={styles.primaryText}>Exportera Excelfil</Text>
       </Pressable>
-      <Pressable style={[styles.primaryBtn, styles.mailBtn]} onPress={onEmailCsv}>
-        <Text style={styles.primaryText}>Skicka CSV via e-post</Text>
+      <Pressable style={[styles.primaryBtn, styles.zipBtn]} onPress={onExportZip}>
+        <Text style={styles.primaryText}>Exportera ZIP med bilder och GeoJSON</Text>
       </Pressable>
 
-      <Text style={styles.previewTitle}>Förhandsvisning TSV</Text>
+      <Text style={styles.previewTitle}>Forhandsvisning TSV</Text>
       <ScrollView style={styles.previewBox}>
         <Text style={styles.previewText}>{preview || "Tomt"}</Text>
       </ScrollView>
+
+      <Modal transparent visible={showExcelModal} animationType="fade" onRequestClose={() => setShowExcelModal(false)}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Exportera Excelfil</Text>
+            <Pressable
+              style={[styles.modalActionBtn, styles.modalShareBtn]}
+              onPress={() => {
+                setShowExcelModal(false);
+                void onSaveCsv();
+              }}
+            >
+              <Text style={styles.modalActionText}>Dela fil</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.modalActionBtn, styles.modalMailBtn]}
+              onPress={() => {
+                setShowExcelModal(false);
+                void onEmailCsv();
+              }}
+            >
+              <Text style={styles.modalActionText}>E-post</Text>
+            </Pressable>
+            <Pressable style={[styles.modalActionBtn, styles.modalCancelBtn]} onPress={() => setShowExcelModal(false)}>
+              <Text style={styles.modalActionText}>Avbryt</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -114,8 +173,8 @@ const styles = StyleSheet.create({
   altBtn: {
     backgroundColor: "#ca6702",
   },
-  mailBtn: {
-    backgroundColor: "#2a9d8f",
+  zipBtn: {
+    backgroundColor: "#6a4c93",
   },
   primaryText: {
     color: "#fff",
@@ -138,5 +197,41 @@ const styles = StyleSheet.create({
   previewText: {
     fontFamily: "monospace",
     color: "#1e2428",
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.35)",
+    justifyContent: "center",
+    padding: 16,
+  },
+  modalCard: {
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    padding: 12,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    marginBottom: 10,
+  },
+  modalActionBtn: {
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    marginTop: 8,
+  },
+  modalShareBtn: {
+    backgroundColor: "#ca6702",
+  },
+  modalMailBtn: {
+    backgroundColor: "#2a9d8f",
+  },
+  modalCancelBtn: {
+    backgroundColor: "#7b8791",
+  },
+  modalActionText: {
+    color: "#fff",
+    fontWeight: "700",
+    textAlign: "center",
   },
 });

@@ -31,8 +31,10 @@ export type ObservationBase = {
 export type PointObservation = ObservationBase & {
   kind: "point";
   wgs84: LatLon;
+  pointNumber?: number;
   localName: string;
   accuracyMeters: number | null;
+  photoAssetIds?: string[];
 };
 
 export type PolygonObservation = ObservationBase & {

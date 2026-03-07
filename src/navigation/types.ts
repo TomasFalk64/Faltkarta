@@ -1,5 +1,5 @@
 export type RootStackParamList = {
   MapList: undefined;
   Map: { mapId: string };
-  Export: { mapId: string };
+  Export: { mapId: string; mode?: "artportalen" | "mail" | "zip" };
 };

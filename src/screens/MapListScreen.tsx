@@ -16,6 +16,7 @@ import { RootStackParamList } from "../navigation/types";
 import { MapItem } from "../types/models";
 import { loadMaps, loadSettings, removeMap, saveSettings, upsertMap } from "../storage/storage";
 import { deleteIfExists, pickAndImportGeoTiff } from "../services/files";
+import { cleanupAllPendingPhotoCopies } from "../services/photos";
 
 type Props = NativeStackScreenProps<RootStackParamList, "MapList">;
 
@@ -24,6 +25,7 @@ export function MapListScreen({ navigation }: Props) {
   const [gpsPingSeconds, setGpsPingSeconds] = useState("3");
   const [renameMap, setRenameMap] = useState<MapItem | null>(null);
   const [renameValue, setRenameValue] = useState("");
+  const [showRenameHint, setShowRenameHint] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [menuMap, setMenuMap] = useState<MapItem | null>(null);
 
@@ -45,6 +47,9 @@ export function MapListScreen({ navigation }: Props) {
       if (!item) return;
       const next = await upsertMap(item);
       setMaps(next);
+      setRenameMap(item);
+      setRenameValue(item.name);
+      setShowRenameHint(true);
     } catch (error) {
       Alert.alert("Importfel", String(error));
     }
@@ -57,6 +62,7 @@ export function MapListScreen({ navigation }: Props) {
   function openRename(item: MapItem) {
     setRenameMap(item);
     setRenameValue(item.name);
+    setShowRenameHint(false);
   }
 
   async function confirmRename() {
@@ -69,6 +75,7 @@ export function MapListScreen({ navigation }: Props) {
     setMaps(next);
     setRenameMap(null);
     setRenameValue("");
+    setShowRenameHint(false);
   }
 
   async function onSavePing() {
@@ -80,29 +87,7 @@ export function MapListScreen({ navigation }: Props) {
   }
 
   function onOpenMap(item: MapItem) {
-    const importName = item.importName?.trim();
-    const currentName = item.name.trim();
-    const hasDefaultName = !!importName && currentName.localeCompare(importName, undefined, { sensitivity: "base" }) === 0;
-
-    if (!hasDefaultName) {
-      navigation.navigate("Map", { mapId: item.id });
-      return;
-    }
-
-    Alert.alert(
-      "Byt kartnamn?",
-      `Kartnamnet \"${item.name}\" kommer att användas som förslag på lokalnamn.`,
-      [
-        {
-          text: "Byt namn",
-          onPress: () => openRename(item),
-        },
-        {
-          text: "Fortsätt",
-          onPress: () => navigation.navigate("Map", { mapId: item.id }),
-        },
-      ]
-    );
+    navigation.navigate("Map", { mapId: item.id });
   }
 
   return (
@@ -111,7 +96,9 @@ export function MapListScreen({ navigation }: Props) {
         data={maps}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
-        ListEmptyComponent={<Text style={styles.emptyText}>Inga kartor an nu. Tryck + for import.</Text>}
+        ListEmptyComponent={
+          <Text style={styles.emptyText}>{"Inga kartor \u00e4nnu. Tryck + f\u00f6r import."}</Text>
+        }
         renderItem={({ item }) => (
           <Pressable style={styles.mapRow} onPress={() => onOpenMap(item)}>
             {item.thumbnailUri ? (
@@ -146,9 +133,20 @@ export function MapListScreen({ navigation }: Props) {
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Byt kartnamn</Text>
+            {showRenameHint && (
+              <Text style={styles.renameHint}>
+                Kartans namn används som förslag till lokalnamn vid punktobservationer.
+              </Text>
+            )}
             <TextInput value={renameValue} onChangeText={setRenameValue} style={styles.modalInput} />
             <View style={styles.modalActions}>
-              <Pressable onPress={() => setRenameMap(null)} style={[styles.modalBtn, styles.cancelBtn]}>
+              <Pressable
+                onPress={() => {
+                  setRenameMap(null);
+                  setShowRenameHint(false);
+                }}
+                style={[styles.modalBtn, styles.cancelBtn]}
+              >
                 <Text style={styles.modalBtnText}>Avbryt</Text>
               </Pressable>
               <Pressable onPress={confirmRename} style={[styles.modalBtn, styles.okBtn]}>
@@ -183,7 +181,7 @@ export function MapListScreen({ navigation }: Props) {
                 navigation.navigate("Export", { mapId: selected.id });
               }}
             >
-              <Text style={styles.menuActionText}>Exportera</Text>
+              <Text style={styles.menuActionText}>Export</Text>
             </Pressable>
             <Pressable
               style={[styles.menuActionBtn, styles.menuDangerBtn]}
@@ -191,13 +189,14 @@ export function MapListScreen({ navigation }: Props) {
                 if (!menuMap) return;
                 const selected = menuMap;
                 setMenuMap(null);
+                await cleanupAllPendingPhotoCopies();
                 await deleteIfExists(selected.fileUri);
                 if (selected.thumbnailUri) await deleteIfExists(selected.thumbnailUri);
                 const next = await removeMap(selected.id);
                 setMaps(next);
               }}
             >
-              <Text style={styles.menuActionText}>Ta bort</Text>
+              <Text style={styles.menuActionText}>Radera karta</Text>
             </Pressable>
           </View>
         </View>
@@ -405,6 +404,11 @@ const styles = StyleSheet.create({
     borderColor: "#b9c1c8",
     borderRadius: 8,
     padding: 10,
+  },
+  renameHint: {
+    color: "#44515b",
+    marginBottom: 8,
+    lineHeight: 18,
   },
   modalActions: {
     flexDirection: "row",

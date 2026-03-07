@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
+import Svg, { Circle, Polygon } from "react-native-svg";
 import { RootStackParamList } from "../navigation/types";
 import { MapCanvas } from "../components/MapCanvas";
 import { ObservationModal } from "../components/ObservationModal";
@@ -18,6 +19,7 @@ import { LatLon, MapItem, Observation, PolygonObservation, PointObservation } fr
 import { averageLatLon, distanceMeters } from "../services/coords";
 import { makeId } from "../utils/id";
 import { ensureMapGeorefBounds } from "../services/files";
+import { photoFileNameFromRef, resolvePointPhotoUri, savePointPhotosToGallery } from "../services/photos";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Map">;
 
@@ -33,13 +35,16 @@ export function MapScreen({ route }: Props) {
   const [pointModalSession, setPointModalSession] = useState(0);
   const [polygonModalSession, setPolygonModalSession] = useState(0);
   const [editingPoint, setEditingPoint] = useState<PointObservation | null>(null);
+  const [editingPointPhotoPreviewUris, setEditingPointPhotoPreviewUris] = useState<string[]>([]);
   const [polygonMode, setPolygonMode] = useState(false);
   const [draftPolygon, setDraftPolygon] = useState<LatLon[]>([]);
   const [gpsPingSeconds, setGpsPingSeconds] = useState(3);
 
-  const { gpsPos, error: gpsError } = useGps({ pingSeconds: gpsPingSeconds });
+  const { gpsPos, rawAccuracyMeters, error: gpsError } = useGps({ pingSeconds: gpsPingSeconds });
   const lastGpsRef = useRef<{ pos: LatLon; ts: number } | null>(null);
-  const gpsTrailRef = useRef<Array<{ pos: LatLon; ts: number }>>([]);
+  const gpsTrailRef = useRef<Array<{ pos: LatLon; ts: number; rawAccuracyMeters: number | null }>>([]);
+  const editingPhotoLookupRef = useRef<Record<string, { fileName: string; assetId?: string }>>({});
+  const editingMissingPhotosRef = useRef<Array<{ fileName: string; assetId?: string }>>([]);
 
   useEffect(() => {
     (async () => {
@@ -74,10 +79,10 @@ export function MapScreen({ route }: Props) {
       if (dtSec < 2 && jump > 200) return;
     }
     lastGpsRef.current = { pos: gpsPos, ts: now };
-    gpsTrailRef.current = [...gpsTrailRef.current, { pos: gpsPos, ts: now }]
+    gpsTrailRef.current = [...gpsTrailRef.current, { pos: gpsPos, ts: now, rawAccuracyMeters }]
       .filter((item) => now - item.ts <= 60_000)
       .slice(-20);
-  }, [gpsPos]);
+  }, [gpsPos, rawAccuracyMeters]);
 
   const crosshairPos = centerCoord;
   const pointList = useMemo(
@@ -109,12 +114,40 @@ export function MapScreen({ route }: Props) {
     setCenterCoord(clampToMapBounds(gpsPos));
   }
 
-  function estimateGpsAccuracyMeters(): number | null {
-    const samples = gpsTrailRef.current.map((s) => s.pos);
-    if (samples.length < 3) return null;
+  function estimateGpsAccuracyMeters(): { estimated: number | null; raw: number | null; combined: number | null } {
+    const recent = gpsTrailRef.current.slice(-4);
+    const samples = recent.map((s) => s.pos);
+    const latestRaw = recent.length ? recent[recent.length - 1].rawAccuracyMeters : rawAccuracyMeters;
+    const raw = typeof latestRaw === "number" && Number.isFinite(latestRaw) ? Math.max(1, Math.round(latestRaw)) : null;
+    if (samples.length < 2) {
+      return { estimated: null, raw, combined: raw };
+    }
     const center = averageLatLon(samples);
     const avgDist = samples.reduce((sum, p) => sum + distanceMeters(p, center), 0) / samples.length;
-    return Math.max(1, Math.round(avgDist));
+    const estimated = Math.max(1, Math.round(avgDist));
+    const combined = raw !== null ? Math.max(estimated, raw) : estimated;
+    return { estimated, raw, combined };
+  }
+
+  const gpsAccuracy = useMemo(() => estimateGpsAccuracyMeters(), [gpsPos, rawAccuracyMeters]);
+  const displayCombined = Math.min(99, Math.max(0, gpsAccuracy.combined ?? 0));
+
+  function getNextPointNumber(): number {
+    const numbers = observations
+      .filter((obs): obs is PointObservation => obs.kind === "point")
+      .map((obs) => obs.pointNumber)
+      .filter((n): n is number => typeof n === "number" && Number.isFinite(n));
+    const max = numbers.length ? Math.max(...numbers) : 0;
+    return max + 1;
+  }
+
+  function derivePointNumberFromExisting(pointId: string): number {
+    const byCreated = observations
+      .filter((obs): obs is PointObservation => obs.kind === "point")
+      .slice()
+      .sort((a, b) => a.dateISO.localeCompare(b.dateISO));
+    const idx = byCreated.findIndex((obs) => obs.id === pointId);
+    return idx >= 0 ? idx + 1 : getNextPointNumber();
   }
 
   async function onAddPoint(payload: {
@@ -123,34 +156,77 @@ export function MapScreen({ route }: Props) {
     photoUris: string[];
     localName?: string;
     accuracyMeters?: number | null;
-  }) {
-    if (!map) return;
-    const obs: PointObservation = editingPoint
-      ? {
-          ...editingPoint,
-          species: payload.species,
-          notes: payload.notes,
-          photoUris: payload.photoUris,
-          localName: payload.localName?.trim() || map.name,
-          accuracyMeters: payload.accuracyMeters ?? null,
-        }
-      : {
-          id: makeId("obs"),
-          mapId: map.id,
-          kind: "point",
-          species: payload.species,
-          count: 1,
-          notes: payload.notes,
-          photoUris: payload.photoUris,
-          localName: payload.localName?.trim() || map.name,
-          accuracyMeters: payload.accuracyMeters ?? estimateGpsAccuracyMeters(),
-          dateISO: new Date().toISOString(),
-          wgs84: crosshairPos,
-        };
-    const next = editingPoint ? await updateObservation(obs) : await addObservation(obs);
-    setObservations(next);
-    setEditingPoint(null);
-    showToast(editingPoint ? "Punkt uppdaterad" : "Punkt sparad");
+  }): Promise<boolean> {
+    if (!map) return false;
+    try {
+      const pointId = editingPoint?.id ?? makeId("obs");
+      const dateISO = editingPoint?.dateISO ?? new Date().toISOString();
+      const pointNumber = editingPoint?.pointNumber ?? derivePointNumberFromExisting(pointId);
+      const currentLookup = editingPhotoLookupRef.current;
+      const keptExisting = payload.photoUris
+        .map((uri) => currentLookup[uri])
+        .filter((v): v is { fileName: string; assetId?: string } => !!v);
+      const missingExisting = editingMissingPhotosRef.current;
+      const newSourceUris = payload.photoUris.filter((uri) => !currentLookup[uri]);
+      const nextSequence = keptExisting.length + missingExisting.length + 1;
+      const savedNewPhotos = await savePointPhotosToGallery({
+        sourceUris: newSourceUris,
+        pointNumber: `Obs${pointNumber}`,
+        species: payload.species,
+        dateISO,
+        startIndex: nextSequence,
+      });
+
+      const photoUris = [
+        ...keptExisting.map((p) => p.fileName),
+        ...missingExisting.map((p) => p.fileName),
+        ...savedNewPhotos.photoNames,
+      ];
+      const photoAssetIds = [
+        ...keptExisting.map((p) => p.assetId ?? ""),
+        ...missingExisting.map((p) => p.assetId ?? ""),
+        ...savedNewPhotos.photoAssetIds,
+      ];
+
+      const obs: PointObservation = editingPoint
+        ? {
+            ...editingPoint,
+            species: payload.species,
+            notes: payload.notes,
+            photoUris,
+            photoAssetIds,
+            pointNumber,
+            localName: payload.localName?.trim() || map.name,
+            accuracyMeters: payload.accuracyMeters ?? null,
+          }
+        : {
+            id: pointId,
+            mapId: map.id,
+            kind: "point",
+            species: payload.species,
+            count: 1,
+            notes: payload.notes,
+            photoUris,
+            photoAssetIds,
+            pointNumber,
+            localName: payload.localName?.trim() || map.name,
+            accuracyMeters: payload.accuracyMeters ?? gpsAccuracy.combined,
+            dateISO,
+            wgs84: crosshairPos,
+          };
+
+      const next = editingPoint ? await updateObservation(obs) : await addObservation(obs);
+      setObservations(next);
+      setEditingPoint(null);
+      setEditingPointPhotoPreviewUris([]);
+      editingPhotoLookupRef.current = {};
+      editingMissingPhotosRef.current = [];
+      showToast(editingPoint ? "Punkt uppdaterad" : "Punkt sparad");
+      return true;
+    } catch (error) {
+      Alert.alert("Foto", String(error));
+      return false;
+    }
   }
 
   async function onDeletePoint() {
@@ -158,6 +234,9 @@ export function MapScreen({ route }: Props) {
     const next = await deleteObservation(map.id, editingPoint.id);
     setObservations(next);
     setEditingPoint(null);
+    setEditingPointPhotoPreviewUris([]);
+    editingPhotoLookupRef.current = {};
+    editingMissingPhotosRef.current = [];
     showToast("Punkt raderad");
   }
 
@@ -167,8 +246,8 @@ export function MapScreen({ route }: Props) {
     photoUris: string[];
   }) {
     if (!map) return;
-    if (draftPolygon.length < 3) {
-      Alert.alert("Polygon", "Minst 3 punkter kravs.");
+    if (draftPolygon.length < 2) {
+      Alert.alert("Polygon", "Minst 2 punkter kravs.");
       return;
     }
     const obs: PolygonObservation = {
@@ -191,6 +270,36 @@ export function MapScreen({ route }: Props) {
 
   function addPolygonVertex() {
     setDraftPolygon((prev) => [...prev, crosshairPos]);
+  }
+
+  async function openPointEditor(obs: PointObservation) {
+    const existing = obs.photoUris.map((fileName, index) => ({
+      fileName: photoFileNameFromRef(fileName),
+      assetId: obs.photoAssetIds?.[index],
+    }));
+    const resolved = await Promise.all(
+      existing.map(async (item) => ({
+        ...item,
+        uri: await resolvePointPhotoUri(item.fileName, item.assetId),
+      }))
+    );
+    const previewLookup: Record<string, { fileName: string; assetId?: string }> = {};
+    const previewUris: string[] = [];
+    const missing: Array<{ fileName: string; assetId?: string }> = [];
+    resolved.forEach((item) => {
+      if (item.uri) {
+        previewLookup[item.uri] = { fileName: item.fileName, assetId: item.assetId };
+        previewUris.push(item.uri);
+      } else {
+        missing.push({ fileName: item.fileName, assetId: item.assetId });
+      }
+    });
+    editingPhotoLookupRef.current = previewLookup;
+    editingMissingPhotosRef.current = missing;
+    setEditingPointPhotoPreviewUris(previewUris);
+    setEditingPoint(obs);
+    setPointModalSession((v) => v + 1);
+    setShowPointModal(true);
   }
 
   if (!map) {
@@ -217,9 +326,7 @@ export function MapScreen({ route }: Props) {
         onPressPoint={(id) => {
           const obs = observations.find((o) => o.id === id);
           if (obs && obs.kind === "point") {
-            setEditingPoint(obs);
-            setPointModalSession((v) => v + 1);
-            setShowPointModal(true);
+            void openPointEditor(obs);
           }
         }}
       />
@@ -233,6 +340,15 @@ export function MapScreen({ route }: Props) {
         </View>
       </View>
 
+      <View
+        style={[
+          styles.accuracyPill,
+          displayCombined > 10 ? styles.accuracyPillBad : undefined,
+        ]}
+      >
+        <Text style={styles.accuracyPillText}>{String(displayCombined)}</Text>
+      </View>
+
       <View style={styles.controls}>
         <Pressable
           style={[styles.mainBtn, polygonMode ? styles.polyOn : undefined]}
@@ -241,7 +357,7 @@ export function MapScreen({ route }: Props) {
             if (polygonMode) setDraftPolygon([]);
           }}
         >
-          <Text style={styles.mainBtnIcon}>⬠</Text>
+          <PolygonModeIcon />
         </Pressable>
         <Pressable style={styles.mainBtn} onPress={onCenterToGps}>
           <Text style={styles.mainBtnIcon}>↗</Text>
@@ -250,6 +366,9 @@ export function MapScreen({ route }: Props) {
           style={styles.mainBtn}
           onPress={() => {
             setEditingPoint(null);
+            setEditingPointPhotoPreviewUris([]);
+            editingPhotoLookupRef.current = {};
+            editingMissingPhotosRef.current = [];
             setPointModalSession((v) => v + 1);
             setShowPointModal(true);
           }}
@@ -265,16 +384,31 @@ export function MapScreen({ route }: Props) {
         {polygonMode && (
           <>
             <Pressable style={styles.secondaryBtn} onPress={addPolygonVertex}>
-              <Text style={styles.secondaryText}>+ Lagg till punkt ({draftPolygon.length})</Text>
+              <Text style={styles.secondaryText}>
+                {`+ L\u00e4gg till punkt (${draftPolygon.length + 1})`}
+              </Text>
             </Pressable>
             <Pressable
               style={styles.secondaryBtn}
               onPress={() => {
+                if (draftPolygon.length < 2) {
+                  Alert.alert("Polygon", "L\u00e4gg till minst 2 punkter innan du markerar polygon klar.");
+                  return;
+                }
                 setPolygonModalSession((v) => v + 1);
                 setShowPolygonModal(true);
               }}
             >
-              <Text style={styles.secondaryText}>Klar polygon</Text>
+              <Text style={styles.secondaryText}>Polygon klar</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.secondaryBtn, styles.secondaryDangerBtn]}
+              onPress={() => {
+                setDraftPolygon([]);
+                setPolygonMode(false);
+              }}
+            >
+              <Text style={styles.secondaryText}>Avbryt polygon</Text>
             </Pressable>
           </>
         )}
@@ -311,9 +445,7 @@ export function MapScreen({ route }: Props) {
                     style={styles.pointListItem}
                     onPress={() => {
                       setShowPointList(false);
-                      setEditingPoint(obs);
-                      setPointModalSession((v) => v + 1);
-                      setShowPointModal(true);
+                      void openPointEditor(obs);
                     }}
                   >
                     <Text style={styles.pointListItemSpecies}>{obs.species}</Text>
@@ -336,6 +468,9 @@ export function MapScreen({ route }: Props) {
         onClose={() => {
           setShowPointModal(false);
           setEditingPoint(null);
+          setEditingPointPhotoPreviewUris([]);
+          editingPhotoLookupRef.current = {};
+          editingMissingPhotosRef.current = [];
         }}
         onSave={onAddPoint}
         onDelete={editingPoint ? onDeletePoint : undefined}
@@ -344,7 +479,7 @@ export function MapScreen({ route }: Props) {
             ? {
                 species: editingPoint.species,
                 notes: editingPoint.notes,
-                photoUris: editingPoint.photoUris,
+                photoUris: editingPointPhotoPreviewUris,
                 localName: editingPoint.localName,
                 accuracyMeters: editingPoint.accuracyMeters,
               }
@@ -353,7 +488,7 @@ export function MapScreen({ route }: Props) {
                 notes: "",
                 photoUris: [],
                 localName: map.name,
-                accuracyMeters: estimateGpsAccuracyMeters(),
+                accuracyMeters: gpsAccuracy.combined,
               }
         }
         title={editingPoint ? "Redigera punkt" : "Ny punktobservation"}
@@ -366,8 +501,22 @@ export function MapScreen({ route }: Props) {
         onSave={onAddPolygon}
         title="Ny polygonobservation"
         sessionToken={polygonModalSession}
+        speciesPlaceholder="Namn"
       />
     </View>
+  );
+}
+
+function PolygonModeIcon() {
+  return (
+    <Svg width={26} height={26} viewBox="0 0 26 26">
+      <Polygon points="13,23.5 22.5,16.5 18.8,4.2 7.2,4.2 3.5,16.5" fill="none" stroke="#fff" strokeWidth={2} />
+      <Circle cx={13} cy={23.5} r={2.1} fill="#fff" />
+      <Circle cx={22.5} cy={16.5} r={2.1} fill="#fff" />
+      <Circle cx={18.8} cy={4.2} r={2.1} fill="#fff" />
+      <Circle cx={7.2} cy={4.2} r={2.1} fill="#fff" />
+      <Circle cx={3.5} cy={16.5} r={2.1} fill="#fff" />
+    </Svg>
   );
 }
 
@@ -375,6 +524,28 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#000" },
   centered: { flex: 1, justifyContent: "center", alignItems: "center" },
   northWrap: { position: "absolute", right: 10, top: 10 },
+  accuracyPill: {
+    position: "absolute",
+    left: 10,
+    top: 10,
+    minWidth: 44,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderWidth: 2,
+    borderColor: "#1b4332",
+    backgroundColor: "rgba(0,95,115,0.45)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  accuracyPillBad: {
+    borderColor: "#d62828",
+  },
+  accuracyPillText: {
+    color: "#fff",
+    fontWeight: "700",
+    fontSize: 14,
+  },
   northBtn: {
     paddingVertical: 2,
     paddingHorizontal: 2,
@@ -445,6 +616,9 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 10,
     paddingVertical: 8,
+  },
+  secondaryDangerBtn: {
+    backgroundColor: "rgba(155,34,38,0.85)",
   },
   secondaryText: { color: "#fff", fontWeight: "600" },
   toast: {

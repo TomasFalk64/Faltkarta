@@ -3,10 +3,11 @@ import * as FileSystem from "expo-file-system/legacy";
 import * as MailComposer from "expo-mail-composer";
 import * as Sharing from "expo-sharing";
 import * as WebBrowser from "expo-web-browser";
-import { fromByteArray } from "base64-js";
-import { Observation } from "../types/models";
+import JSZip from "jszip";
+import { Observation, PointObservation } from "../types/models";
 import { averageLatLon, wgs84ToSweref99tm } from "./coords";
 import { exportDir } from "./files";
+import { photoFileNameFromRef, resolvePointPhotoUri, sanitizeForFileName } from "./photos";
 
 function escapeCsv(value: string): string {
   if (/[;"\n]/.test(value)) {
@@ -78,16 +79,16 @@ export function buildCsv(observations: Observation[]): string {
   const rows = observations.map((obs) => {
     const rep = observationToRepresentativeWgs84(obs);
     const sweref = wgs84ToSweref99tm(rep.lon, rep.lat);
-    const photos = obs.photoUris.join("|");
+    const photos = obs.photoUris.map((name) => photoFileNameFromRef(name)).join("|");
     return [
       escapeCsv(obs.species),
       obs.kind,
       String(obs.count),
       new Date(obs.dateISO).toISOString(),
-      rep.lat.toFixed(7),
-      rep.lon.toFixed(7),
-      sweref.y.toFixed(2),
-      sweref.x.toFixed(2),
+      formatNumberForExcel(rep.lat, 7),
+      formatNumberForExcel(rep.lon, 7),
+      formatNumberForExcel(sweref.y, 2),
+      formatNumberForExcel(sweref.x, 2),
       escapeCsv(pointLocalName(obs)),
       pointAccuracy(obs),
       escapeCsv(obs.notes),
@@ -130,30 +131,147 @@ export async function saveCsvAndComposeEmail(
   return { path, opened: true };
 }
 
+export async function saveZipBundleAndShare(mapName: string, observations: Observation[]): Promise<string> {
+  const dir = exportDir();
+  const dirInfo = await FileSystem.getInfoAsync(dir);
+  if (!dirInfo.exists) {
+    await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
+  }
+  const zip = new JSZip();
+  const safeMapName = sanitizeForFileName(mapName);
+  const csv = buildCsv(observations);
+  zip.file(`${safeMapName}.csv`, ensureUtf8Bom(csv));
+  zip.file(`${safeMapName}.geojson`, buildGeoJson(mapName, observations));
+
+  const uniquePhotos = collectPhotoRefs(observations);
+  for (const photo of uniquePhotos) {
+    const uri = await resolvePointPhotoUri(photo.fileName, photo.assetId);
+    if (!uri) continue;
+    try {
+      const imageBase64 = await FileSystem.readAsStringAsync(uri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+      zip.file(`bilder/${photo.fileName}`, imageBase64, { base64: true });
+    } catch {
+      // Continue even if a specific image no longer exists.
+    }
+  }
+
+  const zipBase64 = await zip.generateAsync({ type: "base64" });
+  const path = `${dir}/${safeMapName}.zip`;
+  await FileSystem.writeAsStringAsync(path, zipBase64, {
+    encoding: FileSystem.EncodingType.Base64,
+  });
+  const canShare = await Sharing.isAvailableAsync();
+  if (canShare) {
+    await Sharing.shareAsync(path, {
+      mimeType: "application/zip",
+      dialogTitle: "Dela ZIP-export",
+      UTI: "public.zip-archive",
+    });
+  }
+  return path;
+}
+
 async function saveCsvFile(mapName: string, csv: string): Promise<string> {
   const dir = exportDir();
   const dirInfo = await FileSystem.getInfoAsync(dir);
   if (!dirInfo.exists) {
     await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
   }
-  const path = `${dir}/${mapName.replace(/[^\w\-.]/g, "_")}_${Date.now()}.csv`;
-  const utf16 = toUtf16LeWithBom(csv);
-  await FileSystem.writeAsStringAsync(path, fromByteArray(utf16), {
-    encoding: FileSystem.EncodingType.Base64,
+  const path = `${dir}/${mapName.replace(/[^\w\-.]/g, "_")}.csv`;
+  await FileSystem.writeAsStringAsync(path, ensureUtf8Bom(csv), {
+    encoding: FileSystem.EncodingType.UTF8,
   });
   return path;
 }
 
-function toUtf16LeWithBom(value: string): Uint8Array {
-  const out = new Uint8Array(2 + value.length * 2);
-  // UTF-16 LE BOM
-  out[0] = 0xff;
-  out[1] = 0xfe;
-  for (let i = 0; i < value.length; i++) {
-    const code = value.charCodeAt(i);
-    const idx = 2 + i * 2;
-    out[idx] = code & 0xff;
-    out[idx + 1] = (code >> 8) & 0xff;
+function collectPhotoRefs(observations: Observation[]): Array<{ fileName: string; assetId?: string }> {
+  const refs = new Map<string, { fileName: string; assetId?: string }>();
+  observations.forEach((obs) => {
+    if (obs.kind !== "point") return;
+    obs.photoUris.forEach((fileName, index) => {
+      const safeName = photoFileNameFromRef(String(fileName ?? "").trim());
+      if (!safeName) return;
+      if (!refs.has(safeName)) {
+        refs.set(safeName, { fileName: safeName, assetId: obs.photoAssetIds?.[index] });
+      }
+    });
+  });
+  return Array.from(refs.values());
+}
+
+function buildGeoJson(mapName: string, observations: Observation[]): string {
+  let polygonCounter = 0;
+  const features = observations.map((obs) => {
+    if (obs.kind === "point") {
+      return observationToGeoJsonFeature(mapName, obs, obs.pointNumber ? `Obs${obs.pointNumber}` : obs.id);
+    }
+    polygonCounter += 1;
+    return observationToGeoJsonFeature(mapName, obs, `Polygon${polygonCounter}`);
+  });
+  return JSON.stringify(
+    {
+      type: "FeatureCollection",
+      features,
+    },
+    null,
+    2
+  );
+}
+
+function observationToGeoJsonFeature(
+  mapName: string,
+  obs: Observation,
+  publicId: string
+): Record<string, unknown> {
+  const baseProps: Record<string, unknown> = {
+    id: publicId,
+    mapName,
+    kind: obs.kind,
+    species: obs.species,
+    count: obs.count,
+    notes: obs.notes,
+    dateISO: obs.dateISO,
+    photos: obs.photoUris,
+  };
+  if (obs.kind === "point") {
+    const point = obs as PointObservation;
+    return {
+      type: "Feature",
+      properties: {
+        ...baseProps,
+        localName: point.localName,
+        accuracyMeters: point.accuracyMeters,
+      },
+      geometry: {
+        type: "Point",
+        coordinates: [point.wgs84.lon, point.wgs84.lat],
+      },
+    };
   }
-  return out;
+  const ring = obs.wgs84.map((p) => [p.lon, p.lat]);
+  if (ring.length > 2) {
+    const first = ring[0];
+    const last = ring[ring.length - 1];
+    if (first[0] !== last[0] || first[1] !== last[1]) {
+      ring.push([first[0], first[1]]);
+    }
+  }
+  return {
+    type: "Feature",
+    properties: baseProps,
+    geometry: {
+      type: "Polygon",
+      coordinates: [ring],
+    },
+  };
+}
+
+function ensureUtf8Bom(value: string): string {
+  return value.startsWith("\uFEFF") ? value : `\uFEFF${value}`;
+}
+
+function formatNumberForExcel(value: number, decimals: number): string {
+  return value.toFixed(decimals).replace(".", ",");
 }

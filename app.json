@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Fältkarta",
+    "name": "F\u00e4ltkarta",
     "slug": "faltkarta",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -11,8 +11,9 @@
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "Fältkarta behöver GPS för att visa din position på kartan.",
-        "NSPhotoLibraryUsageDescription": "Fältkarta behöver åtkomst till bilder för att lägga till foton till observationer."
+        "NSLocationWhenInUseUsageDescription": "Faltkarta behover GPS for att visa din position pa kartan.",
+        "NSPhotoLibraryUsageDescription": "Faltkarta behover atkomst till bilder for att lagga till foton till observationer.",
+        "NSPhotoLibraryAddUsageDescription": "Faltkarta behover spara kopior av observationsbilder i ditt galleri."
       }
     },
     "android": {
@@ -27,7 +28,8 @@
     },
     "plugins": [
       "expo-document-picker",
-      "expo-location"
+      "expo-location",
+      "expo-media-library"
     ]
   }
 }

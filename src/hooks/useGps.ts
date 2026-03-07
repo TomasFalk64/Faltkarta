@@ -8,11 +8,13 @@ type UseGpsOptions = {
 
 type UseGpsResult = {
   gpsPos: LatLon | null;
+  rawAccuracyMeters: number | null;
   error: string | null;
 };
 
 export function useGps({ pingSeconds }: UseGpsOptions): UseGpsResult {
   const [gpsPos, setGpsPos] = useState<LatLon | null>(null);
+  const [rawAccuracyMeters, setRawAccuracyMeters] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -35,6 +37,11 @@ export function useGps({ pingSeconds }: UseGpsOptions): UseGpsResult {
             lat: loc.coords.latitude,
             lon: loc.coords.longitude,
           });
+          setRawAccuracyMeters(
+            typeof loc.coords.accuracy === "number" && Number.isFinite(loc.coords.accuracy)
+              ? Math.max(1, Math.round(loc.coords.accuracy))
+              : null
+          );
           setError(null);
         }
       );
@@ -47,5 +54,5 @@ export function useGps({ pingSeconds }: UseGpsOptions): UseGpsResult {
     };
   }, [pingSeconds]);
 
-  return { gpsPos, error };
+  return { gpsPos, rawAccuracyMeters, error };
 }

@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { speciesList } from "../data/species";
+import { createPendingPhotoCopy, deletePendingPhotoCopies } from "../services/photos";
 
 type ModalPayload = {
   species: string;
@@ -24,11 +25,12 @@ type Props = {
   visible: boolean;
   title: string;
   onClose: () => void;
-  onSave: (payload: ModalPayload) => void;
+  onSave: (payload: ModalPayload) => Promise<boolean | void> | boolean | void;
   initialValues?: ModalPayload;
-  onDelete?: () => void;
+  onDelete?: () => Promise<void> | void;
   sessionToken?: number;
   showPointMetaFields?: boolean;
+  speciesPlaceholder?: string;
 };
 
 export function ObservationModal({
@@ -40,12 +42,14 @@ export function ObservationModal({
   onDelete,
   sessionToken,
   showPointMetaFields = false,
+  speciesPlaceholder = "Artnamn",
 }: Props) {
   const [species, setSpecies] = useState("");
   const [notes, setNotes] = useState("");
   const [photoUris, setPhotoUris] = useState<string[]>([]);
   const [localName, setLocalName] = useState("");
   const [accuracyMeters, setAccuracyMeters] = useState("");
+  const pendingTempPhotoUrisRef = useRef<Set<string>>(new Set());
   const wasVisibleRef = useRef(false);
   const lastSessionTokenRef = useRef<number | undefined>(undefined);
 
@@ -92,21 +96,35 @@ export function ObservationModal({
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) return;
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ["images"],
       quality: 0.7,
       allowsEditing: false,
       selectionLimit: 1,
     });
     if (!result.canceled && result.assets[0]?.uri) {
-      setPhotoUris((prev) => [...prev, result.assets[0].uri]);
+      const tempUri = await createPendingPhotoCopy(result.assets[0].uri);
+      pendingTempPhotoUrisRef.current.add(tempUri);
+      setPhotoUris((prev) => [...prev, tempUri]);
     }
   }
 
-  function removePhotoAt(index: number) {
+  async function removePhotoAt(index: number) {
+    const uri = photoUris[index];
+    if (uri && pendingTempPhotoUrisRef.current.has(uri)) {
+      pendingTempPhotoUrisRef.current.delete(uri);
+      await deletePendingPhotoCopies([uri]);
+    }
     setPhotoUris((prev) => prev.filter((_, i) => i !== index));
   }
 
-  function resetAndClose() {
+  async function cleanupPendingTempPhotos() {
+    const pending = Array.from(pendingTempPhotoUrisRef.current);
+    pendingTempPhotoUrisRef.current.clear();
+    await deletePendingPhotoCopies(pending);
+  }
+
+  async function resetAndClose() {
+    await cleanupPendingTempPhotos();
     setSpecies("");
     setNotes("");
     setPhotoUris([]);
@@ -115,9 +133,9 @@ export function ObservationModal({
     onClose();
   }
 
-  function submit() {
+  async function submit() {
     const parsedAccuracy = Number.parseFloat(accuracyMeters.replace(",", "."));
-    onSave({
+    const shouldClose = await onSave({
       species: species.trim(),
       notes: notes.trim(),
       photoUris,
@@ -125,11 +143,13 @@ export function ObservationModal({
       accuracyMeters:
         Number.isFinite(parsedAccuracy) && parsedAccuracy >= 0 ? Math.round(parsedAccuracy) : null,
     });
-    resetAndClose();
+    if (shouldClose !== false) {
+      await resetAndClose();
+    }
   }
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={resetAndClose}>
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={() => void resetAndClose()}>
       <View style={styles.backdrop}>
         <View style={styles.card}>
           <Text style={styles.title}>{title}</Text>
@@ -138,7 +158,7 @@ export function ObservationModal({
               value={species}
               onChangeText={setSpecies}
               style={styles.input}
-              placeholder="Artnamn"
+              placeholder={speciesPlaceholder}
             />
             {suggestions.length > 0 && (
               <View style={styles.suggestions}>
@@ -184,7 +204,11 @@ export function ObservationModal({
             </Pressable>
             <View style={styles.photoRow}>
               {photoUris.map((uri, index) => (
-                <Pressable key={`${uri}-${index}`} onPress={() => removePhotoAt(index)} style={styles.photoWrap}>
+                <Pressable
+                  key={`${uri}-${index}`}
+                  onPress={() => void removePhotoAt(index)}
+                  style={styles.photoWrap}
+                >
                   <Image source={{ uri }} style={styles.photo} />
                   <View style={styles.removeBadge}>
                     <Text style={styles.removeBadgeText}>x</Text>
@@ -197,21 +221,21 @@ export function ObservationModal({
             {onDelete ? (
               <Pressable
                 style={[styles.actionBtn, styles.deleteBtn]}
-                onPress={() => {
-                  onDelete();
-                  resetAndClose();
+                onPress={async () => {
+                  await onDelete();
+                  await resetAndClose();
                 }}
               >
                 <Text style={styles.actionText}>Radera</Text>
               </Pressable>
             ) : (
-              <Pressable style={[styles.actionBtn, styles.cancelBtn]} onPress={resetAndClose}>
+              <Pressable style={[styles.actionBtn, styles.cancelBtn]} onPress={() => void resetAndClose()}>
                 <Text style={styles.actionText}>Avbryt</Text>
               </Pressable>
             )}
             <Pressable
               style={[styles.actionBtn, styles.saveBtn]}
-              onPress={submit}
+              onPress={() => void submit()}
               disabled={!species.trim()}
             >
               <Text style={styles.actionText}>Spara</Text>
