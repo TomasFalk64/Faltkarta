@@ -10,6 +10,19 @@ export type MapItem = {
   fileUri: string;
   thumbnailUri?: string;
   createdAt: string;
+  georef?: {
+    sourceEpsg: number;
+    imageWidth: number;
+    imageHeight: number;
+    pixelToSource: {
+      a: number;
+      b: number;
+      c: number;
+      d: number;
+      e: number;
+      f: number;
+    };
+  };
   bbox?: {
     minLat: number;
     minLon: number;

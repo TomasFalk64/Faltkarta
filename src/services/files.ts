@@ -55,7 +55,7 @@ export async function pickAndImportGeoTiff(): Promise<MapItem | null> {
   const safeName = sanitizeFileName(asset.name);
   const targetUri = `${MAPS_DIR}/${id}_${safeName}`;
   await FileSystem.copyAsync({ from: asset.uri, to: targetUri });
-  const bbox = await extractGeoTiffBboxWgs84(targetUri);
+  const metadata = await extractGeoTiffMetadata(targetUri);
   const thumbnailUri = await generatePreviewFromGeoTiff(targetUri, id);
 
   return {
@@ -65,7 +65,8 @@ export async function pickAndImportGeoTiff(): Promise<MapItem | null> {
     fileUri: targetUri,
     thumbnailUri: thumbnailUri ?? undefined,
     createdAt: new Date().toISOString(),
-    bbox: bbox ?? undefined,
+    bbox: metadata?.bbox ?? undefined,
+    georef: metadata?.georef ?? undefined,
   };
 }
 
@@ -81,14 +82,14 @@ export async function ensureGeoTiffPreview(map: MapItem): Promise<MapItem> {
 }
 
 export async function ensureMapGeorefBounds(map: MapItem): Promise<MapItem> {
-  if (hasNonLegacyBbox(map)) {
+  if (hasNonLegacyBbox(map) && map.georef) {
     return map;
   }
-  const bbox = await extractGeoTiffBboxWgs84(map.fileUri);
-  if (!bbox) {
+  const metadata = await extractGeoTiffMetadata(map.fileUri);
+  if (!metadata) {
     return map;
   }
-  return { ...map, bbox };
+  return { ...map, bbox: metadata.bbox, georef: metadata.georef };
 }
 
 export async function pickPreviewImageForMap(mapId: string): Promise<string | null> {
@@ -160,7 +161,9 @@ async function generatePreviewFromGeoTiff(geoTiffUri: string, mapId: string): Pr
   }
 }
 
-async function extractGeoTiffBboxWgs84(geoTiffUri: string): Promise<MapItem["bbox"] | null> {
+async function extractGeoTiffMetadata(
+  geoTiffUri: string
+): Promise<{ bbox: MapItem["bbox"]; georef: NonNullable<MapItem["georef"]> } | null> {
   try {
     const base64 = await FileSystem.readAsStringAsync(geoTiffUri, {
       encoding: FileSystem.EncodingType.Base64,
@@ -175,11 +178,11 @@ async function extractGeoTiffBboxWgs84(geoTiffUri: string): Promise<MapItem["bbo
     const height = Number(ifd.height ?? ifd.t257 ?? 0);
     if (width <= 0 || height <= 0) return null;
 
-    const toModel = makePixelToModelTransform(ifd, width, height);
-    if (!toModel) return null;
-
-    const srcCrs = extractGeoCrs(ifd);
-    if (!srcCrs) return null;
+    const pixelToSource = makePixelToModelTransform(ifd, width, height);
+    if (!pixelToSource) return null;
+    const sourceEpsg = extractGeoEpsg(ifd);
+    if (!sourceEpsg) return null;
+    const srcCrs = `EPSG:${sourceEpsg}`;
 
     const cornersPx = [
       { x: 0, y: 0 },
@@ -188,7 +191,7 @@ async function extractGeoTiffBboxWgs84(geoTiffUri: string): Promise<MapItem["bbo
       { x: width, y: height },
     ];
     const cornersWgs84 = cornersPx
-      .map((p) => toModel(p.x, p.y))
+      .map((p) => pixelToSource(p.x, p.y))
       .map((p) => projectToWgs84(srcCrs, p.x, p.y))
       .filter((p): p is { lon: number; lat: number } => !!p);
 
@@ -203,7 +206,15 @@ async function extractGeoTiffBboxWgs84(geoTiffUri: string): Promise<MapItem["bbo
     };
 
     if (!isValidBbox(bbox)) return null;
-    return bbox;
+    return {
+      bbox,
+      georef: {
+        sourceEpsg,
+        imageWidth: width,
+        imageHeight: height,
+        pixelToSource: extractAffine(pixelToSource),
+      },
+    };
   } catch {
     return null;
   }
@@ -263,7 +274,7 @@ function makePixelToModelTransform(
   return best;
 }
 
-function extractGeoCrs(ifd: Record<string, unknown>): string | null {
+function extractGeoEpsg(ifd: Record<string, unknown>): number | null {
   const geoKeys = asNumberArray(ifd.t34735 ?? ifd.GeoKeyDirectoryTag);
   if (!geoKeys || geoKeys.length < 8) {
     return null;
@@ -277,10 +288,26 @@ function extractGeoCrs(ifd: Record<string, unknown>): string | null {
     const valueOffset = geoKeys[base + 3];
     if (tiffTagLocation !== 0) continue;
     if (keyId === 3072 || keyId === 2048) {
-      return `EPSG:${valueOffset}`;
+      return valueOffset;
     }
   }
   return null;
+}
+
+function extractAffine(
+  fn: (x: number, y: number) => { x: number; y: number }
+): { a: number; b: number; c: number; d: number; e: number; f: number } {
+  const p00 = fn(0, 0);
+  const p10 = fn(1, 0);
+  const p01 = fn(0, 1);
+  return {
+    a: p10.x - p00.x,
+    b: p01.x - p00.x,
+    c: p00.x,
+    d: p10.y - p00.y,
+    e: p01.y - p00.y,
+    f: p00.y,
+  };
 }
 
 function projectToWgs84(srcCrs: string, x: number, y: number): { lon: number; lat: number } | null {

@@ -186,7 +186,7 @@ export function MapCanvas({
         ]}
       >
         {imageUri ? (
-          <Image source={{ uri: imageUri }} style={styles.image} resizeMode="cover" />
+          <Image source={{ uri: imageUri }} style={styles.image} resizeMode="stretch" />
         ) : (
           <View style={[styles.image, styles.placeholder]}>
             <Text style={styles.placeholderText}>Kunde inte visa GeoTIFF-preview</Text>
