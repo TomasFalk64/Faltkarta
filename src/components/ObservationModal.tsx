@@ -125,6 +125,7 @@ export function ObservationModal({
   }
 
   async function resetAndClose() {
+    //  if (onDelete) {await onDelete();}
     await cleanupPendingTempPhotos();
     setSpecies("");
     setNotes("");
@@ -135,6 +136,10 @@ export function ObservationModal({
   }
 
   async function submit() {
+    if (!species || species.trim().length === 0) {
+    // Alert.alert("Fel", "Du måste ange ett artnamn.");
+    return; 
+  }
     const parsedAccuracy = Number.parseFloat(accuracyMeters.replace(",", "."));
     const shouldClose = await onSave({
       species: species.trim(),
@@ -154,7 +159,17 @@ export function ObservationModal({
       <View style={styles.backdrop}>
         <View style={styles.card}>
           <View style={styles.header}>
-            <Pressable style={styles.xIcon} onPress={() => void resetAndClose()}>
+            <Pressable 
+              style={styles.xIcon} 
+              onPress={async () => {
+                // 1. Radera om vi är i redigeringsläge
+                if (onDelete) {
+                  await onDelete();
+                }
+                // 2. Städa och stäng
+                await resetAndClose();
+              }}
+            >
               <Ionicons name="close" size={30} color="#9b2226" />
             </Pressable>
 

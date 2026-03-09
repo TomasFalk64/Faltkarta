@@ -37,16 +37,24 @@ function toArtportalenNotes(obs: Observation): string {
 
 export function buildArtportalenTsv(observations: Observation[]): string {
   const header = "Artnamn\tLokalnamn\tStartdatum\tStarttid\tOst\tNord\tNoggrannhet\tPublik kommentar";
-  const rows = observations.map((obs) => {
+  
+  // 1. Filtrera bort allt som inte är en punkt
+  const pointsOnly = observations.filter((obs) => obs.kind === "point");
+
+  // 2. Mappa endast de kvarvarande punkterna
+  const rows = pointsOnly.map((obs) => {
     const coord = observationToRepresentativeWgs84(obs);
     const sweref = wgs84ToSweref99tm(coord.lon, coord.lat);
     const d = new Date(obs.dateISO);
     const date = `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
     const time = `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
-    const localName = obs.kind === "point" ? obs.localName ?? "" : "";
-    const accuracy = obs.kind === "point" && obs.accuracyMeters !== null ? String(obs.accuracyMeters) : "";
+    
+    // Vi vet nu att obs.kind är "point", så vi kan förenkla hämtningen
+    const localName = obs.localName ?? "";
+    const accuracy = obs.accuracyMeters !== null ? String(obs.accuracyMeters) : "";
     const east = String(Math.round(sweref.x));
     const north = String(Math.round(sweref.y));
+    
     return [
       obs.species,
       localName,
@@ -60,6 +68,7 @@ export function buildArtportalenTsv(observations: Observation[]): string {
       .map((v) => String(v).replace(/[\t\r\n]+/g, " ").trim())
       .join("\t");
   });
+
   return [header, ...rows].join("\n");
 }
 

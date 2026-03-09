@@ -50,6 +50,7 @@ export default function App() {
               name="Map"
               component={MapScreen}
               options={{ title: "Karta" }}
+              //options={{ headerShown: false }}
             />
             <Stack.Screen
               name="Export"

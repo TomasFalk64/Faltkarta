@@ -188,15 +188,29 @@ export function MapListScreen({ navigation }: Props) {
             </Pressable>
             <Pressable
               style={[styles.menuActionBtn, styles.menuDangerBtn]}
-              onPress={async () => {
+              onPress={() => {
                 if (!menuMap) return;
-                const selected = menuMap;
-                setMenuMap(null);
-                await cleanupAllPendingPhotoCopies();
-                await deleteIfExists(selected.fileUri);
-                if (selected.thumbnailUri) await deleteIfExists(selected.thumbnailUri);
-                const next = await removeMap(selected.id);
-                setMaps(next);
+
+                Alert.alert(
+                  "Vill du ta bort kartan?",
+                  "Detta kan inte ångras. Du kan spara din data genom att först exportera kartan, observationer och bilder.",
+                  [
+                    { text: "Avbryt", style: "cancel" },
+                    {
+                      text: "Radera permanent",
+                      style: "destructive",
+                      onPress: async () => {
+                        const selected = menuMap;
+                        setMenuMap(null);
+                        await cleanupAllPendingPhotoCopies();
+                        await deleteIfExists(selected.fileUri);
+                        if (selected.thumbnailUri) await deleteIfExists(selected.thumbnailUri);
+                        const next = await removeMap(selected.id);
+                        setMaps(next);
+                      },
+                    },
+                  ]
+                );
               }}
             >
               <Text style={styles.menuActionText}>Radera karta</Text>

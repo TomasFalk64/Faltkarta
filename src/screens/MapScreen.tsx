@@ -23,7 +23,7 @@ import { photoFileNameFromRef, resolvePointPhotoUri, savePointPhotosToGallery } 
 
 type Props = NativeStackScreenProps<RootStackParamList, "Map">;
 
-export function MapScreen({ route }: Props) {
+export function MapScreen({ route, navigation }: Props) {
   const { mapId } = route.params;
   const [map, setMap] = useState<MapItem | null>(null);
   const [observations, setObservations] = useState<Observation[]>([]);
@@ -67,6 +67,11 @@ export function MapScreen({ route }: Props) {
         });
       }
       setMap(hydrated);
+      if (hydrated) {
+        navigation.setOptions({
+          title: hydrated.name,
+        });
+      }
     })().catch((e) => Alert.alert("Fel", String(e)));
   }, [mapId]);
 
@@ -88,7 +93,7 @@ export function MapScreen({ route }: Props) {
   const pointList = useMemo(
     () =>
       observations
-        .filter((obs): obs is PointObservation => obs.kind === "point")
+        .filter((obs) => obs.kind === "point" || obs.kind === "polygon") //.filter((obs): obs is PointObservation => obs.kind === "point")
         .sort((a, b) => b.dateISO.localeCompare(a.dateISO)),
     [observations]
   );
