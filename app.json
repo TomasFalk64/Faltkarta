@@ -30,7 +30,8 @@
         "android.permission.READ_MEDIA_VIDEO",
         "android.permission.READ_MEDIA_AUDIO"
       ],
-      "package": "com.tf64.faltkarta"
+      "package": "com.tf64.faltkarta",
+      "softwareKeyboardLayoutMode": "adjustPan"    
     },
     "web": {
       "bundler": "metro"

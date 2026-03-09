@@ -36,7 +36,7 @@ function toArtportalenNotes(obs: Observation): string {
 }
 
 export function buildArtportalenTsv(observations: Observation[]): string {
-  const header = "Artnamn\tLokalnamn\tStartdatum\tStarttid\tOst\tNord\tNoggrannhet";
+  const header = "Artnamn\tLokalnamn\tStartdatum\tStarttid\tOst\tNord\tNoggrannhet\tPublik kommentar";
   const rows = observations.map((obs) => {
     const coord = observationToRepresentativeWgs84(obs);
     const sweref = wgs84ToSweref99tm(coord.lon, coord.lat);
@@ -55,6 +55,7 @@ export function buildArtportalenTsv(observations: Observation[]): string {
       east,
       north,
       accuracy,
+      obs.notes
     ]
       .map((v) => String(v).replace(/[\t\r\n]+/g, " ").trim())
       .join("\t");

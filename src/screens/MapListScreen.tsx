@@ -5,6 +5,7 @@ import {
   Image,
   Modal,
   Pressable,
+  ScrollView, 
   StyleSheet,
   Text,
   TextInput,
@@ -112,7 +113,7 @@ export function MapListScreen({ navigation }: Props) {
               <Text style={styles.mapName} numberOfLines={1}>
                 {item.name}
               </Text>
-              <Text style={styles.mapDate}>{new Date(item.createdAt).toLocaleString()}</Text>
+              <Text style={styles.mapDate}>{new Date(item.createdAt).toLocaleDateString()}</Text>
             </View>
             <Pressable style={styles.menuBtn} onPress={() => onOpenMenu(item)}>
               <Text style={styles.menuText}>...</Text>
@@ -130,29 +131,31 @@ export function MapListScreen({ navigation }: Props) {
       </Pressable>
 
       <Modal transparent visible={!!renameMap} onRequestClose={() => setRenameMap(null)} animationType="fade">
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Byt kartnamn</Text>
-            {showRenameHint && (
-              <Text style={styles.renameHint}>
-                Kartans namn används som förslag till lokalnamn vid punktobservationer.
-              </Text>
-            )}
-            <TextInput value={renameValue} onChangeText={setRenameValue} style={styles.modalInput} />
-            <View style={styles.modalActions}>
-              <Pressable
-                onPress={() => {
-                  setRenameMap(null);
-                  setShowRenameHint(false);
-                }}
-                style={[styles.modalBtn, styles.cancelBtn]}
-              >
-                <Text style={styles.modalBtnText}>Avbryt</Text>
-              </Pressable>
-              <Pressable onPress={confirmRename} style={[styles.modalBtn, styles.okBtn]}>
-                <Text style={styles.modalBtnText}>Spara</Text>
-              </Pressable>
-            </View>
+        <View style={[styles.modalBackdrop, { justifyContent: 'flex-start' }]}>
+          <View style={[styles.modalCard, { marginTop: 60, maxHeight: '80%' }]}>
+            <ScrollView keyboardShouldPersistTaps="handled">
+              <Text style={styles.modalTitle}>Byt kartnamn</Text>
+              {showRenameHint && (
+                <Text style={styles.renameHint}>
+                  Kartans namn används som förslag till lokalnamn vid punktobservationer.
+                </Text>
+              )}
+              <TextInput value={renameValue} onChangeText={setRenameValue} style={styles.modalInput} />
+              <View style={styles.modalActions}>
+                <Pressable
+                  onPress={() => {
+                    setRenameMap(null);
+                    setShowRenameHint(false);
+                  }}
+                  style={[styles.modalBtn, styles.cancelBtn]}
+                >
+                  <Text style={styles.modalBtnText}>Avbryt</Text>
+                </Pressable>
+                <Pressable onPress={confirmRename} style={[styles.modalBtn, styles.okBtn]}>
+                  <Text style={styles.modalBtnText}>Spara</Text>
+                </Pressable>
+              </View>
+            </ScrollView>
           </View>
         </View>
       </Modal>

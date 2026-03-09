@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { Ionicons } from '@expo/vector-icons';
 import {
   Modal,
   View,
@@ -152,8 +153,18 @@ export function ObservationModal({
     <Modal visible={visible} animationType="slide" transparent onRequestClose={() => void resetAndClose()}>
       <View style={styles.backdrop}>
         <View style={styles.card}>
-          <Text style={styles.title}>{title}</Text>
-          <ScrollView keyboardShouldPersistTaps="handled">
+          <View style={styles.header}>
+            <Pressable style={styles.xIcon} onPress={() => void resetAndClose()}>
+              <Ionicons name="close" size={30} color="#9b2226" />
+            </Pressable>
+
+            <Text style={styles.title}>{title}</Text>
+
+            <Pressable style={styles.checkIcon} onPress={() => void submit()}>
+              <Ionicons name="checkmark" size={30} color="#0a9396" />
+            </Pressable>
+          </View>
+          <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ flexGrow: 1 }}>
             <TextInput
               value={species}
               onChangeText={setSpecies}
@@ -217,30 +228,7 @@ export function ObservationModal({
               ))}
             </View>
           </ScrollView>
-          <View style={styles.actions}>
-            {onDelete ? (
-              <Pressable
-                style={[styles.actionBtn, styles.deleteBtn]}
-                onPress={async () => {
-                  await onDelete();
-                  await resetAndClose();
-                }}
-              >
-                <Text style={styles.actionText}>Radera</Text>
-              </Pressable>
-            ) : (
-              <Pressable style={[styles.actionBtn, styles.cancelBtn]} onPress={() => void resetAndClose()}>
-                <Text style={styles.actionText}>Avbryt</Text>
-              </Pressable>
-            )}
-            <Pressable
-              style={[styles.actionBtn, styles.saveBtn]}
-              onPress={() => void submit()}
-              disabled={!species.trim()}
-            >
-              <Text style={styles.actionText}>Spara</Text>
-            </Pressable>
-          </View>
+  
         </View>
       </View>
     </Modal>
@@ -251,19 +239,22 @@ const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.35)",
-    justifyContent: "center",
-    padding: 16,
+    justifyContent: "flex-start",
+    padding:16,
+    paddingTop: 30,
+    paddingBottom: 0,
   },
   card: {
     backgroundColor: "#fff",
     borderRadius: 12,
-    maxHeight: "85%",
+    flex: 1,
+    //minHeight: "100%",
+    //maxHeight: "80%",
+    
+    //height: "80%",
+    height: 500,
+    marginBottom: 5,
     padding: 14,
-  },
-  title: {
-    fontSize: 18,
-    fontWeight: "700",
-    marginBottom: 10,
   },
   input: {
     borderWidth: 1,
@@ -372,5 +363,28 @@ const styles = StyleSheet.create({
     color: "#fff",
     textAlign: "center",
     fontWeight: "700",
+  },
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 5,
+    marginBottom: 10,
+  },
+  title: {
+    fontSize: 18,
+    fontWeight: "700",
+    flex: 1,           // Gör att titeln tar ledigt utrymme i mitten
+    textAlign: "center", // Centrerar texten mellan ikonerna
+  },
+  xIcon: {
+    color: "#9b2226", // Röd
+    fontSize: 28,     // Lite större för tydlighet
+    fontWeight: "900",
+  },
+  checkIcon: {
+    color: "#0a9396", // Grön
+    fontSize: 28,
+    fontWeight: "900",
   },
 });
