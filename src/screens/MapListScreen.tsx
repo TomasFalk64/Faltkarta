@@ -15,15 +15,18 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useFocusEffect } from "@react-navigation/native";
 import { RootStackParamList } from "../navigation/types";
 import { MapItem } from "../types/models";
+import { AppSettings } from "../types/models";
 import { loadMaps, loadSettings, removeMap, saveSettings, upsertMap } from "../storage/storage";
 import { deleteIfExists, pickAndImportGeoTiff } from "../services/files";
 import { cleanupAllPendingPhotoCopies } from "../services/photos";
+import { Ionicons } from '@expo/vector-icons';
 
 type Props = NativeStackScreenProps<RootStackParamList, "MapList">;
 
 export function MapListScreen({ navigation }: Props) {
   const [maps, setMaps] = useState<MapItem[]>([]);
   const [gpsPingSeconds, setGpsPingSeconds] = useState("3");
+  const [showQuantityField, setShowQuantityField] = useState(true);
   const [renameMap, setRenameMap] = useState<MapItem | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [showRenameHint, setShowRenameHint] = useState(false);
@@ -34,6 +37,7 @@ export function MapListScreen({ navigation }: Props) {
     const [allMaps, settings] = await Promise.all([loadMaps(), loadSettings()]);
     setMaps(allMaps);
     setGpsPingSeconds(String(settings.gpsPingSeconds));
+    setShowQuantityField(settings.showQuantityField ?? true);
   }, []);
 
   useFocusEffect(
@@ -78,14 +82,29 @@ export function MapListScreen({ navigation }: Props) {
     setRenameValue("");
     setShowRenameHint(false);
   }
+  const onSaveSettings = async () => {
+    try {
+      const parsedPing = Number.parseInt(gpsPingSeconds, 10);
+      const pingValue = Number.isFinite(parsedPing) && parsedPing > 0 ? parsedPing : 3;
 
-  async function onSavePing() {
-    const parsed = Number.parseInt(gpsPingSeconds, 10);
-    const value = Number.isFinite(parsed) && parsed > 0 ? parsed : 3;
-    await saveSettings({ gpsPingSeconds: value });
-    setGpsPingSeconds(String(value));
-    Alert.alert("Sparat", "GPS ping-frekvens uppdaterad.");
-  }
+      // Skapa det fullständiga objektet som ska sparas
+      const newSettings: AppSettings = {
+        gpsPingSeconds: pingValue,
+        showQuantityField: showQuantityField,
+      };
+
+      // Spara allt på en gång
+      await saveSettings(newSettings);
+      
+      // Uppdatera UI
+      setGpsPingSeconds(String(pingValue));
+      Alert.alert("Sparat", "Inställningar uppdaterade.");
+      setShowSettings(false);
+    } catch (error) {
+      console.error("Kunde inte spara inställningar:", error);
+      Alert.alert("Fel", "Kunde inte spara inställningarna.");
+    }
+  };
 
   function onOpenMap(item: MapItem) {
     navigation.navigate("Map", { mapId: item.id });
@@ -225,13 +244,14 @@ export function MapListScreen({ navigation }: Props) {
             <Text style={styles.modalTitle}>Kort guide</Text>
             <View style={styles.helpBox}>
               <Text style={styles.helpText}>Importera en GeoTIFF som karta. Du kan ha flera kartor.</Text>
-              <Text style={styles.helpText}>
-                Byt namn på kartan, namnet används som förslag på lokalnamn.
-              </Text>
+              <Text style={styles.helpText}>Byt namn på kartan, namnet används som förslag på lokalnamn.</Text>
               <Text style={styles.helpText}>Öppna kartan och registrera punkter eller polygoner.</Text>
-              <Text style={styles.helpText}>Exportera till Artportalen eller Excel.</Text>
+              <Text style={styles.helpText}>Exportera direkt till Artportalen eller skicka med epost.</Text>
             </View>
+
             <Text style={styles.modalTitle}>Inställningar</Text>
+
+            {/* GPS-inställning */}
             <Text style={styles.settingsTitle}>GPS ping-frekvens (sekunder)</Text>
             <View style={styles.settingsRow}>
               <TextInput
@@ -240,21 +260,37 @@ export function MapListScreen({ navigation }: Props) {
                 style={styles.pingInput}
                 keyboardType="number-pad"
               />
-              <Pressable
-                style={styles.saveBtn}
-                onPress={async () => {
-                  await onSavePing();
-                  setShowSettings(false);
-                }}
-              >
-                <Text style={styles.saveBtnText}>Spara</Text>
-              </Pressable>
             </View>
+
+            {/* Ny rad: Visa antal och enhet */}
+            <Pressable 
+              style={[styles.settingsRow, { marginVertical: 15, alignItems: 'center' }]}
+              onPress={() => setShowQuantityField(!showQuantityField)}
+            >
+              <Text style={styles.settingsTitle}>Visa antal och enhet vid inmatning</Text>
+              <Ionicons 
+                name={showQuantityField ? "checkbox" : "square-outline"} 
+                size={24} 
+                color={showQuantityField ? "#0a9396" : "#767577"} 
+              />
+            </Pressable>
+
+            {/* Gemensam Spara-knapp */}
+            <Pressable
+              style={styles.saveBtn}
+              onPress={async () => {
+                await onSaveSettings(); // Spara både ping och visnings-inställning här
+                setShowSettings(false);
+              }}
+            >
+              <Text style={styles.saveBtnText}>Spara</Text>
+            </Pressable>
+
             <Pressable
               onPress={() => setShowSettings(false)}
               style={[styles.modalBtn, styles.cancelBtn, styles.closeOnlyBtn]}
             >
-              <Text style={styles.modalBtnText}>Stang</Text>
+              <Text style={styles.modalBtnText}>Stäng</Text>
             </Pressable>
           </View>
         </View>
@@ -304,7 +340,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#005f73",
     borderRadius: 8,
     paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingVertical: 10, 
+    alignSelf: 'flex-start',
+    marginTop: 10, 
   },
   saveBtnText: {
     color: "#fff",

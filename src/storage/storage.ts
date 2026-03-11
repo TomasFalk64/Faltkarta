@@ -105,7 +105,8 @@ function normalizeObservation(obs: Observation): Observation {
 export async function loadSettings(): Promise<AppSettings> {
   const raw = await AsyncStorage.getItem(SETTINGS_KEY);
   if (!raw) {
-    return { gpsPingSeconds: 3 };
+    // Returnera standardvärden för båda inställningarna
+    return { gpsPingSeconds: 3, showQuantityField: true };
   }
   return JSON.parse(raw) as AppSettings;
 }

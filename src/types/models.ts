@@ -61,4 +61,5 @@ export type Observation = PointObservation | PolygonObservation;
 
 export type AppSettings = {
   gpsPingSeconds: number;
+  showQuantityField: boolean;
 };
