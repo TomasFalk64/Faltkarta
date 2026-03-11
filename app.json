@@ -3,7 +3,7 @@
     "name": "Fältkarta",
     "slug": "faltkarta",
     "version": "1.0.0",
-    "icon": "./assets/logga.jpg", 
+    "icon": "./assets/logga.jpg",
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
@@ -41,7 +41,7 @@
         "backgroundColor": "#ffffff"
       },
       "package": "com.tf64.faltkarta",
-      "softwareKeyboardLayoutMode": "adjustPan"    
+      "softwareKeyboardLayoutMode": "adjustPan"
     },
     "web": {
       "bundler": "metro"
@@ -49,7 +49,9 @@
     "plugins": [
       "expo-document-picker",
       "expo-location",
-      "expo-media-library"
+      "expo-media-library",
+      "expo-font",
+      "expo-mail-composer"
     ],
     "extra": {
       "eas": {
