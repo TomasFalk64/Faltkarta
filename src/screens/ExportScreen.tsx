@@ -2,7 +2,7 @@
 import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { RootStackParamList } from "../navigation/types";
-import { loadMaps, loadObservationsForMap } from "../storage/storage";
+import { loadMaps, loadObservationsForMap, loadSettings } from "../storage/storage";
 import { Observation } from "../types/models";
 import {
   buildArtportalenTsv,
@@ -20,19 +20,21 @@ export function ExportScreen({ route }: Props) {
   const [mapName, setMapName] = useState("export");
   const [mapFileUri, setMapFileUri] = useState<string | null>(null);
   const [observations, setObservations] = useState<Observation[]>([]);
+  const [maxImageSizeMB, setMaxImageSizeMB] = useState(2);
   const [preview, setPreview] = useState("");
   const [showExcelModal, setShowExcelModal] = useState(false);
   const [isCreatingZip, setIsCreatingZip] = useState(false);
 
   useEffect(() => {
     (async () => {
-      const [maps, obs] = await Promise.all([loadMaps(), loadObservationsForMap(mapId)]);
+      const [maps, obs, settings] = await Promise.all([loadMaps(), loadObservationsForMap(mapId), loadSettings()]);
       const m = maps.find((item) => item.id === mapId);
       if (m) {
         setMapName(m.name);
         setMapFileUri(m.fileUri);
       }
       setObservations(obs);
+      setMaxImageSizeMB(settings.maxImageSizeMB ?? 2);
       setPreview(buildArtportalenTsv(obs).slice(0, 600));
     })().catch((e) => Alert.alert("Fel", String(e)));
   }, [mapId]);
@@ -96,7 +98,7 @@ export function ExportScreen({ route }: Props) {
     }
     setIsCreatingZip(true);
     try {
-      const result = await saveZipBundleAndShare(mapName, observations, mapFileUri);
+      const result = await saveZipBundleAndShare(mapName, observations, mapFileUri, maxImageSizeMB);
       if (!result.shared) {
         Alert.alert("Export", "Delning ar inte tillganglig pa enheten.");
         return;
@@ -162,7 +164,7 @@ export function ExportScreen({ route }: Props) {
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Skapar Zip-fil</Text>
-            <Text style={styles.modalBody}>Skapar Zip-fil. Ta det lugnt.</Text>
+            <Text style={styles.modalBody}>Ta det lugnt.</Text>
           </View>
         </View>
       </Modal>

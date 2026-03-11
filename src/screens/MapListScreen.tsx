@@ -27,6 +27,7 @@ export function MapListScreen({ navigation }: Props) {
   const [maps, setMaps] = useState<MapItem[]>([]);
   const [gpsPingSeconds, setGpsPingSeconds] = useState("3");
   const [showQuantityField, setShowQuantityField] = useState(false);
+  const [maxImageSizeMB, setMaxImageSizeMB] = useState("2");
   const [renameMap, setRenameMap] = useState<MapItem | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [showRenameHint, setShowRenameHint] = useState(false);
@@ -38,6 +39,7 @@ export function MapListScreen({ navigation }: Props) {
     setMaps(allMaps);
     setGpsPingSeconds(String(settings.gpsPingSeconds));
     setShowQuantityField(settings.showQuantityField ?? false);
+    setMaxImageSizeMB(String(settings.maxImageSizeMB ?? 2));
   }, []);
 
   useFocusEffect(
@@ -86,11 +88,14 @@ export function MapListScreen({ navigation }: Props) {
     try {
       const parsedPing = Number.parseInt(gpsPingSeconds, 10);
       const pingValue = Number.isFinite(parsedPing) && parsedPing > 0 ? parsedPing : 3;
+      const parsedMaxSize = Number.parseFloat(maxImageSizeMB.replace(",", "."));
+      const maxSizeValue = Number.isFinite(parsedMaxSize) && parsedMaxSize > 0 ? parsedMaxSize : 2;
 
       // Skapa det fullständiga objektet som ska sparas
       const newSettings: AppSettings = {
         gpsPingSeconds: pingValue,
         showQuantityField: showQuantityField,
+        maxImageSizeMB: maxSizeValue,
       };
 
       // Spara allt på en gång
@@ -98,6 +103,7 @@ export function MapListScreen({ navigation }: Props) {
       
       // Uppdatera UI
       setGpsPingSeconds(String(pingValue));
+      setMaxImageSizeMB(String(maxSizeValue));
       Alert.alert("Sparat", "Inställningar uppdaterade.");
       setShowSettings(false);
     } catch (error) {
@@ -259,6 +265,16 @@ export function MapListScreen({ navigation }: Props) {
                 onChangeText={setGpsPingSeconds}
                 style={styles.pingInput}
                 keyboardType="number-pad"
+              />
+            </View>
+
+            <Text style={styles.settingsTitle}>Max bildstorlek vid export (MB)</Text>
+            <View style={styles.settingsRow}>
+              <TextInput
+                value={maxImageSizeMB}
+                onChangeText={setMaxImageSizeMB}
+                style={styles.pingInput}
+                keyboardType="decimal-pad"
               />
             </View>
 

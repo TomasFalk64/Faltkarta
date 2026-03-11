@@ -201,7 +201,12 @@ export async function saveCsvGeoJsonAndMapAndComposeEmail(
   }
 }
 
-export async function saveZipBundleAndShare(mapName: string, observations: Observation[],mapFileUri?: string | null): Promise<{ shared: boolean }> {
+export async function saveZipBundleAndShare(
+  mapName: string,
+  observations: Observation[],
+  mapFileUri?: string | null,
+  maxImageSizeMB = 2
+): Promise<{ shared: boolean }> {
   const dir = await createExportSessionDir();
   const zip = new JSZip();
   const safeMapName = sanitizeForFileName(mapName);
@@ -228,7 +233,8 @@ export async function saveZipBundleAndShare(mapName: string, observations: Obser
       const ref = String(obs.photoUris[index] ?? "").trim();
       if (!ref) continue;
       try {
-        const optimized = await optimizePhotoForZip(ref, obs.photoAssetIds?.[index], obs.dateISO);
+        const assetId = obs.kind === "point" ? obs.photoAssetIds?.[index] : undefined;
+        const optimized = await optimizePhotoForZip(ref, assetId, obs.dateISO, maxImageSizeMB);
         if (!optimized) continue;
         const fileName = buildPhotoFileName(label, obs.species, optimized.dateISO, index, optimized.extension);
         zip.file(`bilder/${fileName}`, optimized.base64, { base64: true });
@@ -360,7 +366,8 @@ async function cleanupExportSessionDir(dir: string): Promise<void> {
 async function optimizePhotoForZip(
   ref: string,
   assetId: string | undefined,
-  fallbackDateISO: string
+  fallbackDateISO: string,
+  maxImageSizeMB: number
 ): Promise<{ base64: string; extension: string; dateISO: string } | null> {
   const uri = await resolvePointPhotoUri(ref, assetId);
   if (!uri) return null;
@@ -372,6 +379,9 @@ async function optimizePhotoForZip(
   const assetDateISO = await resolveAssetDateISO(assetId);
   const exifDateISO = shouldCopyExif ? extractExifDateISO(originalBase64) : null;
   const dateISO = assetDateISO ?? exifDateISO ?? fallbackDateISO;
+  const maxBytes = Math.max(0.2, maxImageSizeMB) * 1024 * 1024;
+  const info = await FileSystem.getInfoAsync(uri, { size: true });
+  const originalBytes = typeof info.size === "number" ? info.size : null;
   const size = await getImageSizeSafe(uri);
   const maxSide = size ? Math.max(size.width, size.height) : null;
   const actions: ImageManipulator.Action[] = [];
@@ -382,8 +392,13 @@ async function optimizePhotoForZip(
       actions.push({ resize: { height: 2000 } });
     }
   }
+  const needsCompression = originalBytes !== null ? originalBytes > maxBytes : false;
+  const compressionGuess = originalBytes !== null && originalBytes > 0
+    ? Math.min(0.95, Math.max(0.2, maxBytes / originalBytes))
+    : 1;
+  const compress = needsCompression ? compressionGuess : 1;
   const result = await ImageManipulator.manipulateAsync(uri, actions, {
-    compress: 0.82,
+    compress,
     format: ImageManipulator.SaveFormat.JPEG,
     base64: true,
   });
