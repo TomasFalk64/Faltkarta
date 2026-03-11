@@ -6,6 +6,7 @@ import * as MediaLibrary from "expo-media-library";
 import * as Sharing from "expo-sharing";
 import * as WebBrowser from "expo-web-browser";
 import JSZip from "jszip";
+import * as XLSX from "xlsx";
 import Papa from "papaparse";
 import piexif from "piexifjs";
 import { Image } from "react-native";
@@ -142,60 +143,115 @@ export function buildCsv(observations: Observation[]): string {
   return ensureUtf8Bom(`sep=;\r\n${csvBody}`);
 }
 
+export function buildXlsx(observations: Observation[]): string {
+  const fields = [
+    "Artnamn",
+    "Typ",
+    "Datum",
+    "Lat",
+    "Lon",
+    "Nord",
+    "Ost",
+    "Lokalnamn",
+    "Noggrannhet",
+    "Publik kommentar",
+    "Antal",
+    "Enhet",
+    "Foton",
+  ];
+  let polygonCounter = 0;
+  const data = observations.map((obs) => {
+    if (obs.kind === "polygon") polygonCounter += 1;
+    const label = observationLabel(obs, polygonCounter);
+    const rep = observationToRepresentativeWgs84(obs);
+    const sweref = wgs84ToSweref99tm(rep.lon, rep.lat);
+    const photos = obs.photoUris
+      .map((_, index) => buildPhotoFileName(label, obs.species, obs.dateISO, index, "jpg"))
+      .filter((name) => name.length > 0)
+      .join("|");
+    const quantity = (obs.kind === "point" && obs.quantity && obs.quantity !== 0) ? String(obs.quantity) : "";
+    const unit = obs.kind === "point" ? obs.unit : "";
+    return [
+      obs.species,
+      obs.kind,
+      new Date(obs.dateISO).toISOString(),
+      formatNumberForExcel(rep.lat, 7),
+      formatNumberForExcel(rep.lon, 7),
+      formatNumberForExcel(sweref.y, 2),
+      formatNumberForExcel(sweref.x, 2),
+      pointLocalName(obs),
+      pointAccuracy(obs),
+      obs.notes,
+      quantity,
+      unit,
+      photos,
+    ];
+  });
+  const worksheet = XLSX.utils.aoa_to_sheet([fields, ...data]);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, "Export");
+  return XLSX.write(workbook, { type: "base64", bookType: "xlsx" });
+}
+
 function pad2(value: number): string {
   return String(value).padStart(2, "0");
 }
 
-export async function saveCsvAndShare(mapName: string, csv: string): Promise<string> {
-  const path = await saveCsvFile(mapName, csv);
+export async function saveXlsxAndShare(
+  mapName: string,
+  xlsxBase64: string
+): Promise<{ xlsxPath: string; shared: boolean }> {
+  const xlsxPath = await saveXlsxFile(mapName, xlsxBase64);
   const canShare = await Sharing.isAvailableAsync();
+  let shared = false;
   if (canShare) {
-    await Sharing.shareAsync(path, {
-      mimeType: "text/csv",
+    await Sharing.shareAsync(xlsxPath, {
+      mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       dialogTitle: "Dela exportfil",
     });
+    shared = true;
   }
-  return path;
+  return { xlsxPath, shared };
 }
 
-export async function saveCsvAndComposeEmail(
+export async function saveXlsxAndComposeEmail(
   mapName: string,
-  csv: string
+  xlsxBase64: string
 ): Promise<{ path: string; opened: boolean }> {
-  const path = await saveCsvFile(mapName, csv);
+  const path = await saveXlsxFile(mapName, xlsxBase64);
   const canEmail = await MailComposer.isAvailableAsync();
   if (!canEmail) {
     return { path, opened: false };
   }
   await MailComposer.composeAsync({
     subject: mapName,
-    body: `CSV-export fran Faltkarta for kartan "${mapName}".`,
+    body: `Excel-export fran Faltkarta for kartan "${mapName}".`,
     attachments: [path],
   });
   return { path, opened: true };
 }
 
-export async function saveCsvGeoJsonAndMapAndComposeEmail(
+export async function saveXlsxGeoJsonAndMapAndComposeEmail(
   mapName: string,
   observations: Observation[],
-  csv: string,
+  xlsxBase64: string,
   mapFileUri?: string | null
 ): Promise<{ paths: string[]; opened: boolean }> {
-  const csvPath = await saveCsvFile(mapName, csv);
+  const xlsxPath = await saveXlsxFile(mapName, xlsxBase64);
   const canEmail = await MailComposer.isAvailableAsync();
   if (!canEmail) {
-    const fallbackBundlePath = await saveEmailBundleZip(mapName, observations, csv, mapFileUri, exportDir());
-    return { paths: [csvPath, fallbackBundlePath], opened: false };
+    const fallbackBundlePath = await saveEmailBundleZip(mapName, observations, mapFileUri, exportDir());
+    return { paths: [xlsxPath, fallbackBundlePath], opened: false };
   }
   const tempDir = await createExportSessionDir();
   try {
-    const bundlePath = await saveEmailBundleZip(mapName, observations, csv, mapFileUri, tempDir);
+    const bundlePath = await saveEmailBundleZip(mapName, observations, mapFileUri, tempDir);
     await MailComposer.composeAsync({
       subject: mapName,
-      body: `Export fran Faltkarta for kartan "${mapName}" (ZIP med CSV, GeoJSON och GeoTIFF).`,
-      attachments: [csvPath, bundlePath],
+      body: `Export fran Faltkarta for kartan "${mapName}" (ZIP med Excel, GeoJSON och GeoTIFF).`,
+      attachments: [xlsxPath, bundlePath],
     });
-    return { paths: [csvPath, bundlePath], opened: true };
+    return { paths: [xlsxPath, bundlePath], opened: true };
   } finally {
     await cleanupExportSessionDir(tempDir);
   }
@@ -210,8 +266,8 @@ export async function saveZipBundleAndShare(
   const dir = await createExportSessionDir();
   const zip = new JSZip();
   const safeMapName = sanitizeForFileName(mapName);
-  const csv = buildCsv(observations);
-  zip.file(`${safeMapName}.csv`, ensureUtf8Bom(csv));
+  const xlsx = buildXlsx(observations);
+  zip.file(`${safeMapName}.xlsx`, xlsx, { base64: true });
   zip.file(`${safeMapName}.geojson`, buildGeoJson(mapName, observations));
   if (mapFileUri) {
     try {
@@ -279,6 +335,20 @@ async function saveCsvFile(mapName: string, csv: string): Promise<string> {
   return path;
 }
 
+async function saveXlsxFile(mapName: string, xlsxBase64: string): Promise<string> {
+  const dir = exportDir();
+  const dirInfo = await FileSystem.getInfoAsync(dir);
+  if (!dirInfo.exists) {
+    await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
+  }
+  const safeMapName = sanitizeForFileName(mapName);
+  const path = `${dir}/${safeMapName}.xlsx`;
+  await FileSystem.writeAsStringAsync(path, xlsxBase64, {
+    encoding: FileSystem.EncodingType.Base64,
+  });
+  return path;
+}
+
 async function saveGeoJsonFile(mapName: string, observations: Observation[]): Promise<string> {
   const dir = exportDir();
   const dirInfo = await FileSystem.getInfoAsync(dir);
@@ -296,7 +366,6 @@ async function saveGeoJsonFile(mapName: string, observations: Observation[]): Pr
 async function saveEmailBundleZip(
   mapName: string,
   observations: Observation[],
-  csv: string,
   mapFileUri: string | null | undefined,
   targetDir: string
 ): Promise<string> {
@@ -306,7 +375,8 @@ async function saveEmailBundleZip(
   }
   const safeMapName = sanitizeForFileName(mapName);
   const zip = new JSZip();
-  zip.file(`${safeMapName}.csv`, ensureUtf8Bom(csv));
+  const xlsx = buildXlsx(observations);
+  zip.file(`${safeMapName}.xlsx`, xlsx, { base64: true });
   zip.file(`${safeMapName}.geojson`, buildGeoJson(mapName, observations));
 
   if (mapFileUri) {

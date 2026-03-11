@@ -40,6 +40,7 @@ export function MapScreen({ route, navigation }: Props) {
   const [polygonMode, setPolygonMode] = useState(false);
   const [draftPolygon, setDraftPolygon] = useState<LatLon[]>([]);
   const [gpsPingSeconds, setGpsPingSeconds] = useState(3);
+  const [showQuantityField, setShowQuantityField] = useState(false);
 
   const { gpsPos, rawAccuracyMeters, error: gpsError } = useGps({ pingSeconds: gpsPingSeconds });
   const lastGpsRef = useRef<{ pos: LatLon; ts: number } | null>(null);
@@ -61,6 +62,7 @@ export function MapScreen({ route, navigation }: Props) {
       }
       setObservations(obs);
       setGpsPingSeconds(settings.gpsPingSeconds);
+      setShowQuantityField(settings.showQuantityField ?? false);
       if (hydrated?.bbox) {
         setCenterCoord({
           lat: (hydrated.bbox.minLat + hydrated.bbox.maxLat) / 2,
@@ -509,6 +511,7 @@ export function MapScreen({ route, navigation }: Props) {
         }
         title={editingPoint ? "Redigera punkt" : "Ny punktobservation"}
         sessionToken={pointModalSession}
+        showQuantityField={showQuantityField}
         showPointMetaFields
       />
       <ObservationModal

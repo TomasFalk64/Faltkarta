@@ -258,7 +258,7 @@ export function MapListScreen({ navigation }: Props) {
             <Text style={styles.modalTitle}>Inställningar</Text>
 
             {/* GPS-inställning */}
-            <Text style={styles.settingsTitle}>GPS ping-frekvens (sekunder)</Text>
+            <Text style={styles.settingsTitle}>GPS ping-frekvens (s)</Text>
             <View style={styles.settingsRow}>
               <TextInput
                 value={gpsPingSeconds}

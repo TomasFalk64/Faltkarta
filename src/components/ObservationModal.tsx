@@ -34,6 +34,7 @@ type Props = {
   onDelete?: () => Promise<void> | void;
   sessionToken?: number;
   showPointMetaFields?: boolean;
+  showQuantityField?: boolean;
   speciesPlaceholder?: string;
 };
 
@@ -46,6 +47,7 @@ export function ObservationModal({
   onDelete,
   sessionToken,
   showPointMetaFields = false,
+  showQuantityField = false,
   speciesPlaceholder = "Artnamn",
 }: Props) {
   const [species, setSpecies] = useState("");
@@ -110,13 +112,13 @@ export function ObservationModal({
   }, [visible, sessionToken]);
 
   useEffect(() => {
-  // 1. Arten mÃ¥ste vara knÃ¤rot
-  // 2. AnvÃ¤ndaren mÃ¥ste ha skrivit in ett antal (quantity Ã¤r inte tomt)
-  // 3. Enheten mÃ¥ste vara tom (sÃ¥ vi inte skriver Ã¶ver om anvÃ¤ndaren redan valt en annan)
-  if (species.toLowerCase().includes('knÃ¤rot') && quantity !== "" && unit === "") {
-    setUnit('plantor/tuvor');
-  }
-});
+    // 1. Arten måste vara knärot
+    // 2. Användaren måste ha skrivit in ett antal (quantity är inte tomt)
+    // 3. Enheten måste vara tom (så vi inte skriver över om användaren redan valt en annan)
+    if (species.toLowerCase().includes("kn\u00e4rot") && quantity !== "" && unit === "") {
+      setUnit("plantor/tuvor");
+    }
+  }, [species, quantity, unit]);
 
   const combinedSpecies = useMemo(() => {
     const byLower = new Map<string, string>();
@@ -175,7 +177,7 @@ export function ObservationModal({
     }
     const trimmedSpecies = species.trim();
     const isKnown = combinedSpecies.some((s) => s.toLowerCase() === trimmedSpecies.toLowerCase());
-    if (!isKnown) {
+    if (showPointMetaFields && !isKnown) {
       setPendingNewSpecies(trimmedSpecies);
       return;
     }
@@ -245,6 +247,7 @@ export function ObservationModal({
                 setIsShowingSuggestions(true);
               }}
               onBlur={() => setIsShowingSuggestions(false)}
+              placeholder={speciesPlaceholder}
               style={styles.input}
             />
             {isShowingSuggestions && suggestions.length > 0 && (
@@ -276,21 +279,23 @@ export function ObservationModal({
               <Text style={styles.dividerText}>Extra info nedan</Text>
               <View style={styles.line} />
             </View>
-            <View style={styles.metaRow}>
-              <TextInput
-                value={quantity}
-                onChangeText={setQuantity}
-                style={[styles.input, styles.metaInput, { flex: 1 }]}
-                placeholder="Antal"
-                keyboardType="numeric"
-              />
-              <TextInput
-                value={unit}
-                onChangeText={setUnit}
-                style={[styles.input, styles.metaInput, { flex: 2, marginLeft: 10 }]}
-                placeholder="Enhet"
-              />
-            </View>
+            {showQuantityField && (
+              <View style={styles.metaRow}>
+                <TextInput
+                  value={quantity}
+                  onChangeText={setQuantity}
+                  style={[styles.input, styles.metaInput, { flex: 1 }]}
+                  placeholder="Antal"
+                  keyboardType="numeric"
+                />
+                <TextInput
+                  value={unit}
+                  onChangeText={setUnit}
+                  style={[styles.input, styles.metaInput, { flex: 2, marginLeft: 10 }]}
+                  placeholder="Enhet"
+                />
+              </View>
+            )}
             {showPointMetaFields && (
               <>
                 <View style={styles.metaRow}>

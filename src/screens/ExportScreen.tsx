@@ -6,10 +6,10 @@ import { loadMaps, loadObservationsForMap, loadSettings } from "../storage/stora
 import { Observation } from "../types/models";
 import {
   buildArtportalenTsv,
-  buildCsv,
+  buildXlsx,
   copyTsvAndOpenArtportalen,
-  saveCsvGeoJsonAndMapAndComposeEmail,
-  saveCsvAndShare,
+  saveXlsxGeoJsonAndMapAndComposeEmail,
+  saveXlsxAndShare,
   saveZipBundleAndShare,
 } from "../services/export";
 
@@ -69,9 +69,13 @@ export function ExportScreen({ route }: Props) {
       Alert.alert("Export", "Inga observationer att exportera.");
       return;
     }
-    const csv = buildCsv(observations);
-    const path = await saveCsvAndShare(mapName, csv);
-    Alert.alert("Sparad", path);
+    const xlsx = buildXlsx(observations);
+    const result = await saveXlsxAndShare(mapName, xlsx);
+    if (!result.shared) {
+      Alert.alert("Export", `Delning ar inte tillganglig.\nFil sparades:\n${result.xlsxPath}`);
+      return;
+    }
+    Alert.alert("Sparad", `Fil skapad:\n${result.xlsxPath}`);
   }
 
   async function onEmailCsv() {
@@ -79,8 +83,8 @@ export function ExportScreen({ route }: Props) {
       Alert.alert("Export", "Inga observationer att exportera.");
       return;
     }
-    const csv = buildCsv(observations);
-    const result = await saveCsvGeoJsonAndMapAndComposeEmail(mapName, observations, csv, mapFileUri);
+    const xlsx = buildXlsx(observations);
+    const result = await saveXlsxGeoJsonAndMapAndComposeEmail(mapName, observations, xlsx, mapFileUri);
     if (!result.opened) {
       Alert.alert("E-post", `E-post ar inte tillgangligt pa enheten.\nFiler sparades:\n${result.paths.join("\n")}`);
       return;
