@@ -4,6 +4,7 @@ import { AppSettings, MapItem, Observation } from "../types/models";
 const MAPS_KEY = "maps:v1";
 const OBS_KEY = "observations:v1";
 const SETTINGS_KEY = "settings:v1";
+const USER_SPECIES_KEY = "userSpecies.json";
 
 export async function loadMaps(): Promise<MapItem[]> {
   const raw = await AsyncStorage.getItem(MAPS_KEY);
@@ -117,4 +118,22 @@ export async function loadSettings(): Promise<AppSettings> {
 
 export async function saveSettings(settings: AppSettings) {
   await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+}
+
+export async function loadUserSpecies(): Promise<string[]> {
+  const raw = await AsyncStorage.getItem(USER_SPECIES_KEY);
+  if (!raw) return [];
+  const parsed = JSON.parse(raw) as string[];
+  return parsed.map((v) => String(v ?? "").trim()).filter((v) => v.length > 0);
+}
+
+export async function addUserSpecies(value: string): Promise<string[]> {
+  const name = String(value ?? "").trim();
+  if (!name) return await loadUserSpecies();
+  const list = await loadUserSpecies();
+  const exists = list.some((item) => item.toLowerCase() === name.toLowerCase());
+  if (exists) return list;
+  const next = [...list, name];
+  await AsyncStorage.setItem(USER_SPECIES_KEY, JSON.stringify(next));
+  return next;
 }

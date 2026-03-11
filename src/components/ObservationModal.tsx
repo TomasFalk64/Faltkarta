@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+﻿import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Ionicons } from '@expo/vector-icons';
 import {
   Modal,
@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { speciesList } from "../data/species";
+import { addUserSpecies, loadUserSpecies } from "../storage/storage";
 
 type ModalPayload = {
   species: string;
@@ -58,6 +59,9 @@ export function ObservationModal({
   const wasVisibleRef = useRef(false);
   const lastSessionTokenRef = useRef<number | undefined>(undefined);
   const [isShowingSuggestions, setIsShowingSuggestions] = useState(false);
+  const [userSpecies, setUserSpecies] = useState<string[]>([]);
+  const isSubmittingRef = useRef(false);
+  const [pendingNewSpecies, setPendingNewSpecies] = useState<string | null>(null);
 
   useEffect(() => {
     if (sessionToken !== undefined) {
@@ -99,19 +103,39 @@ export function ObservationModal({
   }, [initialValues, sessionToken, visible]);
 
   useEffect(() => {
-  // 1. Arten måste vara knärot
-  // 2. Användaren måste ha skrivit in ett antal (quantity är inte tomt)
-  // 3. Enheten måste vara tom (så vi inte skriver över om användaren redan valt en annan)
-  if (species.toLowerCase().includes('knärot') && quantity !== "" && unit === "") {
+    if (!visible) return;
+    loadUserSpecies()
+      .then((list) => setUserSpecies(list))
+      .catch(() => setUserSpecies([]));
+  }, [visible, sessionToken]);
+
+  useEffect(() => {
+  // 1. Arten mÃ¥ste vara knÃ¤rot
+  // 2. AnvÃ¤ndaren mÃ¥ste ha skrivit in ett antal (quantity Ã¤r inte tomt)
+  // 3. Enheten mÃ¥ste vara tom (sÃ¥ vi inte skriver Ã¶ver om anvÃ¤ndaren redan valt en annan)
+  if (species.toLowerCase().includes('knÃ¤rot') && quantity !== "" && unit === "") {
     setUnit('plantor/tuvor');
   }
 });
 
+  const combinedSpecies = useMemo(() => {
+    const byLower = new Map<string, string>();
+    speciesList.forEach((s) => {
+      const key = s.toLowerCase();
+      if (!byLower.has(key)) byLower.set(key, s);
+    });
+    userSpecies.forEach((s) => {
+      const key = s.toLowerCase();
+      if (!byLower.has(key)) byLower.set(key, s);
+    });
+    return Array.from(byLower.values());
+  }, [userSpecies]);
+
   const suggestions = useMemo(() => {
     const q = species.trim().toLowerCase();
     if (!q) return [];
-    return speciesList.filter((s) => s.toLowerCase().startsWith(q)).slice(0, 3);
-  }, [species]);
+    return combinedSpecies.filter((s) => s.toLowerCase().startsWith(q)).slice(0, 3);
+  }, [combinedSpecies, species]);
 
   async function addPhoto() {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -146,25 +170,46 @@ export function ObservationModal({
 
   async function submit() {
     if (!species || species.trim().length === 0) {
-    // Alert.alert("Fel", "Du måste ange ett artnamn.");
-    return; 
+      // Alert.alert("Fel", "Du måste ange ett artnamn.");
+      return;
+    }
+    const trimmedSpecies = species.trim();
+    const isKnown = combinedSpecies.some((s) => s.toLowerCase() === trimmedSpecies.toLowerCase());
+    if (!isKnown) {
+      setPendingNewSpecies(trimmedSpecies);
+      return;
+    }
+    await doSave(false);
   }
-    const parsedAccuracy = Number.parseFloat(accuracyMeters.replace(",", "."));
-    const rawVal = quantity.trim();
-    const quantityAsNumber = rawVal === "" ? undefined : Number(rawVal);
-    const shouldClose = await onSave({
-      species: species.trim(),
-      notes: notes.trim(),
-      photoUris,
-      photoAssetIds,
-      localName: localName.trim(),
-      quantity: quantityAsNumber, 
-      unit: unit.trim(),
-      accuracyMeters:
-        Number.isFinite(parsedAccuracy) && parsedAccuracy >= 0 ? Math.round(parsedAccuracy) : null,
-    });
-    if (shouldClose !== false) {
-      await resetAndClose();
+
+  async function doSave(addToSuggestions: boolean) {
+    if (isSubmittingRef.current) return;
+    isSubmittingRef.current = true;
+    try {
+      const parsedAccuracy = Number.parseFloat(accuracyMeters.replace(",", "."));
+      const rawVal = quantity.trim();
+      const quantityAsNumber = rawVal === "" ? undefined : Number(rawVal);
+      const trimmedSpecies = species.trim();
+      if (addToSuggestions) {
+        const next = await addUserSpecies(trimmedSpecies);
+        setUserSpecies(next);
+      }
+      const shouldClose = await onSave({
+        species: trimmedSpecies,
+        notes: notes.trim(),
+        photoUris,
+        photoAssetIds,
+        localName: localName.trim(),
+        quantity: quantityAsNumber,
+        unit: unit.trim(),
+        accuracyMeters:
+          Number.isFinite(parsedAccuracy) && parsedAccuracy >= 0 ? Math.round(parsedAccuracy) : null,
+      });
+      if (shouldClose !== false) {
+        await resetAndClose();
+      }
+    } finally {
+      isSubmittingRef.current = false;
     }
   }
 
@@ -176,11 +221,11 @@ export function ObservationModal({
             <Pressable 
               style={styles.xIcon} 
               onPress={async () => {
-                // 1. Radera om vi är i redigeringsläge
+                // 1. Radera om vi Ã¤r i redigeringslÃ¤ge
                 if (onDelete) {
                   await onDelete();
                 }
-                // 2. Städa och stäng
+                // 2. StÃ¤da och stÃ¤ng
                 await resetAndClose();
               }}
             >
@@ -200,6 +245,7 @@ export function ObservationModal({
                 setSpecies(text); // Uppdatera texten
                 setIsShowingSuggestions(true);
               }}
+              onBlur={() => setIsShowingSuggestions(false)}
               style={styles.input}
             />
             {isShowingSuggestions && suggestions.length > 0 && (
@@ -209,7 +255,7 @@ export function ObservationModal({
                     key={item} 
                     onPress={() => {
                       setSpecies(item);
-                      setIsShowingSuggestions(false); // Stäng menyn vid val
+                      setIsShowingSuggestions(false); // StÃ¤ng menyn vid val
                     }} 
                     style={styles.suggestionItem}
                   >
@@ -221,6 +267,7 @@ export function ObservationModal({
             <TextInput
               value={notes}
               onChangeText={setNotes}
+              onFocus={() => setIsShowingSuggestions(false)}
               style={[styles.input, styles.notes]}
               placeholder="Beskrivning"
               multiline
@@ -270,11 +317,11 @@ export function ObservationModal({
             )}
             {photoUris.length < 3 ? (
               <Pressable style={styles.photoBtn} onPress={addPhoto}>
-                <Text style={styles.photoBtnText}>Lägg till foto ({photoUris.length}/3)</Text>
+                <Text style={styles.photoBtnText}>LÃ¤gg till foto ({photoUris.length}/3)</Text>
               </Pressable>
             ) : (
               <View style={[styles.photoBtn, { backgroundColor: '#ccc' }]}>
-                <Text style={styles.photoBtnText}>Max 3 bilder nådd</Text>
+                <Text style={styles.photoBtnText}>Max 3 bilder nÃ¥dd</Text>
               </View>
             )}
             <View style={styles.photoRow}>
@@ -292,8 +339,44 @@ export function ObservationModal({
               ))}
             </View>
           </ScrollView>
-  
         </View>
+
+        <Modal transparent visible={!!pendingNewSpecies} animationType="fade" onRequestClose={() => setPendingNewSpecies(null)}>
+          <View style={styles.modalBackdrop}>
+            <View style={styles.speciesPromptCard}>
+              <Text style={styles.speciesPromptTitle}>Ny art</Text>
+              <Text style={styles.speciesPromptText}>
+                {pendingNewSpecies
+                  ? `Arten "${pendingNewSpecies}" finns inte i f\u00f6rslagslistan, vill du l\u00e4gga till den?`
+                  : ""}
+              </Text>
+              <View style={styles.speciesPromptActions}>
+                <Pressable
+                  style={[styles.speciesPromptBtn, styles.speciesPromptCancel]}
+                  onPress={() => {
+                    setPendingNewSpecies(null);
+                    void doSave(false);
+                  }}
+                >
+                  <Text style={styles.speciesPromptBtnText}>Nej</Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.speciesPromptBtn, styles.speciesPromptOk]}
+                  onPress={() => {
+                    const next = pendingNewSpecies;
+                    setPendingNewSpecies(null);
+                    if (next) {
+                      setSpecies(next);
+                    }
+                    void doSave(true);
+                  }}
+                >
+                  <Text style={styles.speciesPromptBtnText}>Ja</Text>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </Modal>
       </View>
     </Modal>
   );
@@ -438,16 +521,16 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 18,
     fontWeight: "700",
-    flex: 1,           // Gör att titeln tar ledigt utrymme i mitten
+    flex: 1,           // GÃ¶r att titeln tar ledigt utrymme i mitten
     textAlign: "center", // Centrerar texten mellan ikonerna
   },
   xIcon: {
-    color: "#9b2226", // Röd
-    fontSize: 28,     // Lite större för tydlighet
+    color: "#9b2226", // RÃ¶d
+    fontSize: 28,     // Lite stÃ¶rre fÃ¶r tydlighet
     fontWeight: "900",
   },
   checkIcon: {
-    color: "#0a9396", // Grön
+    color: "#0a9396", // GrÃ¶n
     fontSize: 28,
     fontWeight: "900",
   },
@@ -468,4 +551,68 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     textTransform: 'uppercase',
   },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 16,
+  },
+  speciesPromptCard: {
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: "#005f73",
+    padding: 14,
+    width: "90%",
+    maxWidth: 360,
+  },
+  speciesPromptTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#172121",
+    marginBottom: 6,
+  },
+  speciesPromptText: {
+    color: "#23313a",
+    marginBottom: 12,
+  },
+  speciesPromptActions: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  speciesPromptBtn: {
+    flex: 1,
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: "center",
+  },
+  speciesPromptCancel: {
+    backgroundColor: "#8a939b",
+  },
+  speciesPromptOk: {
+    backgroundColor: "#005f73",
+  },
+  speciesPromptBtnText: {
+    color: "#fff",
+    fontWeight: "700",
+  },
 });
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
