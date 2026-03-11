@@ -26,7 +26,7 @@ type Props = NativeStackScreenProps<RootStackParamList, "MapList">;
 export function MapListScreen({ navigation }: Props) {
   const [maps, setMaps] = useState<MapItem[]>([]);
   const [gpsPingSeconds, setGpsPingSeconds] = useState("3");
-  const [showQuantityField, setShowQuantityField] = useState(true);
+  const [showQuantityField, setShowQuantityField] = useState(false);
   const [renameMap, setRenameMap] = useState<MapItem | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [showRenameHint, setShowRenameHint] = useState(false);
@@ -37,7 +37,7 @@ export function MapListScreen({ navigation }: Props) {
     const [allMaps, settings] = await Promise.all([loadMaps(), loadSettings()]);
     setMaps(allMaps);
     setGpsPingSeconds(String(settings.gpsPingSeconds));
-    setShowQuantityField(settings.showQuantityField ?? true);
+    setShowQuantityField(settings.showQuantityField ?? false);
   }, []);
 
   useFocusEffect(

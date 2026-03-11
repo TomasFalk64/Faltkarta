@@ -3,6 +3,12 @@
     "name": "Fältkarta",
     "slug": "faltkarta",
     "version": "1.0.0",
+    "icon": "./assets/logga.jpg", 
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "assetBundlePatterns": [
@@ -30,6 +36,10 @@
         "android.permission.READ_MEDIA_VIDEO",
         "android.permission.READ_MEDIA_AUDIO"
       ],
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/logga.jpg",
+        "backgroundColor": "#ffffff"
+      },
       "package": "com.tf64.faltkarta",
       "softwareKeyboardLayoutMode": "adjustPan"    
     },

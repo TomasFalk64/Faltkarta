@@ -106,7 +106,7 @@ export async function loadSettings(): Promise<AppSettings> {
   const raw = await AsyncStorage.getItem(SETTINGS_KEY);
   if (!raw) {
     // Returnera standardvärden för båda inställningarna
-    return { gpsPingSeconds: 3, showQuantityField: true };
+    return { gpsPingSeconds: 3, showQuantityField: false };
   }
   return JSON.parse(raw) as AppSettings;
 }
