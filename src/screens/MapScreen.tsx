@@ -19,7 +19,7 @@ import { LatLon, MapItem, Observation, PolygonObservation, PointObservation } fr
 import { averageLatLon, distanceMeters } from "../services/coords";
 import { makeId } from "../utils/id";
 import { ensureMapGeorefBounds } from "../services/files";
-import { photoFileNameFromRef, resolvePointPhotoUri, savePointPhotosToGallery } from "../services/photos";
+import { resolvePointPhotoUri } from "../services/photos";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Map">;
 
@@ -36,6 +36,7 @@ export function MapScreen({ route, navigation }: Props) {
   const [polygonModalSession, setPolygonModalSession] = useState(0);
   const [editingPoint, setEditingPoint] = useState<PointObservation | null>(null);
   const [editingPointPhotoPreviewUris, setEditingPointPhotoPreviewUris] = useState<string[]>([]);
+  const [editingPointPhotoPreviewAssetIds, setEditingPointPhotoPreviewAssetIds] = useState<string[]>([]);
   const [polygonMode, setPolygonMode] = useState(false);
   const [draftPolygon, setDraftPolygon] = useState<LatLon[]>([]);
   const [gpsPingSeconds, setGpsPingSeconds] = useState(3);
@@ -43,8 +44,8 @@ export function MapScreen({ route, navigation }: Props) {
   const { gpsPos, rawAccuracyMeters, error: gpsError } = useGps({ pingSeconds: gpsPingSeconds });
   const lastGpsRef = useRef<{ pos: LatLon; ts: number } | null>(null);
   const gpsTrailRef = useRef<Array<{ pos: LatLon; ts: number; rawAccuracyMeters: number | null }>>([]);
-  const editingPhotoLookupRef = useRef<Record<string, { fileName: string; assetId?: string }>>({});
-  const editingMissingPhotosRef = useRef<Array<{ fileName: string; assetId?: string }>>([]);
+  const editingPhotoLookupRef = useRef<Record<string, { ref: string; assetId?: string }>>({});
+  const editingMissingPhotosRef = useRef<Array<{ ref: string; assetId?: string }>>([]);
 
   useEffect(() => {
     (async () => {
@@ -165,6 +166,7 @@ export function MapScreen({ route, navigation }: Props) {
     species: string;
     notes: string;
     photoUris: string[];
+    photoAssetIds?: string[];
     localName?: string;
     accuracyMeters?: number | null;
     quantity?: number; 
@@ -176,30 +178,16 @@ export function MapScreen({ route, navigation }: Props) {
       const dateISO = editingPoint?.dateISO ?? new Date().toISOString();
       const pointNumber = editingPoint?.pointNumber ?? derivePointNumberFromExisting(pointId);
       const currentLookup = editingPhotoLookupRef.current;
-      const keptExisting = payload.photoUris
-        .map((uri) => currentLookup[uri])
-        .filter((v): v is { fileName: string; assetId?: string } => !!v);
       const missingExisting = editingMissingPhotosRef.current;
-      const newSourceUris = payload.photoUris.filter((uri) => !currentLookup[uri]);
-      const nextSequence = keptExisting.length + missingExisting.length + 1;
-      const savedNewPhotos = await savePointPhotosToGallery({
-        sourceUris: newSourceUris,
-        pointNumber: `Obs${pointNumber}`,
-        species: payload.species,
-        dateISO,
-        startIndex: nextSequence,
+      const ordered = payload.photoUris.map((uri, index) => {
+        const existing = currentLookup[uri];
+        if (existing) return { ref: existing.ref, assetId: existing.assetId };
+        const payloadAssetId = String(payload.photoAssetIds?.[index] ?? "");
+        return { ref: uri, assetId: payloadAssetId };
       });
-
-      const photoUris = [
-        ...keptExisting.map((p) => p.fileName),
-        ...missingExisting.map((p) => p.fileName),
-        ...savedNewPhotos.photoNames,
-      ];
-      const photoAssetIds = [
-        ...keptExisting.map((p) => p.assetId ?? ""),
-        ...missingExisting.map((p) => p.assetId ?? ""),
-        ...savedNewPhotos.photoAssetIds,
-      ];
+      const photoUris = [...ordered.map((p) => p.ref), ...missingExisting.map((p) => p.ref)];
+      const photoAssetIds = [...ordered.map((p) => p.assetId ?? ""), ...missingExisting.map((p) => p.assetId ?? "")];
+      const hasAnyAssetId = photoAssetIds.some((id) => String(id ?? "").trim().length > 0);
 
       const obs: PointObservation = editingPoint
         ? {
@@ -207,7 +195,7 @@ export function MapScreen({ route, navigation }: Props) {
             species: payload.species,
             notes: payload.notes,
             photoUris,
-            photoAssetIds,
+            photoAssetIds: hasAnyAssetId ? photoAssetIds : undefined,
             pointNumber,
             localName: payload.localName?.trim() || map.name,
             accuracyMeters: payload.accuracyMeters ?? null,
@@ -222,7 +210,7 @@ export function MapScreen({ route, navigation }: Props) {
             count: 1,
             notes: payload.notes,
             photoUris,
-            photoAssetIds,
+            photoAssetIds: hasAnyAssetId ? photoAssetIds : undefined,
             pointNumber,
             localName: payload.localName?.trim() || map.name,
             accuracyMeters: payload.accuracyMeters ?? gpsAccuracy.combined,
@@ -236,6 +224,7 @@ export function MapScreen({ route, navigation }: Props) {
       setObservations(next);
       setEditingPoint(null);
       setEditingPointPhotoPreviewUris([]);
+      setEditingPointPhotoPreviewAssetIds([]);
       editingPhotoLookupRef.current = {};
       editingMissingPhotosRef.current = [];
       showToast(editingPoint ? "Punkt uppdaterad" : "Punkt sparad");
@@ -252,6 +241,7 @@ export function MapScreen({ route, navigation }: Props) {
     setObservations(next);
     setEditingPoint(null);
     setEditingPointPhotoPreviewUris([]);
+    setEditingPointPhotoPreviewAssetIds([]);
     editingPhotoLookupRef.current = {};
     editingMissingPhotosRef.current = [];
     showToast("Punkt raderad");
@@ -261,6 +251,7 @@ export function MapScreen({ route, navigation }: Props) {
     species: string;
     notes: string;
     photoUris: string[];
+    photoAssetIds?: string[];
   }) {
     if (!map) return;
     if (draftPolygon.length < 2) {
@@ -290,30 +281,33 @@ export function MapScreen({ route, navigation }: Props) {
   }
 
   async function openPointEditor(obs: PointObservation) {
-    const existing = obs.photoUris.map((fileName, index) => ({
-      fileName: photoFileNameFromRef(fileName),
+    const existing = obs.photoUris.map((ref, index) => ({
+      ref: String(ref ?? ""),
       assetId: obs.photoAssetIds?.[index],
     }));
     const resolved = await Promise.all(
       existing.map(async (item) => ({
         ...item,
-        uri: await resolvePointPhotoUri(item.fileName, item.assetId),
+        uri: await resolvePointPhotoUri(item.ref, item.assetId),
       }))
     );
-    const previewLookup: Record<string, { fileName: string; assetId?: string }> = {};
+    const previewLookup: Record<string, { ref: string; assetId?: string }> = {};
     const previewUris: string[] = [];
-    const missing: Array<{ fileName: string; assetId?: string }> = [];
+    const previewAssetIds: string[] = [];
+    const missing: Array<{ ref: string; assetId?: string }> = [];
     resolved.forEach((item) => {
       if (item.uri) {
-        previewLookup[item.uri] = { fileName: item.fileName, assetId: item.assetId };
+        previewLookup[item.uri] = { ref: item.ref, assetId: item.assetId };
         previewUris.push(item.uri);
+        previewAssetIds.push(String(item.assetId ?? ""));
       } else {
-        missing.push({ fileName: item.fileName, assetId: item.assetId });
+        missing.push({ ref: item.ref, assetId: item.assetId });
       }
     });
     editingPhotoLookupRef.current = previewLookup;
     editingMissingPhotosRef.current = missing;
     setEditingPointPhotoPreviewUris(previewUris);
+    setEditingPointPhotoPreviewAssetIds(previewAssetIds);
     setEditingPoint(obs);
     setPointModalSession((v) => v + 1);
     setShowPointModal(true);
@@ -384,6 +378,7 @@ export function MapScreen({ route, navigation }: Props) {
           onPress={() => {
             setEditingPoint(null);
             setEditingPointPhotoPreviewUris([]);
+            setEditingPointPhotoPreviewAssetIds([]);
             editingPhotoLookupRef.current = {};
             editingMissingPhotosRef.current = [];
             setPointModalSession((v) => v + 1);
@@ -487,6 +482,7 @@ export function MapScreen({ route, navigation }: Props) {
           setShowPointModal(false);
           setEditingPoint(null);
           setEditingPointPhotoPreviewUris([]);
+          setEditingPointPhotoPreviewAssetIds([]);
           editingPhotoLookupRef.current = {};
           editingMissingPhotosRef.current = [];
         }}
@@ -498,6 +494,7 @@ export function MapScreen({ route, navigation }: Props) {
                 species: editingPoint.species,
                 notes: editingPoint.notes,
                 photoUris: editingPointPhotoPreviewUris,
+                photoAssetIds: editingPointPhotoPreviewAssetIds,
                 localName: editingPoint.localName,
                 accuracyMeters: editingPoint.accuracyMeters,
               }
@@ -505,6 +502,7 @@ export function MapScreen({ route, navigation }: Props) {
                 species: "",
                 notes: "",
                 photoUris: [],
+                photoAssetIds: [],
                 localName: map.name,
                 accuracyMeters: gpsAccuracy.combined,
               }

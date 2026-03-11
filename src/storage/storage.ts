@@ -1,6 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { AppSettings, MapItem, Observation } from "../types/models";
-import { photoFileNameFromRef } from "../services/photos";
 
 const MAPS_KEY = "maps:v1";
 const OBS_KEY = "observations:v1";
@@ -90,7 +89,7 @@ export async function deleteObservation(mapId: string, observationId: string): P
 
 function normalizeObservation(obs: Observation): Observation {
   if (obs.kind !== "point") return obs;
-  const photoNames = (obs.photoUris ?? []).map((value) => photoFileNameFromRef(String(value ?? "")));
+  const photoNames = (obs.photoUris ?? []).map((value) => String(value ?? ""));
   const photoAssetIds = (obs.photoAssetIds ?? []).map((value) => String(value ?? ""));
   return {
     ...obs,

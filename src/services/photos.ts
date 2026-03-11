@@ -114,7 +114,7 @@ export async function cleanupAllPendingPhotoCopies(): Promise<void> {
   }
 }
 
-function buildPointPhotoFileName(
+export function buildPointPhotoFileName(
   pointNumber: string,
   species: string,
   dateISO: string,
@@ -137,7 +137,7 @@ function formatDateForFileName(dateISO: string): string {
   return `${yyyy}-${mm}-${dd}_${hh}-${min}`;
 }
 
-function guessImageExtension(uri: string): string {
+export function guessImageExtension(uri: string): string {
   const clean = uri.split("?")[0];
   const match = clean.match(/\.([A-Za-z0-9]+)$/);
   const ext = match?.[1]?.toLowerCase();

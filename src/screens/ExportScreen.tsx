@@ -22,6 +22,7 @@ export function ExportScreen({ route }: Props) {
   const [observations, setObservations] = useState<Observation[]>([]);
   const [preview, setPreview] = useState("");
   const [showExcelModal, setShowExcelModal] = useState(false);
+  const [isCreatingZip, setIsCreatingZip] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -93,8 +94,17 @@ export function ExportScreen({ route }: Props) {
       Alert.alert("Export", "Inga observationer att exportera.");
       return;
     }
-    const path = await saveZipBundleAndShare(mapName, observations, mapFileUri);
-    Alert.alert("Sparad", `ZIP skapad:\n${path}`);
+    setIsCreatingZip(true);
+    try {
+      const result = await saveZipBundleAndShare(mapName, observations, mapFileUri);
+      if (!result.shared) {
+        Alert.alert("Export", "Delning ar inte tillganglig pa enheten.");
+        return;
+      }
+      Alert.alert("Sparad", "ZIP skapad och delad.");
+    } finally {
+      setIsCreatingZip(false);
+    }
   }
 
   return (
@@ -144,6 +154,15 @@ export function ExportScreen({ route }: Props) {
             <Pressable style={[styles.modalActionBtn, styles.modalCancelBtn]} onPress={() => setShowExcelModal(false)}>
               <Text style={styles.modalActionText}>Avbryt</Text>
             </Pressable>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal transparent visible={isCreatingZip} animationType="fade">
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Skapar Zip-fil</Text>
+            <Text style={styles.modalBody}>Skapar Zip-fil. Ta det lugnt.</Text>
           </View>
         </View>
       </Modal>
@@ -217,6 +236,9 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "700",
     marginBottom: 10,
+  },
+  modalBody: {
+    color: "#44515b",
   },
   modalActionBtn: {
     borderRadius: 10,

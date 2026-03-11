@@ -10,3 +10,12 @@ declare module "utif" {
   export function decodeImage(buffer: ArrayBuffer, ifd: any): void;
   export function toRGBA8(ifd: any): Uint8Array;
 }
+
+declare module "piexifjs" {
+  const piexif: {
+    load(data: string): Record<string, any>;
+    dump(exif: Record<string, any>): string;
+    insert(exifBytes: string, jpegData: string): string;
+  };
+  export default piexif;
+}

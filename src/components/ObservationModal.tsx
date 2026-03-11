@@ -12,12 +12,12 @@ import {
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { speciesList } from "../data/species";
-import { createPendingPhotoCopy, deletePendingPhotoCopies } from "../services/photos";
 
 type ModalPayload = {
   species: string;
   notes: string;
   photoUris: string[];
+  photoAssetIds?: string[];
   localName?: string;
   quantity?: number;
   unit?: string;
@@ -50,11 +50,11 @@ export function ObservationModal({
   const [species, setSpecies] = useState("");
   const [notes, setNotes] = useState("");
   const [photoUris, setPhotoUris] = useState<string[]>([]);
+  const [photoAssetIds, setPhotoAssetIds] = useState<string[]>([]);
   const [localName, setLocalName] = useState("");
   const [quantity, setQuantity] = useState("");
   const [unit, setUnit] = useState("");
   const [accuracyMeters, setAccuracyMeters] = useState("");
-  const pendingTempPhotoUrisRef = useRef<Set<string>>(new Set());
   const wasVisibleRef = useRef(false);
   const lastSessionTokenRef = useRef<number | undefined>(undefined);
   const [isShowingSuggestions, setIsShowingSuggestions] = useState(false);
@@ -65,6 +65,7 @@ export function ObservationModal({
         setSpecies(initialValues?.species ?? "");
         setNotes(initialValues?.notes ?? "");
         setPhotoUris(initialValues?.photoUris ?? []);
+        setPhotoAssetIds(initialValues?.photoAssetIds ?? []);
         setLocalName(initialValues?.localName ?? "");
         setQuantity(initialValues?.quantity !== undefined ? String(initialValues.quantity) : "");
         setUnit(initialValues?.unit ?? "");
@@ -84,6 +85,7 @@ export function ObservationModal({
       setSpecies(initialValues?.species ?? "");
       setNotes(initialValues?.notes ?? "");
       setPhotoUris(initialValues?.photoUris ?? []);
+      setPhotoAssetIds(initialValues?.photoAssetIds ?? []);
       setLocalName(initialValues?.localName ?? "");
       setQuantity(initialValues?.quantity ?? "");
       setUnit(initialValues?.unit ?? "");
@@ -121,33 +123,22 @@ export function ObservationModal({
       selectionLimit: 1,
     });
     if (!result.canceled && result.assets[0]?.uri) {
-      const tempUri = await createPendingPhotoCopy(result.assets[0].uri);
-      pendingTempPhotoUrisRef.current.add(tempUri);
-      setPhotoUris((prev) => [...prev, tempUri]);
+      setPhotoUris((prev) => [...prev, result.assets[0].uri]);
+      setPhotoAssetIds((prev) => [...prev, String(result.assets[0].assetId ?? "")]);
     }
   }
 
   async function removePhotoAt(index: number) {
-    const uri = photoUris[index];
-    if (uri && pendingTempPhotoUrisRef.current.has(uri)) {
-      pendingTempPhotoUrisRef.current.delete(uri);
-      await deletePendingPhotoCopies([uri]);
-    }
     setPhotoUris((prev) => prev.filter((_, i) => i !== index));
-  }
-
-  async function cleanupPendingTempPhotos() {
-    const pending = Array.from(pendingTempPhotoUrisRef.current);
-    pendingTempPhotoUrisRef.current.clear();
-    await deletePendingPhotoCopies(pending);
+    setPhotoAssetIds((prev) => prev.filter((_, i) => i !== index));
   }
 
   async function resetAndClose() {
     //  if (onDelete) {await onDelete();}
-    await cleanupPendingTempPhotos();
     setSpecies("");
     setNotes("");
     setPhotoUris([]);
+    setPhotoAssetIds([]);
     setLocalName("");
     setAccuracyMeters("");
     onClose();
@@ -165,6 +156,7 @@ export function ObservationModal({
       species: species.trim(),
       notes: notes.trim(),
       photoUris,
+      photoAssetIds,
       localName: localName.trim(),
       quantity: quantityAsNumber, 
       unit: unit.trim(),
