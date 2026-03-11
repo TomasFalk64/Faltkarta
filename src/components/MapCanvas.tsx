@@ -22,12 +22,12 @@ type Props = {
 
 const VIRTUAL_IMAGE_WIDTH = 1200;
 const VIRTUAL_IMAGE_HEIGHT = 1200;
-const BASE_GPS_DOT_SIZE = 28;
-const BASE_POINT_DOT_SIZE = 20;
-const BASE_POINT_TOUCH_SIZE = 28;
-const MIN_GPS_DOT_SCREEN_SIZE = 20;
-const MIN_POINT_DOT_SCREEN_SIZE = 16;
-const MIN_POINT_TOUCH_SCREEN_SIZE = 28;
+const TARGET_DOT_SCREEN_SIZE = 22;
+const MIN_DOT_SCREEN_SIZE = 18;
+const MAX_DOT_SCREEN_SIZE = 40;
+const TARGET_TOUCH_SCREEN_SIZE = 28;
+const MIN_TOUCH_SCREEN_SIZE = 24;
+const MAX_TOUCH_SCREEN_SIZE = 36;
 
 export function MapCanvas({
   map,
@@ -74,9 +74,22 @@ export function MapCanvas({
 
   const gpsPoint = gpsPos && isCoordInsideMapBounds(map, gpsPos) ? toLocalPoint(gpsPos) : null;
   const safeScale = Math.max(0.01, scale);
-  const gpsDotSize = Math.max(BASE_GPS_DOT_SIZE, MIN_GPS_DOT_SCREEN_SIZE / safeScale);
-  const pointDotSize = Math.max(BASE_POINT_DOT_SIZE, MIN_POINT_DOT_SCREEN_SIZE / safeScale);
-  const pointTouchSize = Math.max(BASE_POINT_TOUCH_SIZE, MIN_POINT_TOUCH_SCREEN_SIZE / safeScale);
+  const gpsDotSize = clamp(
+    TARGET_DOT_SCREEN_SIZE / safeScale,
+    MIN_DOT_SCREEN_SIZE / safeScale,
+    MAX_DOT_SCREEN_SIZE / safeScale
+  );
+  const pointDotSize = clamp(
+    TARGET_DOT_SCREEN_SIZE / safeScale,
+    MIN_DOT_SCREEN_SIZE / safeScale,
+    MAX_DOT_SCREEN_SIZE / safeScale
+  );
+  const pointTouchSize = clamp(
+    TARGET_TOUCH_SCREEN_SIZE / safeScale,
+    MIN_TOUCH_SCREEN_SIZE / safeScale,
+    MAX_TOUCH_SCREEN_SIZE / safeScale
+  );
+  const gpsBorderWidth = clamp(1.5 / safeScale, 0.8 / safeScale, 2.0 / safeScale);
 
   const panResponder = useMemo(
     () =>
@@ -238,6 +251,7 @@ export function MapCanvas({
                 width: gpsDotSize,
                 height: gpsDotSize,
                 borderRadius: gpsDotSize / 2,
+                borderWidth: gpsBorderWidth,
                 left: gpsPoint.x - gpsDotSize / 2,
                 top: gpsPoint.y - gpsDotSize / 2,
               },
@@ -269,6 +283,7 @@ export function MapCanvas({
                     width: pointDotSize,
                     height: pointDotSize,
                     borderRadius: pointDotSize / 2,
+                    borderWidth: gpsBorderWidth,
                   },
                 ]}
               />
@@ -356,12 +371,12 @@ const styles = StyleSheet.create({
   gpsDot: {
     position: "absolute",
     backgroundColor: "#3a86ff",
-    borderWidth: 2,
+    borderWidth: 0,
     borderColor: "#e6f0ff",
   },
   pointDot: {
     backgroundColor: "#d62828",
-    borderWidth: 1,
+    borderWidth: 0,
     borderColor: "#fff",
   },
   pointTouch: {

@@ -91,7 +91,7 @@ export function ObservationModal({
       setPhotoUris(initialValues?.photoUris ?? []);
       setPhotoAssetIds(initialValues?.photoAssetIds ?? []);
       setLocalName(initialValues?.localName ?? "");
-      setQuantity(initialValues?.quantity ?? "");
+      setQuantity(initialValues?.quantity !== undefined ? String(initialValues.quantity) : "");
       setUnit(initialValues?.unit ?? "");
       setAccuracyMeters(
         initialValues?.accuracyMeters === null || initialValues?.accuracyMeters === undefined
@@ -219,8 +219,7 @@ export function ObservationModal({
         <View style={styles.card}>
           <View style={styles.header}>
             <Pressable 
-              style={styles.xIcon} 
-              onPress={async () => {
+              style={styles.iconBtn} onPress={async () => {
                 // 1. Radera om vi Ã¤r i redigeringslÃ¤ge
                 if (onDelete) {
                   await onDelete();
@@ -229,13 +228,13 @@ export function ObservationModal({
                 await resetAndClose();
               }}
             >
-              <Ionicons name="close" size={30} color="#9b2226" />
+              <Ionicons name="close" size={30} style={{ color: "#9b2226" }} />
             </Pressable>
 
             <Text style={styles.title}>{title}</Text>
 
-            <Pressable style={styles.checkIcon} onPress={() => void submit()}>
-              <Ionicons name="checkmark" size={30} color="#0a9396" />
+            <Pressable style={styles.iconBtn} onPress={() => void submit()}>
+              <Ionicons name="checkmark" size={30} style={{ color: "#0a9396" }} />
             </Pressable>
           </View>
           <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ flexGrow: 1 }}>
@@ -317,7 +316,7 @@ export function ObservationModal({
             )}
             {photoUris.length < 3 ? (
               <Pressable style={styles.photoBtn} onPress={addPhoto}>
-                <Text style={styles.photoBtnText}>LÃ¤gg till foto ({photoUris.length}/3)</Text>
+                <Text style={styles.photoBtnText}>Lägg till foto ({photoUris.length}/3)</Text>
               </Pressable>
             ) : (
               <View style={[styles.photoBtn, { backgroundColor: '#ccc' }]}>
@@ -524,15 +523,8 @@ const styles = StyleSheet.create({
     flex: 1,           // GÃ¶r att titeln tar ledigt utrymme i mitten
     textAlign: "center", // Centrerar texten mellan ikonerna
   },
-  xIcon: {
-    color: "#9b2226", // RÃ¶d
-    fontSize: 28,     // Lite stÃ¶rre fÃ¶r tydlighet
-    fontWeight: "900",
-  },
-  checkIcon: {
-    color: "#0a9396", // GrÃ¶n
-    fontSize: 28,
-    fontWeight: "900",
+  iconBtn: {
+    padding: 4,
   },
   dividerContainer: {
     flexDirection: 'row',
@@ -598,6 +590,10 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 });
+
+
+
+
 
 
 
