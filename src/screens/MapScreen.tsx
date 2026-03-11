@@ -70,6 +70,12 @@ export function MapScreen({ route, navigation }: Props) {
       if (hydrated) {
         navigation.setOptions({
           title: hydrated.name,
+          headerStyle: {
+          backgroundColor: '#f4f0e7', 
+          },
+          headerTitleStyle: {
+            fontSize: 15,
+          },
         });
       }
     })().catch((e) => Alert.alert("Fel", String(e)));
@@ -161,6 +167,8 @@ export function MapScreen({ route, navigation }: Props) {
     photoUris: string[];
     localName?: string;
     accuracyMeters?: number | null;
+    quantity?: number; 
+    unit?: string;
   }): Promise<boolean> {
     if (!map) return false;
     try {
@@ -203,6 +211,8 @@ export function MapScreen({ route, navigation }: Props) {
             pointNumber,
             localName: payload.localName?.trim() || map.name,
             accuracyMeters: payload.accuracyMeters ?? null,
+            quantity: payload.quantity,
+            unit: payload.unit ?? "",
           }
         : {
             id: pointId,
@@ -216,6 +226,8 @@ export function MapScreen({ route, navigation }: Props) {
             pointNumber,
             localName: payload.localName?.trim() || map.name,
             accuracyMeters: payload.accuracyMeters ?? gpsAccuracy.combined,
+            quantity: payload.quantity ?? 0,
+            unit: payload.unit ?? "",
             dateISO,
             wgs84: crosshairPos,
           };
@@ -435,7 +447,7 @@ export function MapScreen({ route, navigation }: Props) {
         <View style={styles.pointListWrap}>
           <View style={styles.pointListCard}>
             <View style={styles.pointListHeader}>
-              <Text style={styles.pointListTitle}>Alla punkter ({pointList.length})</Text>
+              <Text style={styles.pointListTitle}>Observationer ({pointList.length})</Text>{/* Rubrik för punktlistan */}
               <Pressable style={styles.pointListCloseBtn} onPress={() => setShowPointList(false)}>
                 <Text style={styles.pointListCloseText}>Stäng</Text>
               </Pressable>
@@ -450,15 +462,16 @@ export function MapScreen({ route, navigation }: Props) {
                     style={styles.pointListItem}
                     onPress={() => {
                       setShowPointList(false);
-                      void openPointEditor(obs);
+                      void openPointEditor(obs as any);
                     }}
                   >
                     <Text style={styles.pointListItemSpecies}>{obs.species}</Text>
-                    {!!obs.localName && (
-                      <Text style={styles.pointListItemMeta}>{obs.localName}</Text>
-                    )}
-                    {obs.accuracyMeters !== null && (
-                      <Text style={styles.pointListItemMeta}>Noggrannhet: {obs.accuracyMeters} m</Text>
+                    {obs.kind === 'point' ? (
+                      <Text style={styles.pointListItemMeta}>
+                        Noggrannhet: {obs.accuracyMeters} m
+                      </Text>
+                    ) : (
+                      <Text style={styles.pointListItemMeta}>Polygon</Text>
                     )}
                   </Pressable>
                 ))

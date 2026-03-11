@@ -47,6 +47,8 @@ export type PointObservation = ObservationBase & {
   pointNumber?: number;
   localName: string;
   accuracyMeters: number | null;
+  quantity: number;
+  unit: string;
   photoAssetIds?: string[];
 };
 

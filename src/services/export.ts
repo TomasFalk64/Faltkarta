@@ -36,7 +36,7 @@ function toArtportalenNotes(obs: Observation): string {
 }
 
 export function buildArtportalenTsv(observations: Observation[]): string {
-  const header = "Artnamn\tLokalnamn\tStartdatum\tStarttid\tOst\tNord\tNoggrannhet\tPublik kommentar";
+  const header = "Artnamn\tLokalnamn\tStartdatum\tStarttid\tOst\tNord\tNoggrannhet\tPublik kommentar\tAntal\tEnhet";
   
   // 1. Filtrera bort allt som inte är en punkt
   const pointsOnly = observations.filter((obs) => obs.kind === "point");
@@ -63,7 +63,9 @@ export function buildArtportalenTsv(observations: Observation[]): string {
       east,
       north,
       accuracy,
-      obs.notes
+      obs.notes,
+      (obs.quantity && obs.quantity !== 0) ? String(obs.quantity) : "", 
+      obs.unit ?? ""
     ]
       .map((v) => String(v).replace(/[\t\r\n]+/g, " ").trim())
       .join("\t");
@@ -81,25 +83,27 @@ export function buildCsv(observations: Observation[]): string {
   const fields = [
     "Artnamn",
     "Typ",
-    "Antal",
     "Datum",
     "Lat",
     "Lon",
-    "SWEREF99TM_NordY",
-    "SWEREF99TM_OstX",
+    "Nord",
+    "Ost",
     "Lokalnamn",
-    "Noggrannhet_m",
-    "Beskrivning",
+    "Noggrannhet",
+    "Publik kommentar",
+    "Antal",
+    "Enhet",
     "Foton",
   ];
   const data = observations.map((obs) => {
     const rep = observationToRepresentativeWgs84(obs);
     const sweref = wgs84ToSweref99tm(rep.lon, rep.lat);
     const photos = obs.photoUris.map((name) => photoFileNameFromRef(name)).join("|");
+    const quantity = (obs.kind === "point" && obs.quantity && obs.quantity !== 0) ? String(obs.quantity) : "";
+    const unit = obs.kind === "point" ? obs.unit : "";
     return [
       obs.species,
       obs.kind,
-      String(obs.count),
       new Date(obs.dateISO).toISOString(),
       formatNumberForExcel(rep.lat, 7),
       formatNumberForExcel(rep.lon, 7),
@@ -108,6 +112,8 @@ export function buildCsv(observations: Observation[]): string {
       pointLocalName(obs),
       pointAccuracy(obs),
       obs.notes,
+      quantity,
+      unit,
       photos,
     ];
   });
@@ -180,7 +186,7 @@ export async function saveCsvGeoJsonAndMapAndComposeEmail(
   return { paths: attachments, opened: true };
 }
 
-export async function saveZipBundleAndShare(mapName: string, observations: Observation[]): Promise<string> {
+export async function saveZipBundleAndShare(mapName: string, observations: Observation[],mapFileUri?: string | null): Promise<string> {
   const dir = exportDir();
   const dirInfo = await FileSystem.getInfoAsync(dir);
   if (!dirInfo.exists) {
@@ -191,6 +197,17 @@ export async function saveZipBundleAndShare(mapName: string, observations: Obser
   const csv = buildCsv(observations);
   zip.file(`${safeMapName}.csv`, ensureUtf8Bom(csv));
   zip.file(`${safeMapName}.geojson`, buildGeoJson(mapName, observations));
+  if (mapFileUri) {
+    try {
+      const mapBase64 = await FileSystem.readAsStringAsync(mapFileUri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+      const ext = mapFileUri.toLowerCase().endsWith(".tiff") ? "tiff" : "tif";
+      zip.file(`${safeMapName}.${ext}`, mapBase64, { base64: true });
+    } catch {
+      // ...
+    }
+  }
 
   const uniquePhotos = collectPhotoRefs(observations);
   for (const photo of uniquePhotos) {
@@ -342,6 +359,8 @@ function observationToGeoJsonFeature(
         ...baseProps,
         localName: point.localName,
         accuracyMeters: point.accuracyMeters,
+        quantity: point.quantity,
+        unit: point.unit,
       },
       geometry: {
         type: "Point",
@@ -362,7 +381,7 @@ function observationToGeoJsonFeature(
     properties: baseProps,
     geometry: {
       type: "Polygon",
-      coordinates: [ring],
+      coordinates: [ring],  
     },
   };
 }

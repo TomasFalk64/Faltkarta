@@ -19,6 +19,8 @@ type ModalPayload = {
   notes: string;
   photoUris: string[];
   localName?: string;
+  quantity?: number;
+  unit?: string;
   accuracyMeters?: number | null;
 };
 
@@ -49,10 +51,13 @@ export function ObservationModal({
   const [notes, setNotes] = useState("");
   const [photoUris, setPhotoUris] = useState<string[]>([]);
   const [localName, setLocalName] = useState("");
+  const [quantity, setQuantity] = useState("");
+  const [unit, setUnit] = useState("");
   const [accuracyMeters, setAccuracyMeters] = useState("");
   const pendingTempPhotoUrisRef = useRef<Set<string>>(new Set());
   const wasVisibleRef = useRef(false);
   const lastSessionTokenRef = useRef<number | undefined>(undefined);
+  const [isShowingSuggestions, setIsShowingSuggestions] = useState(false);
 
   useEffect(() => {
     if (sessionToken !== undefined) {
@@ -61,6 +66,8 @@ export function ObservationModal({
         setNotes(initialValues?.notes ?? "");
         setPhotoUris(initialValues?.photoUris ?? []);
         setLocalName(initialValues?.localName ?? "");
+        setQuantity(initialValues?.quantity !== undefined ? String(initialValues.quantity) : "");
+        setUnit(initialValues?.unit ?? "");
         setAccuracyMeters(
           initialValues?.accuracyMeters === null || initialValues?.accuracyMeters === undefined
             ? ""
@@ -71,13 +78,15 @@ export function ObservationModal({
       wasVisibleRef.current = visible;
       return;
     }
-
+    
     const openedNow = visible && !wasVisibleRef.current;
     if (openedNow) {
       setSpecies(initialValues?.species ?? "");
       setNotes(initialValues?.notes ?? "");
       setPhotoUris(initialValues?.photoUris ?? []);
       setLocalName(initialValues?.localName ?? "");
+      setQuantity(initialValues?.quantity ?? "");
+      setUnit(initialValues?.unit ?? "");
       setAccuracyMeters(
         initialValues?.accuracyMeters === null || initialValues?.accuracyMeters === undefined
           ? ""
@@ -86,6 +95,15 @@ export function ObservationModal({
     }
     wasVisibleRef.current = visible;
   }, [initialValues, sessionToken, visible]);
+
+  useEffect(() => {
+  // 1. Arten måste vara knärot
+  // 2. Användaren måste ha skrivit in ett antal (quantity är inte tomt)
+  // 3. Enheten måste vara tom (så vi inte skriver över om användaren redan valt en annan)
+  if (species.toLowerCase().includes('knärot') && quantity !== "" && unit === "") {
+    setUnit('plantor/tuvor');
+  }
+});
 
   const suggestions = useMemo(() => {
     const q = species.trim().toLowerCase();
@@ -141,11 +159,15 @@ export function ObservationModal({
     return; 
   }
     const parsedAccuracy = Number.parseFloat(accuracyMeters.replace(",", "."));
+    const rawVal = quantity.trim();
+    const quantityAsNumber = rawVal === "" ? undefined : Number(rawVal);
     const shouldClose = await onSave({
       species: species.trim(),
       notes: notes.trim(),
       photoUris,
       localName: localName.trim(),
+      quantity: quantityAsNumber, 
+      unit: unit.trim(),
       accuracyMeters:
         Number.isFinite(parsedAccuracy) && parsedAccuracy >= 0 ? Math.round(parsedAccuracy) : null,
     });
@@ -182,14 +204,23 @@ export function ObservationModal({
           <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ flexGrow: 1 }}>
             <TextInput
               value={species}
-              onChangeText={setSpecies}
+              onChangeText={(text) => {
+                setSpecies(text); // Uppdatera texten
+                setIsShowingSuggestions(true);
+              }}
               style={styles.input}
-              placeholder={speciesPlaceholder}
             />
-            {suggestions.length > 0 && (
+            {isShowingSuggestions && suggestions.length > 0 && (
               <View style={styles.suggestions}>
                 {suggestions.map((item) => (
-                  <Pressable key={item} onPress={() => setSpecies(item)} style={styles.suggestionItem}>
+                  <Pressable 
+                    key={item} 
+                    onPress={() => {
+                      setSpecies(item);
+                      setIsShowingSuggestions(false); // Stäng menyn vid val
+                    }} 
+                    style={styles.suggestionItem}
+                  >
                     <Text>{item}</Text>
                   </Pressable>
                 ))}
@@ -202,6 +233,26 @@ export function ObservationModal({
               placeholder="Beskrivning"
               multiline
             />
+            <View style={styles.dividerContainer}>
+              <View style={styles.line} />
+              <Text style={styles.dividerText}>Extra info nedan</Text>
+              <View style={styles.line} />
+            </View>
+            <View style={styles.metaRow}>
+              <TextInput
+                value={quantity}
+                onChangeText={setQuantity}
+                style={[styles.input, styles.metaInput, { flex: 1 }]}
+                placeholder="Antal"
+                keyboardType="numeric"
+              />
+              <TextInput
+                value={unit}
+                onChangeText={setUnit}
+                style={[styles.input, styles.metaInput, { flex: 2, marginLeft: 10 }]}
+                placeholder="Enhet"
+              />
+            </View>
             {showPointMetaFields && (
               <>
                 <View style={styles.metaRow}>
@@ -225,9 +276,15 @@ export function ObservationModal({
                 </View>
               </>
             )}
-            <Pressable style={styles.photoBtn} onPress={addPhoto}>
-              <Text style={styles.photoBtnText}>Lägg till foto</Text>
-            </Pressable>
+            {photoUris.length < 3 ? (
+              <Pressable style={styles.photoBtn} onPress={addPhoto}>
+                <Text style={styles.photoBtnText}>Lägg till foto ({photoUris.length}/3)</Text>
+              </Pressable>
+            ) : (
+              <View style={[styles.photoBtn, { backgroundColor: '#ccc' }]}>
+                <Text style={styles.photoBtnText}>Max 3 bilder nådd</Text>
+              </View>
+            )}
             <View style={styles.photoRow}>
               {photoUris.map((uri, index) => (
                 <Pressable
@@ -290,7 +347,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   metaLabel: {
-    width: 118,
+    width: 150,
     fontWeight: "600",
     color: "#23313a",
   },
@@ -401,5 +458,22 @@ const styles = StyleSheet.create({
     color: "#0a9396", // Grön
     fontSize: 28,
     fontWeight: "900",
+  },
+  dividerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 16,
+  },
+  line: {
+    flex: 1,
+    height: 1.5,
+    backgroundColor: '#0a9396',
+  },
+  dividerText: {
+    marginHorizontal: 10,
+    color: '#888',
+    fontSize: 10,
+    fontWeight: 'bold',
+    textTransform: 'uppercase',
   },
 });

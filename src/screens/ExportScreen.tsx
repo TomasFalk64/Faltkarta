@@ -93,7 +93,7 @@ export function ExportScreen({ route }: Props) {
       Alert.alert("Export", "Inga observationer att exportera.");
       return;
     }
-    const path = await saveZipBundleAndShare(mapName, observations);
+    const path = await saveZipBundleAndShare(mapName, observations, mapFileUri);
     Alert.alert("Sparad", `ZIP skapad:\n${path}`);
   }
 
