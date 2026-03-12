@@ -10,6 +10,7 @@ import {
   Text,
   TextInput,
   View,
+  Linking,
 } from "react-native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useFocusEffect } from "@react-navigation/native";
@@ -33,6 +34,21 @@ export function MapListScreen({ navigation }: Props) {
   const [showRenameHint, setShowRenameHint] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [menuMap, setMenuMap] = useState<MapItem | null>(null);
+  const [showImportMenu, setShowImportMenu] = useState(false);
+
+  function clampPingInput(value: string): string {
+    const parsed = Number.parseInt(value, 10);
+    if (!Number.isFinite(parsed)) return "3";
+    const clamped = Math.min(20, Math.max(3, parsed));
+    return String(clamped);
+  }
+
+  function clampMaxImageSize(value: string): string {
+    const parsed = Number.parseFloat(value.replace(",", "."));
+    if (!Number.isFinite(parsed)) return "2";
+    const clamped = Math.min(9, Math.max(1, parsed));
+    return String(clamped);
+  }
 
   const refresh = useCallback(async () => {
     const [allMaps, settings] = await Promise.all([loadMaps(), loadSettings()]);
@@ -87,7 +103,8 @@ export function MapListScreen({ navigation }: Props) {
   const onSaveSettings = async () => {
     try {
       const parsedPing = Number.parseInt(gpsPingSeconds, 10);
-      const pingValue = Number.isFinite(parsedPing) && parsedPing > 0 ? parsedPing : 3;
+      const rawPing = Number.isFinite(parsedPing) ? parsedPing : 3;
+      const pingValue = Math.min(20, Math.max(3, rawPing));
       const parsedMaxSize = Number.parseFloat(maxImageSizeMB.replace(",", "."));
       const maxSizeValue = Number.isFinite(parsedMaxSize) && parsedMaxSize > 0 ? parsedMaxSize : 2;
 
@@ -104,7 +121,7 @@ export function MapListScreen({ navigation }: Props) {
       // Uppdatera UI
       setGpsPingSeconds(String(pingValue));
       setMaxImageSizeMB(String(maxSizeValue));
-      Alert.alert("Sparat", "Inställningar uppdaterade.");
+      //Alert.alert("Sparat", "Inställningar uppdaterade.");
       setShowSettings(false);
     } catch (error) {
       console.error("Kunde inte spara inställningar:", error);
@@ -147,13 +164,42 @@ export function MapListScreen({ navigation }: Props) {
         )}
       />
 
-      <Pressable style={styles.fab} onPress={onImport}>
+      <Pressable style={styles.fab} onPress={() => setShowImportMenu(true)}>
         <Text style={styles.fabText}>+</Text>
       </Pressable>
 
       <Pressable style={styles.infoFab} onPress={() => setShowSettings(true)}>
         <Text style={styles.infoFabText}>i</Text>
       </Pressable>
+
+      <Modal transparent visible={showImportMenu} onRequestClose={() => setShowImportMenu(false)} animationType="fade">
+        <View style={styles.modalBackdrop}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setShowImportMenu(false)} />
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Lägg till karta</Text>
+            <Pressable
+              style={styles.menuActionBtn}
+              onPress={() => {
+                setShowImportMenu(false);
+                void Linking.openURL(
+                  "https://karta.skogsmonitor.se/?background=Lantm%C3%A4terietTopowebb&lat=60.55728&layers=17-26-21-14&lng=16.88599&zoom=7"
+                );
+              }}
+            >
+              <Text style={styles.menuActionText}>Hämta kartor från Skogsmonitor</Text>
+            </Pressable>
+            <Pressable
+              style={styles.menuActionBtn}
+              onPress={() => {
+                setShowImportMenu(false);
+                void onImport();
+              }}
+            >
+              <Text style={styles.menuActionText}>Ladda in karta från mobil</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
 
       <Modal transparent visible={!!renameMap} onRequestClose={() => setRenameMap(null)} animationType="fade">
         <View style={[styles.modalBackdrop, { justifyContent: 'flex-start' }]}>
@@ -249,7 +295,20 @@ export function MapListScreen({ navigation }: Props) {
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Kort guide</Text>
             <View style={styles.helpBox}>
-              <Text style={styles.helpText}>Importera en GeoTIFF som karta. Du kan ha flera kartor.</Text>
+              <Text style={styles.helpText}>
+                Importera karta som GeoTIFF från{" "}
+                <Text
+                  style={styles.linkText}
+                  onPress={() =>
+                    void Linking.openURL(
+                      "https://karta.skogsmonitor.se/?background=Lantm%C3%A4terietTopowebb&lat=60.55728&layers=17-26-21-14&lng=16.88599&zoom=7"
+                    )
+                  }
+                >
+                  Skogsmonitor
+                </Text>
+                . Du kan ha flera kartor.
+              </Text>
               <Text style={styles.helpText}>Byt namn på kartan, namnet används som förslag på lokalnamn.</Text>
               <Text style={styles.helpText}>Öppna kartan och registrera punkter eller polygoner.</Text>
               <Text style={styles.helpText}>Exportera direkt till Artportalen eller skicka med epost.</Text>
@@ -258,21 +317,23 @@ export function MapListScreen({ navigation }: Props) {
             <Text style={styles.modalTitle}>Inställningar</Text>
 
             {/* GPS-inställning */}
-            <Text style={styles.settingsTitle}>GPS ping-frekvens (s)</Text>
             <View style={styles.settingsRow}>
+              <Text style={styles.settingsTitle}>GPS pingfrekvens (3-20s)</Text>
               <TextInput
                 value={gpsPingSeconds}
                 onChangeText={setGpsPingSeconds}
+                onBlur={() => setGpsPingSeconds(clampPingInput(gpsPingSeconds))}
                 style={styles.pingInput}
                 keyboardType="number-pad"
               />
             </View>
 
-            <Text style={styles.settingsTitle}>Max bildstorlek vid export (MB)</Text>
             <View style={styles.settingsRow}>
+              <Text style={styles.settingsTitle}>Max bildstorlek vid export (MB)</Text>
               <TextInput
                 value={maxImageSizeMB}
                 onChangeText={setMaxImageSizeMB}
+                onBlur={() => setMaxImageSizeMB(clampMaxImageSize(maxImageSizeMB))}
                 style={styles.pingInput}
                 keyboardType="decimal-pad"
               />
@@ -302,12 +363,6 @@ export function MapListScreen({ navigation }: Props) {
               <Text style={styles.saveBtnText}>Spara</Text>
             </Pressable>
 
-            <Pressable
-              onPress={() => setShowSettings(false)}
-              style={[styles.modalBtn, styles.cancelBtn, styles.closeOnlyBtn]}
-            >
-              <Text style={styles.modalBtnText}>Stäng</Text>
-            </Pressable>
           </View>
         </View>
       </Modal>
@@ -323,6 +378,7 @@ const styles = StyleSheet.create({
   settingsTitle: {
     fontWeight: "700",
     marginBottom: 8,
+    flex: 1,
   },
   helpBox: {
     backgroundColor: "#eef6f7",
@@ -338,19 +394,26 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     marginBottom: 4,
   },
+  linkText: {
+    color: "#005f73",
+    textDecorationLine: "underline",
+    fontWeight: "700",
+  },
   settingsRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
+    marginBottom: 10,
   },
   pingInput: {
     backgroundColor: "#fff",
     borderColor: "#b9c1c8",
     borderWidth: 1,
     borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    minWidth: 80,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    minWidth: 54,
+    textAlign: "center",
   },
   saveBtn: {
     backgroundColor: "#005f73",
