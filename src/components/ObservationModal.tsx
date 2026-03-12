@@ -1,5 +1,4 @@
 ﻿import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Ionicons } from '@expo/vector-icons';
 import {
   Modal,
   View,
@@ -10,6 +9,8 @@ import {
   Image,
   ScrollView,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import Svg, { Path } from "react-native-svg";
 import * as ImagePicker from "expo-image-picker";
 import { speciesList } from "../data/species";
 import { addUserSpecies, loadUserSpecies } from "../storage/storage";
@@ -218,8 +219,9 @@ export function ObservationModal({
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={() => void resetAndClose()}>
       <View style={styles.backdrop}>
-        <View style={styles.card}>
-          <View style={styles.header}>
+        <SafeAreaView style={styles.safeArea} edges={["top", "bottom"]}>
+          <View style={styles.card}>
+            <View style={styles.header}>
             <Pressable 
               style={styles.iconBtn} onPress={async () => {
                 // 1. Radera om vi Ã¤r i redigeringslÃ¤ge
@@ -230,16 +232,37 @@ export function ObservationModal({
                 await resetAndClose();
               }}
             >
-              <Ionicons name="close" size={30} style={{ color: "#9b2226" }} />
+              <Svg width={36} height={36} viewBox="0 0 24 24">
+                <Path
+                  d="M6 6l12 12M18 6L6 18"
+                  stroke="#aa191e"
+                  strokeWidth={3.5}
+                  strokeLinecap="round"
+                />
+              </Svg>
             </Pressable>
 
             <Text style={styles.title}>{title}</Text>
 
             <Pressable style={styles.iconBtn} onPress={() => void submit()}>
-              <Ionicons name="checkmark" size={30} style={{ color: "#0a9396" }} />
+              <Svg width={36} height={36} viewBox="0 0 24 24">
+                <Path
+                  d="M5 12l4 4 10-10"
+                  stroke="#1da328"
+                  strokeWidth={3.5}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  fill="none"
+                />
+              </Svg>
             </Pressable>
-          </View>
-          <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ flexGrow: 1 }}>
+            </View>
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
+              style={styles.scroll}
+              contentContainerStyle={styles.scrollContent}
+            >
             <TextInput
               value={species}
               onChangeText={(text) => {
@@ -305,6 +328,7 @@ export function ObservationModal({
                     onChangeText={setLocalName}
                     style={[styles.input, styles.metaInput]}
                     placeholder="Ange lokalnamn"
+                    placeholderTextColor="#77838c"
                   />
                 </View>
                 <View style={styles.metaRow}>
@@ -314,6 +338,7 @@ export function ObservationModal({
                     onChangeText={setAccuracyMeters}
                     style={[styles.input, styles.metaInput]}
                     placeholder="Ange meter"
+                    placeholderTextColor="#77838c"
                     keyboardType="decimal-pad"
                   />
                 </View>
@@ -342,10 +367,15 @@ export function ObservationModal({
                 </Pressable>
               ))}
             </View>
-          </ScrollView>
+            </ScrollView>
         </View>
 
-        <Modal transparent visible={!!pendingNewSpecies} animationType="fade" onRequestClose={() => setPendingNewSpecies(null)}>
+        <Modal
+          transparent
+          visible={!!pendingNewSpecies}
+          animationType="fade"
+          onRequestClose={() => setPendingNewSpecies(null)}
+        >
           <View style={styles.modalBackdrop}>
             <View style={styles.speciesPromptCard}>
               <Text style={styles.speciesPromptTitle}>Ny art</Text>
@@ -381,6 +411,7 @@ export function ObservationModal({
             </View>
           </View>
         </Modal>
+        </SafeAreaView>
       </View>
     </Modal>
   );
@@ -391,19 +422,27 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.35)",
     justifyContent: "flex-start",
-    padding:16,
-    paddingTop: 30,
+    alignItems: "stretch",
+    padding: 16,
+    paddingTop: 16,
     paddingBottom: 0,
+  },
+  safeArea: {
+    flex: 1,
+    justifyContent: "flex-start",
   },
   card: {
     backgroundColor: "#fff",
     borderRadius: 12,
     flex: 1,
+    minHeight: 0,
+    maxHeight: "85%",
+    alignSelf: "stretch",
+    overflow: "hidden",
     //minHeight: "100%",
     //maxHeight: "80%",
-    
-    //height: "80%",
-    height: 500,
+    //maxHeight: "80%",
+    //height: 500,
     marginBottom: 5,
     padding: 14,
   },
@@ -414,6 +453,8 @@ const styles = StyleSheet.create({
     padding: 10,
     marginBottom: 8,
     backgroundColor: "#fff",
+    fontSize: 16,
+    color: "#172121",
   },
   notes: {
     minHeight: 80,
@@ -522,10 +563,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 5,
     marginBottom: 10,
   },
+  scroll: {
+    flex: 1,
+    minHeight: 0,
+  },
+  scrollContent: {
+    paddingBottom: 16,
+  },
   title: {
     fontSize: 18,
     fontWeight: "700",
-    flex: 1,           // GÃ¶r att titeln tar ledigt utrymme i mitten
+    color: "#172121",
+    flex: 1,           // Gör att titeln tar ledigt utrymme i mitten
     textAlign: "center", // Centrerar texten mellan ikonerna
   },
   iconBtn: {
@@ -595,20 +644,6 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 });
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
