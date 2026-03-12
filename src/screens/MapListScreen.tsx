@@ -34,7 +34,10 @@ export function MapListScreen({ navigation }: Props) {
   const [showRenameHint, setShowRenameHint] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [menuMap, setMenuMap] = useState<MapItem | null>(null);
+  const [deleteMap, setDeleteMap] = useState<MapItem | null>(null);
   const [showImportMenu, setShowImportMenu] = useState(false);
+
+  const SKOGSMONITOR_URL = "https://karta.skogsmonitor.se/?background=Lantm%C3%A4terietTopowebb&lat=60.55728&layers=17-26-21-14&lng=16.88599&zoom=7";
 
   function clampPingInput(value: string): string {
     const parsed = Number.parseInt(value, 10);
@@ -77,6 +80,8 @@ export function MapListScreen({ navigation }: Props) {
       Alert.alert("Importfel", String(error));
     }
   }
+
+
 
   function onOpenMenu(item: MapItem) {
     setMenuMap(item);
@@ -177,17 +182,20 @@ export function MapListScreen({ navigation }: Props) {
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setShowImportMenu(false)} />
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Lägg till karta</Text>
+
+            <Text style={styles.sectionTitle}>Hämta ny karta</Text>
             <Pressable
               style={styles.menuActionBtn}
               onPress={() => {
                 setShowImportMenu(false);
-                void Linking.openURL(
-                  "https://karta.skogsmonitor.se/?background=Lantm%C3%A4terietTopowebb&lat=60.55728&layers=17-26-21-14&lng=16.88599&zoom=7"
-                );
+                void Linking.openURL(SKOGSMONITOR_URL);
               }}
             >
-              <Text style={styles.menuActionText}>Hämta kartor från Skogsmonitor</Text>
+              <Text style={styles.menuActionText}>Öppna webbläsaren</Text>
             </Pressable>
+            <Text style={styles.helpText}>Öppnar Skogsmonitor.se för att hitta och ladda ner kartor.</Text>
+
+            <Text style={styles.sectionTitle}>Redan nedladdad</Text>
             <Pressable
               style={styles.menuActionBtn}
               onPress={() => {
@@ -195,11 +203,20 @@ export function MapListScreen({ navigation }: Props) {
                 void onImport();
               }}
             >
-              <Text style={styles.menuActionText}>Ladda in karta från mobil</Text>
+              <Text style={styles.menuActionText}>Ladda från enhet</Text>
+            </Pressable>
+            <Text style={styles.helpText}>Välj en GeoTIFF-fil som redan finns på din telefon.</Text>
+
+            <Pressable
+              style={[styles.menuActionBtn, styles.cancelBtn]}
+              onPress={() => setShowImportMenu(false)}
+            >
+              <Text style={styles.menuActionText}>Stäng</Text>
             </Pressable>
           </View>
         </View>
       </Modal>
+
 
       <Modal transparent visible={!!renameMap} onRequestClose={() => setRenameMap(null)} animationType="fade">
         <View style={[styles.modalBackdrop, { justifyContent: 'flex-start' }]}>
@@ -218,11 +235,11 @@ export function MapListScreen({ navigation }: Props) {
                     setRenameMap(null);
                     setShowRenameHint(false);
                   }}
-                  style={[styles.modalBtn, styles.cancelBtn]}
+                  style={[styles.modalBtn, styles.cancelBtn, styles.modalBtnShort]}
                 >
                   <Text style={styles.modalBtnText}>Avbryt</Text>
                 </Pressable>
-                <Pressable onPress={confirmRename} style={[styles.modalBtn, styles.okBtn]}>
+                <Pressable onPress={confirmRename} style={[styles.modalBtn, styles.okBtn, styles.modalBtnWide]}>
                   <Text style={styles.modalBtnText}>Spara</Text>
                 </Pressable>
               </View>
@@ -261,27 +278,9 @@ export function MapListScreen({ navigation }: Props) {
               style={[styles.menuActionBtn, styles.menuDangerBtn]}
               onPress={() => {
                 if (!menuMap) return;
-
-                Alert.alert(
-                  "Vill du ta bort kartan?",
-                  "Detta kan inte ångras. Du kan spara din data genom att först exportera kartan, observationer och bilder.",
-                  [
-                    { text: "Avbryt", style: "cancel" },
-                    {
-                      text: "Radera permanent",
-                      style: "destructive",
-                      onPress: async () => {
-                        const selected = menuMap;
-                        setMenuMap(null);
-                        await cleanupAllPendingPhotoCopies();
-                        await deleteIfExists(selected.fileUri);
-                        if (selected.thumbnailUri) await deleteIfExists(selected.thumbnailUri);
-                        const next = await removeMap(selected.id);
-                        setMaps(next);
-                      },
-                    },
-                  ]
-                );
+                const selected = menuMap;
+                setMenuMap(null);
+                setDeleteMap(selected);
               }}
             >
               <Text style={styles.menuActionText}>Radera karta</Text>
@@ -297,14 +296,7 @@ export function MapListScreen({ navigation }: Props) {
             <View style={styles.helpBox}>
               <Text style={styles.helpText}>
                 Importera karta som GeoTIFF från{" "}
-                <Text
-                  style={styles.linkText}
-                  onPress={() =>
-                    void Linking.openURL(
-                      "https://karta.skogsmonitor.se/?background=Lantm%C3%A4terietTopowebb&lat=60.55728&layers=17-26-21-14&lng=16.88599&zoom=7"
-                    )
-                  }
-                >
+                <Text style={styles.linkText} onPress={() => void Linking.openURL(SKOGSMONITOR_URL)}>
                   Skogsmonitor
                 </Text>
                 . Du kan ha flera kartor.
@@ -363,6 +355,39 @@ export function MapListScreen({ navigation }: Props) {
               <Text style={styles.saveBtnText}>Spara</Text>
             </Pressable>
 
+          </View>
+        </View>
+      </Modal>
+
+      <Modal transparent visible={!!deleteMap} onRequestClose={() => setDeleteMap(null)} animationType="fade">
+        <View style={styles.modalBackdrop}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setDeleteMap(null)} />
+          <View style={styles.menuModalCard}>
+            <Text style={styles.modalTitle}>Vill du ta bort kartan?</Text>
+            <Text style={styles.helpText}>
+              Detta kan inte ångras. Du kan spara din data genom att först exportera kartan,
+              observationer och bilder.
+            </Text>
+            <View style={styles.modalActions}>
+              <Pressable onPress={() => setDeleteMap(null)} style={[styles.modalBtn, styles.cancelBtn, styles.modalBtnShort]}>
+                <Text style={styles.modalBtnText}>Avbryt</Text>
+              </Pressable>
+              <Pressable
+                onPress={async () => {
+                  if (!deleteMap) return;
+                  const selected = deleteMap;
+                  setDeleteMap(null);
+                  await cleanupAllPendingPhotoCopies();
+                  await deleteIfExists(selected.fileUri);
+                  if (selected.thumbnailUri) await deleteIfExists(selected.thumbnailUri);
+                  const next = await removeMap(selected.id);
+                  setMaps(next);
+                }}
+                style={[styles.modalBtn, styles.menuDangerBtn, styles.modalBtnLong]}
+              >
+                <Text style={styles.modalBtnText}>Radera permanent</Text>
+              </Pressable>
+            </View>
           </View>
         </View>
       </Modal>
@@ -533,6 +558,12 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     fontSize: 16,
   },
+  sectionTitle: {
+    fontWeight: "700",
+    marginTop: 6,
+    marginBottom: 6,
+    fontSize: 15,
+  },
   modalInput: {
     borderWidth: 1,
     borderColor: "#b9c1c8",
@@ -550,9 +581,17 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   modalBtn: {
-    flex: 1,
     paddingVertical: 11,
     borderRadius: 8,
+  },
+  modalBtnShort: {
+    minWidth: 110,
+  },
+  modalBtnWide: {
+    paddingHorizontal: 18,
+  },
+  modalBtnLong: {
+    flex: 1,
   },
   cancelBtn: {
     backgroundColor: "#7b8791",

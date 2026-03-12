@@ -70,6 +70,33 @@ export async function pickAndImportGeoTiff(): Promise<MapItem | null> {
   };
 }
 
+
+export async function downloadAndImportGeoTiffFromUrl(url: string): Promise<MapItem | null> {
+  await ensureDataDirs();
+  const info = extractFileNameFromUrl(url);
+  if (!info) return null;
+  const ext = info.ext.toLowerCase();
+  if (ext !== "tif" && ext !== "tiff") {
+    return null;
+  }
+  const id = makeId("map");
+  const safeName = sanitizeFileName(info.fileName);
+  const targetUri = `${MAPS_DIR}/${id}_${safeName}`;
+  await FileSystem.downloadAsync(url, targetUri);
+  const metadata = await extractGeoTiffMetadata(targetUri);
+  const thumbnailUri = await generatePreviewFromGeoTiff(targetUri, id);
+  return {
+    id,
+    name: info.baseName,
+    importName: info.baseName,
+    fileUri: targetUri,
+    thumbnailUri: thumbnailUri ?? undefined,
+    createdAt: new Date().toISOString(),
+    bbox: metadata?.bbox ?? undefined,
+    georef: metadata?.georef ?? undefined,
+  };
+}
+
 export async function ensureGeoTiffPreview(map: MapItem): Promise<MapItem> {
   if (map.thumbnailUri) {
     return map;
@@ -120,6 +147,26 @@ export async function deleteIfExists(uri: string) {
 export function sanitizeFileName(name: string): string {
   return name.replace(/[^\w\-.]/g, "_");
 }
+
+function extractFileNameFromUrl(url: string): { fileName: string; baseName: string; ext: string } | null {
+  const raw = String(url ?? "");
+  if (!raw) return null;
+  let path = raw;
+  try {
+    const parsed = new URL(raw);
+    path = parsed.pathname || raw;
+  } catch {
+    // Keep raw value if URL parsing fails.
+  }
+  const withoutQuery = path.split("?")[0]?.split("#")[0] ?? "";
+  const fileName = withoutQuery.split("/").pop() ?? "";
+  const dot = fileName.lastIndexOf(".");
+  if (!fileName || dot <= 0 || dot === fileName.length - 1) return null;
+  const ext = fileName.slice(dot + 1);
+  const baseName = fileName.slice(0, dot);
+  return { fileName, baseName, ext };
+}
+
 
 export function exportDir(): string {
   return EXPORT_DIR;
