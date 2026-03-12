@@ -344,16 +344,29 @@ export function MapListScreen({ navigation }: Props) {
               />
             </Pressable>
 
-            {/* Gemensam Spara-knapp */}
-            <Pressable
-              style={styles.saveBtn}
-              onPress={async () => {
-                await onSaveSettings(); // Spara både ping och visnings-inställning här
-                setShowSettings(false);
-              }}
-            >
-              <Text style={styles.saveBtnText}>Spara</Text>
-            </Pressable>
+            <View style={styles.bottomBar}>
+              {/* Spara-knapp till vänster */}
+              <Pressable 
+                style={styles.saveBtn}
+                onPress={async () => {
+                  await onSaveSettings();
+                  setShowSettings(false);
+                }}
+              >
+                <Text style={styles.saveBtnText}>Spara</Text>
+              </Pressable>
+
+              {/* Licens-knapp till höger */}
+              <Pressable 
+                style={styles.copyrightBtn} 
+                onPress={() => Alert.alert(
+                  "Licens", 
+                  "Appen är öppen källkod och licensierad under MIT-licensen. Du hittar mer information på projektets hemsida."
+                )}
+              >
+                <Text style={styles.copyrightText}>©</Text>
+              </Pressable>
+            </View>
 
           </View>
         </View>
@@ -629,4 +642,18 @@ const styles = StyleSheet.create({
   closeOnlyBtn: {
     marginTop: 10,
   },
+  bottomBar: {
+  flexDirection: 'row',          // Lägger elementen på rad
+  justifyContent: 'space-between', // Trycker isär elementen (vänster/höger)
+  alignItems: 'baseline',          // Centrerar vertikalt
+  paddingHorizontal: 20,         // Avstånd från skärmkanterna
+  marginTop: 20,
+},
+copyrightBtn: {
+  padding: 10,                   // Gör den lättare att träffa
+},
+copyrightText: {
+  fontSize: 18,
+  color: '#888',
+},
 });
