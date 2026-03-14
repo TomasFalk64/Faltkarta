@@ -341,10 +341,10 @@ export function MapScreen({ route, navigation }: Props) {
       <View
         style={[
           styles.accuracyPill,
-          displayCombined > 10 ? styles.accuracyPillBad : undefined,
+          displayCombined > 15 ? styles.accuracyPillBad : undefined,
         ]}
       >
-        <Text style={styles.accuracyPillText}>{String(displayCombined)}</Text>
+        <Text style={styles.accuracyPillText}>{displayCombined > 0 ? String(displayCombined) : '...'}</Text>
       </View>
 
       <View style={styles.controls}>
