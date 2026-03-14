@@ -17,10 +17,14 @@ import { useFocusEffect } from "@react-navigation/native";
 import { RootStackParamList } from "../navigation/types";
 import { MapItem } from "../types/models";
 import { AppSettings } from "../types/models";
-import { loadMaps, loadSettings, removeMap, saveSettings, upsertMap } from "../storage/storage";
-import { deleteIfExists, pickAndImportGeoTiff } from "../services/files";
+import { loadMaps, loadObservationsByMapId, loadSettings, removeMap, saveObservationsByMapId, saveSettings, upsertMap } from "../storage/storage";
+import { deleteIfExists, ensureMapGeorefBounds, pickAndImportGeoTiff } from "../services/files";
 import { cleanupAllPendingPhotoCopies } from "../services/photos";
 import { Ionicons } from '@expo/vector-icons';
+import * as DocumentPicker from "expo-document-picker";
+import * as FileSystem from "expo-file-system/legacy";
+import { makeId } from "../utils/id";
+import { PolygonObservation } from "../types/models";
 
 type Props = NativeStackScreenProps<RootStackParamList, "MapList">;
 
@@ -140,6 +144,147 @@ export function MapListScreen({ navigation }: Props) {
 
   function onOpenMap(item: MapItem) {
     navigation.navigate("Map", { mapId: item.id });
+  }
+
+  async function importPolygonAreas(map: MapItem) {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: "*/*",
+        multiple: false,
+        copyToCacheDirectory: true,
+      });
+      if (result.canceled || !result.assets?.[0]) {
+        return;
+      }
+      const asset = result.assets[0];
+      const lower = asset.name.toLowerCase();
+      if (!lower.endsWith(".json") && !lower.endsWith(".geojson")) {
+        Alert.alert("Fel filtyp", "Välj en .json- eller .geojson-fil.");
+        return;
+      }
+
+      const hydrated = await ensureMapGeorefBounds(map);
+      const bbox = hydrated.bbox;
+      if (!bbox) {
+        Alert.alert("Saknar kartgränser", "Kartan saknar gränser för att kunna filtrera polygoner.");
+        return;
+      }
+
+      const raw = await FileSystem.readAsStringAsync(asset.uri);
+      const parsed = JSON.parse(raw) as any;
+      const features = Array.isArray(parsed?.features)
+        ? parsed.features
+        : parsed?.type === "Feature"
+          ? [parsed]
+          : parsed?.type === "Polygon"
+            ? [{ type: "Feature", geometry: parsed, properties: {} }]
+            : [];
+      if (!features.length) {
+        Alert.alert("Ingen data", "Filen innehåller inga polygoner.");
+        return;
+      }
+
+      const nextPolygons: PolygonObservation[] = [];
+      const now = new Date().toISOString();
+
+      for (const feature of features) {
+        if (feature?.geometry?.type !== "Polygon") continue;
+        const coords = feature?.geometry?.coordinates;
+        if (!Array.isArray(coords) || !Array.isArray(coords[0]) || coords[0].length < 3) continue;
+        const ring = coords[0];
+        const points = ring
+          .map((pair: any) => ({ lon: Number(pair?.[0]), lat: Number(pair?.[1]) }))
+          .filter((p: any) => Number.isFinite(p.lon) && Number.isFinite(p.lat));
+        if (points.length < 3) continue;
+        const clipped = clipPolygonToBbox(points, bbox);
+        if (clipped.length < 3) continue;
+
+        const polygonName = String(feature?.properties?.polygonName ?? "").trim() || "Nytt område";
+        const notes = String(feature?.properties?.notes ?? "").trim();
+
+        nextPolygons.push({
+          id: makeId("obs"),
+          mapId: map.id,
+          kind: "polygon",
+          polygonName,
+          count: 1,
+          notes,
+          photoUris: [],
+          dateISO: now,
+          wgs84: clipped,
+        });
+      }
+
+      if (!nextPolygons.length) {
+        Alert.alert("Ingen data", "Inga polygoner kunde importeras.");
+        return;
+      }
+
+      const byMap = await loadObservationsByMapId();
+      const current = byMap[map.id] ?? [];
+      byMap[map.id] = [...nextPolygons, ...current];
+      await saveObservationsByMapId(byMap);
+
+      Alert.alert("Import klar", `Tillagda polygoner: ${nextPolygons.length}`);
+    } catch (error) {
+      Alert.alert("Importfel", String(error));
+    }
+  }
+
+  function clipPolygonToBbox(
+    points: Array<{ lat: number; lon: number }>,
+    bbox: { minLat: number; minLon: number; maxLat: number; maxLon: number }
+  ): Array<{ lat: number; lon: number }> {
+    const input = points.map((p) => ({ x: p.lon, y: p.lat }));
+    const edges = [
+      { inside: (p: any) => p.x >= bbox.minLon, intersect: (a: any, b: any) => intersectVertical(a, b, bbox.minLon) },
+      { inside: (p: any) => p.x <= bbox.maxLon, intersect: (a: any, b: any) => intersectVertical(a, b, bbox.maxLon) },
+      { inside: (p: any) => p.y >= bbox.minLat, intersect: (a: any, b: any) => intersectHorizontal(a, b, bbox.minLat) },
+      { inside: (p: any) => p.y <= bbox.maxLat, intersect: (a: any, b: any) => intersectHorizontal(a, b, bbox.maxLat) },
+    ];
+
+    let output = input;
+    for (const edge of edges) {
+      const next: Array<{ x: number; y: number }> = [];
+      for (let i = 0; i < output.length; i++) {
+        const current = output[i];
+        const prev = output[(i + output.length - 1) % output.length];
+        const currentInside = edge.inside(current);
+        const prevInside = edge.inside(prev);
+        if (currentInside) {
+          if (!prevInside) {
+            next.push(edge.intersect(prev, current));
+          }
+          next.push(current);
+        } else if (prevInside) {
+          next.push(edge.intersect(prev, current));
+        }
+      }
+      output = next;
+      if (output.length === 0) break;
+    }
+
+    const ring = output.map((p) => ({ lon: p.x, lat: p.y }));
+    if (ring.length > 0) {
+      const first = ring[0];
+      const last = ring[ring.length - 1];
+      if (first.lon !== last.lon || first.lat !== last.lat) {
+        ring.push({ ...first });
+      }
+    }
+    return ring;
+  }
+
+  function intersectVertical(a: { x: number; y: number }, b: { x: number; y: number }, x: number) {
+    if (a.x === b.x) return { x, y: a.y };
+    const t = (x - a.x) / (b.x - a.x);
+    return { x, y: a.y + (b.y - a.y) * t };
+  }
+
+  function intersectHorizontal(a: { x: number; y: number }, b: { x: number; y: number }, y: number) {
+    if (a.y === b.y) return { x: a.x, y };
+    const t = (y - a.y) / (b.y - a.y);
+    return { x: a.x + (b.x - a.x) * t, y };
   }
 
   return (
@@ -281,10 +426,20 @@ export function MapListScreen({ navigation }: Props) {
             <Pressable
               style={styles.menuActionBtn}
               onPress={() => {
+                if (!menuMap) return;
+                const selected = menuMap;
                 setMenuMap(null);
                 Alert.alert(
-                  "Importera område (Polygon)",
-                  "Ladda upp en GeoJSON-fil med polygoner. För att polygonen ska läsas in korrekt måste filen innehålla:\n\ngeometry.type: Polygon\ntype: Polygon\ngeometry.coordinates: En lista med koordinatpar [longitud, latitud] som sluts med samma punkt som den startade.\nproperties.species: Ett namn"
+                  "Importera polygon",
+                  "V\u00e4nligen v\u00e4lj en GeoJSON eller JSON-fil.\n\nF\u00f6r att importen ska lyckas beh\u00f6ver filen vara en Polygon.\nMinsta krav:\n\ngeometry.type: 'Polygon'\n\ncoordinates: [[ [lon, lat], ... ]]\n\nAppen klipper automatiskt polygoner som ligger utanf\u00f6r kartans gr\u00e4nser.",
+                  [
+                    {
+                      text: "OK",
+                      onPress: () => {
+                        void importPolygonAreas(selected);
+                      },
+                    },
+                  ]
                 );
               }}
             >
