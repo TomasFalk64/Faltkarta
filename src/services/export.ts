@@ -30,6 +30,14 @@ function pointAccuracy(obs: Observation): string {
   return obs.kind === "point" && obs.accuracyMeters !== null ? String(obs.accuracyMeters) : "";
 }
 
+function observationName(obs: Observation, polygonIndex: number): string {
+  if (obs.kind === "point") {
+    return obs.species;
+  }
+  const name = obs.polygonName?.trim();
+  return name && name.length > 0 ? name : `Polygon${polygonIndex}`;
+}
+
 function toArtportalenNotes(obs: Observation): string {
   const parts: string[] = [];
   if (obs.notes.trim()) parts.push(obs.notes.trim());
@@ -87,6 +95,7 @@ export async function copyTsvAndOpenArtportalen(tsv: string) {
 export function buildCsv(observations: Observation[]): string {
   const fields = [
     "Artnamn",
+    "Polygonnamn",
     "Typ",
     "Datum",
     "Lat",
@@ -104,16 +113,20 @@ export function buildCsv(observations: Observation[]): string {
   const data = observations.map((obs) => {
     if (obs.kind === "polygon") polygonCounter += 1;
     const label = observationLabel(obs, polygonCounter);
+    const name = observationName(obs, polygonCounter);
     const rep = observationToRepresentativeWgs84(obs);
     const sweref = wgs84ToSweref99tm(rep.lon, rep.lat);
     const photos = obs.photoUris
-      .map((_, index) => buildPhotoFileName(label, obs.species, obs.dateISO, index, "jpg"))
+      .map((_, index) => buildPhotoFileName(label, name, obs.dateISO, index, "jpg"))
       .filter((name) => name.length > 0)
       .join("|");
     const quantity = (obs.kind === "point" && obs.quantity && obs.quantity !== 0) ? String(obs.quantity) : "";
     const unit = obs.kind === "point" ? obs.unit : "";
+    const species = obs.kind === "point" ? obs.species : "";
+    const polygonName = obs.kind === "polygon" ? name : "";
     return [
-      obs.species,
+      species,
+      polygonName,
       obs.kind,
       new Date(obs.dateISO).toISOString(),
       formatNumberForExcel(rep.lat, 7),
@@ -146,6 +159,7 @@ export function buildCsv(observations: Observation[]): string {
 export function buildXlsx(observations: Observation[]): string {
   const fields = [
     "Artnamn",
+    "Polygonnamn",
     "Typ",
     "Datum",
     "Lat",
@@ -163,16 +177,20 @@ export function buildXlsx(observations: Observation[]): string {
   const data = observations.map((obs) => {
     if (obs.kind === "polygon") polygonCounter += 1;
     const label = observationLabel(obs, polygonCounter);
+    const name = observationName(obs, polygonCounter);
     const rep = observationToRepresentativeWgs84(obs);
     const sweref = wgs84ToSweref99tm(rep.lon, rep.lat);
     const photos = obs.photoUris
-      .map((_, index) => buildPhotoFileName(label, obs.species, obs.dateISO, index, "jpg"))
+      .map((_, index) => buildPhotoFileName(label, name, obs.dateISO, index, "jpg"))
       .filter((name) => name.length > 0)
       .join("|");
     const quantity = (obs.kind === "point" && obs.quantity && obs.quantity !== 0) ? String(obs.quantity) : "";
     const unit = obs.kind === "point" ? obs.unit : "";
+    const species = obs.kind === "point" ? obs.species : "";
+    const polygonName = obs.kind === "polygon" ? name : "";
     return [
-      obs.species,
+      species,
+      polygonName,
       obs.kind,
       new Date(obs.dateISO).toISOString(),
       formatNumberForExcel(rep.lat, 7),
@@ -285,6 +303,7 @@ export async function saveZipBundleAndShare(
   for (const obs of observations) {
     if (obs.kind === "polygon") polygonCounter += 1;
     const label = observationLabel(obs, polygonCounter);
+    const name = observationName(obs, polygonCounter);
     for (let index = 0; index < obs.photoUris.length; index++) {
       const ref = String(obs.photoUris[index] ?? "").trim();
       if (!ref) continue;
@@ -292,7 +311,7 @@ export async function saveZipBundleAndShare(
         const assetId = obs.kind === "point" ? obs.photoAssetIds?.[index] : undefined;
         const optimized = await optimizePhotoForZip(ref, assetId, obs.dateISO, maxImageSizeMB);
         if (!optimized) continue;
-        const fileName = buildPhotoFileName(label, obs.species, optimized.dateISO, index, optimized.extension);
+        const fileName = buildPhotoFileName(label, name, optimized.dateISO, index, optimized.extension);
         zip.file(`bilder/${fileName}`, optimized.base64, { base64: true });
       } catch {
         // Continue even if a specific image no longer exists.
@@ -403,17 +422,18 @@ function observationLabel(obs: Observation, polygonIndex: number): string {
   if (obs.kind === "point") {
     return String(obs.pointNumber ?? obs.id);
   }
-  return `Polygon${polygonIndex}`;
+  const name = obs.polygonName?.trim();
+  return name && name.length > 0 ? name : `Polygon${polygonIndex}`;
 }
 
 function buildPhotoFileName(
   label: string,
-  species: string,
+  name: string,
   dateISO: string,
   index: number,
   extension: string
 ): string {
-  return buildPointPhotoFileName(label, species, dateISO, index + 1, extension);
+  return buildPointPhotoFileName(label, name, dateISO, index + 1, extension);
 }
 
 async function createExportSessionDir(): Promise<string> {
@@ -552,7 +572,8 @@ function buildGeoJson(mapName: string, observations: Observation[]): string {
       return observationToGeoJsonFeature(mapName, obs, obs.pointNumber ? `Obs${obs.pointNumber}` : obs.id);
     }
     polygonCounter += 1;
-    return observationToGeoJsonFeature(mapName, obs, `Polygon${polygonCounter}`);
+    const name = observationName(obs, polygonCounter);
+    return observationToGeoJsonFeature(mapName, obs, name);
   });
   return JSON.stringify(
     {
@@ -573,7 +594,6 @@ function observationToGeoJsonFeature(
     id: publicId,
     mapName,
     kind: obs.kind,
-    species: obs.species,
     count: obs.count,
     notes: obs.notes,
     dateISO: obs.dateISO,
@@ -585,6 +605,7 @@ function observationToGeoJsonFeature(
       type: "Feature",
       properties: {
         ...baseProps,
+        species: point.species,
         localName: point.localName,
         accuracyMeters: point.accuracyMeters,
         quantity: point.quantity,
@@ -606,7 +627,10 @@ function observationToGeoJsonFeature(
   }
   return {
     type: "Feature",
-    properties: baseProps,
+    properties: {
+      ...baseProps,
+      polygonName: obs.polygonName,
+    },
     geometry: {
       type: "Polygon",
       coordinates: [ring],  

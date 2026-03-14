@@ -34,7 +34,6 @@ export type MapItem = {
 export type ObservationBase = {
   id: string;
   mapId: string;
-  species: string;
   count: number;
   notes: string;
   dateISO: string;
@@ -43,6 +42,7 @@ export type ObservationBase = {
 
 export type PointObservation = ObservationBase & {
   kind: "point";
+  species: string;
   wgs84: LatLon;
   pointNumber?: number;
   localName: string;
@@ -54,6 +54,7 @@ export type PointObservation = ObservationBase & {
 
 export type PolygonObservation = ObservationBase & {
   kind: "polygon";
+  polygonName: string;
   wgs84: LatLon[];
 };
 

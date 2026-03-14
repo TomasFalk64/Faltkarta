@@ -140,7 +140,7 @@ export function MapScreen({ route, navigation }: Props) {
   }
 
   async function onAddPoint(payload: {
-    species: string;
+    species?: string;
     notes: string;
     photoUris: string[];
     photoAssetIds?: string[];
@@ -151,6 +151,11 @@ export function MapScreen({ route, navigation }: Props) {
   }): Promise<boolean> {
     if (!map) return false;
     try {
+      const species = payload.species?.trim();
+      if (!species) {
+        Alert.alert("Art", "Du måste ange ett artnamn.");
+        return false;
+      }
       const pointId = editingPoint?.id ?? makeId("obs");
       const dateISO = editingPoint?.dateISO ?? new Date().toISOString();
       const pointNumber = editingPoint?.pointNumber ?? derivePointNumberFromExisting(pointId);
@@ -169,7 +174,7 @@ export function MapScreen({ route, navigation }: Props) {
       const obs: PointObservation = editingPoint
         ? {
             ...editingPoint,
-            species: payload.species,
+            species,
             notes: payload.notes,
             photoUris,
             photoAssetIds: hasAnyAssetId ? photoAssetIds : undefined,
@@ -183,7 +188,7 @@ export function MapScreen({ route, navigation }: Props) {
             id: pointId,
             mapId: map.id,
             kind: "point",
-            species: payload.species,
+            species,
             count: 1,
             notes: payload.notes,
             photoUris,
@@ -225,7 +230,7 @@ export function MapScreen({ route, navigation }: Props) {
   }
 
   async function onAddPolygon(payload: {
-    species: string;
+    polygonName?: string;
     notes: string;
     photoUris: string[];
     photoAssetIds?: string[];
@@ -235,11 +240,16 @@ export function MapScreen({ route, navigation }: Props) {
       Alert.alert("Polygon", "Minst 2 punkter kravs.");
       return;
     }
+    const polygonName = payload.polygonName?.trim();
+    if (!polygonName) {
+      Alert.alert("Polygon", "Du måste ange ett namn.");
+      return;
+    }
     const obs: PolygonObservation = {
       id: makeId("obs"),
       mapId: map.id,
       kind: "polygon",
-      species: payload.species,
+      polygonName,
       count: 1,
       notes: payload.notes,
       photoUris: payload.photoUris,
@@ -437,7 +447,9 @@ export function MapScreen({ route, navigation }: Props) {
                       void openPointEditor(obs as any);
                     }}
                   >
-                    <Text style={styles.pointListItemSpecies}>{obs.species}</Text>
+                    <Text style={styles.pointListItemSpecies}>
+                      {obs.kind === "point" ? obs.species : obs.polygonName}
+                    </Text>
                     {obs.kind === 'point' ? (
                       <Text style={styles.pointListItemMeta}>
                         Noggrannhet: {obs.accuracyMeters} m
@@ -495,7 +507,8 @@ export function MapScreen({ route, navigation }: Props) {
         onSave={onAddPolygon}
         title="Ny polygonobservation"
         sessionToken={polygonModalSession}
-        speciesPlaceholder="Namn"
+        speciesPlaceholder="Polygonnamn"
+        kind="polygon"
       />
     </View>
   );

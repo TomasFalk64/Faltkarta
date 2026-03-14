@@ -279,6 +279,18 @@ export function MapListScreen({ navigation }: Props) {
               <Text style={styles.menuActionText}>Export</Text>
             </Pressable>
             <Pressable
+              style={styles.menuActionBtn}
+              onPress={() => {
+                setMenuMap(null);
+                Alert.alert(
+                  "Importera område (Polygon)",
+                  "Ladda upp en GeoJSON-fil med polygoner. För att polygonen ska läsas in korrekt måste filen innehålla:\n\ngeometry.type: Polygon\ntype: Polygon\ngeometry.coordinates: En lista med koordinatpar [longitud, latitud] som sluts med samma punkt som den startade.\nproperties.species: Ett namn"
+                );
+              }}
+            >
+              <Text style={styles.menuActionText}>Importera område (Polygon)</Text>
+            </Pressable>
+            <Pressable
               style={[styles.menuActionBtn, styles.menuDangerBtn]}
               onPress={() => {
                 if (!menuMap) return;

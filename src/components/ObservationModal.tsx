@@ -16,7 +16,8 @@ import { speciesList } from "../data/species";
 import { addUserSpecies, loadUserSpecies } from "../storage/storage";
 
 type ModalPayload = {
-  species: string;
+  species?: string;
+  polygonName?: string;
   notes: string;
   photoUris: string[];
   photoAssetIds?: string[];
@@ -37,6 +38,7 @@ type Props = {
   showPointMetaFields?: boolean;
   showQuantityField?: boolean;
   speciesPlaceholder?: string;
+  kind?: "point" | "polygon";
 };
 
 export function ObservationModal({
@@ -50,6 +52,7 @@ export function ObservationModal({
   showPointMetaFields = false,
   showQuantityField = false,
   speciesPlaceholder = "Artnamn",
+  kind = "point",
 }: Props) {
   const [species, setSpecies] = useState("");
   const [notes, setNotes] = useState("");
@@ -65,11 +68,14 @@ export function ObservationModal({
   const [userSpecies, setUserSpecies] = useState<string[]>([]);
   const isSubmittingRef = useRef(false);
   const [pendingNewSpecies, setPendingNewSpecies] = useState<string | null>(null);
+  const isPolygon = kind === "polygon";
 
   useEffect(() => {
     if (sessionToken !== undefined) {
       if (lastSessionTokenRef.current !== sessionToken) {
-        setSpecies(initialValues?.species ?? "");
+        setSpecies(
+          isPolygon ? initialValues?.polygonName ?? "" : initialValues?.species ?? ""
+        );
         setNotes(initialValues?.notes ?? "");
         setPhotoUris(initialValues?.photoUris ?? []);
         setPhotoAssetIds(initialValues?.photoAssetIds ?? []);
@@ -89,7 +95,9 @@ export function ObservationModal({
     
     const openedNow = visible && !wasVisibleRef.current;
     if (openedNow) {
-      setSpecies(initialValues?.species ?? "");
+      setSpecies(
+        isPolygon ? initialValues?.polygonName ?? "" : initialValues?.species ?? ""
+      );
       setNotes(initialValues?.notes ?? "");
       setPhotoUris(initialValues?.photoUris ?? []);
       setPhotoAssetIds(initialValues?.photoAssetIds ?? []);
@@ -103,7 +111,7 @@ export function ObservationModal({
       );
     }
     wasVisibleRef.current = visible;
-  }, [initialValues, sessionToken, visible]);
+  }, [initialValues, isPolygon, sessionToken, visible]);
 
   useEffect(() => {
     if (!visible) return;
@@ -178,7 +186,7 @@ export function ObservationModal({
     }
     const trimmedSpecies = species.trim();
     const isKnown = combinedSpecies.some((s) => s.toLowerCase() === trimmedSpecies.toLowerCase());
-    if (showPointMetaFields && !isKnown) {
+    if (!isPolygon && showPointMetaFields && !isKnown) {
       setPendingNewSpecies(trimmedSpecies);
       return;
     }
@@ -193,12 +201,13 @@ export function ObservationModal({
       const rawVal = quantity.trim();
       const quantityAsNumber = rawVal === "" ? undefined : Number(rawVal);
       const trimmedSpecies = species.trim();
-      if (addToSuggestions) {
+      if (!isPolygon && addToSuggestions) {
         const next = await addUserSpecies(trimmedSpecies);
         setUserSpecies(next);
       }
       const shouldClose = await onSave({
-        species: trimmedSpecies,
+        species: isPolygon ? undefined : trimmedSpecies,
+        polygonName: isPolygon ? trimmedSpecies : undefined,
         notes: notes.trim(),
         photoUris,
         photoAssetIds,
@@ -644,8 +653,6 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 });
-
-
 
 
 
