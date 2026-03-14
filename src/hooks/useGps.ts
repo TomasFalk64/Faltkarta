@@ -35,6 +35,7 @@ if (!TaskManager.isTaskDefined(GPS_BACK_TASK)) {
     locations.forEach((loc) => {
       const accuracy = loc.coords.accuracy;
       if (typeof accuracy !== "number" || !Number.isFinite(accuracy)) return;
+      //console.log("[GPS_BACK_TASK] pos", loc.coords.latitude, loc.coords.longitude, "acc", accuracy, "ts", loc.timestamp);
       emitGpsSample({
         lat: loc.coords.latitude,
         lon: loc.coords.longitude,
@@ -168,9 +169,13 @@ export function useGps({ pingSeconds, backgroundGPS }: UseGpsOptions): UseGpsRes
     let cancelled = false;
 
     const stopBackgroundUpdates = async () => {
-      const started = await Location.hasStartedLocationUpdatesAsync(GPS_BACK_TASK);
-      if (started) {
-        await Location.stopLocationUpdatesAsync(GPS_BACK_TASK);
+      try {
+        const started = await Location.hasStartedLocationUpdatesAsync(GPS_BACK_TASK);
+        if (started) {
+          await Location.stopLocationUpdatesAsync(GPS_BACK_TASK);
+        }
+      } catch (e) {
+        console.log("[GPS_BACK_TASK] stop rejected", String(e));
       }
     };
 
@@ -184,6 +189,7 @@ export function useGps({ pingSeconds, backgroundGPS }: UseGpsOptions): UseGpsRes
         (loc) => {
           const accuracy = loc.coords.accuracy;
           if (typeof accuracy !== "number" || !Number.isFinite(accuracy)) return;
+          //console.log("[GPS_FOREGROUND] pos", loc.coords.latitude, loc.coords.longitude, "acc", accuracy, "ts", loc.timestamp);
           handleSample({
             lat: loc.coords.latitude,
             lon: loc.coords.longitude,
@@ -195,13 +201,17 @@ export function useGps({ pingSeconds, backgroundGPS }: UseGpsOptions): UseGpsRes
     };
 
     const startBackgroundUpdates = async () => {
-      const started = await Location.hasStartedLocationUpdatesAsync(GPS_BACK_TASK);
-      if (!started) {
-        await Location.startLocationUpdatesAsync(GPS_BACK_TASK, {
-          accuracy: Location.Accuracy.BestForNavigation,
-          timeInterval: 10_000,
-          distanceInterval: 1,
-        });
+      try {
+        const started = await Location.hasStartedLocationUpdatesAsync(GPS_BACK_TASK);
+        if (!started) {
+          await Location.startLocationUpdatesAsync(GPS_BACK_TASK, {
+            accuracy: Location.Accuracy.BestForNavigation,
+            timeInterval: 10_000,
+            distanceInterval: 1,
+          });
+        }
+      } catch (e) {
+        console.log("[GPS_BACK_TASK] start rejected", String(e));
       }
     };
 
@@ -221,12 +231,7 @@ export function useGps({ pingSeconds, backgroundGPS }: UseGpsOptions): UseGpsRes
     return () => {
       cancelled = true;
       sub?.remove();
-      void Location.hasStartedLocationUpdatesAsync(GPS_BACK_TASK).then((started) => {
-        if (started) {
-          return Location.stopLocationUpdatesAsync(GPS_BACK_TASK);
-        }
-        return undefined;
-      });
+      void stopBackgroundUpdates();
     };
   }, [appState, backgroundAllowed, backgroundGPS, handleSample, permissionGranted, pingSeconds]);
 

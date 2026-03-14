@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+﻿import React, { useCallback, useState } from "react";
 import {
   Alert,
   FlatList,
@@ -34,6 +34,7 @@ export function MapListScreen({ navigation }: Props) {
   const [renameValue, setRenameValue] = useState("");
   const [showRenameHint, setShowRenameHint] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showGuide, setShowGuide] = useState(false);
   const [menuMap, setMenuMap] = useState<MapItem | null>(null);
   const [deleteMap, setDeleteMap] = useState<MapItem | null>(null);
   const [showImportMenu, setShowImportMenu] = useState(false);
@@ -295,20 +296,6 @@ export function MapListScreen({ navigation }: Props) {
       <Modal transparent visible={showSettings} onRequestClose={() => setShowSettings(false)} animationType="fade">
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Kort guide</Text>
-            <View style={styles.helpBox}>
-              <Text style={styles.helpText}>
-                Importera karta som GeoTIFF från{" "}
-                <Text style={styles.linkText} onPress={() => void Linking.openURL(SKOGSMONITOR_URL)}>
-                  Skogsmonitor
-                </Text>
-                . Du kan ha flera kartor.
-              </Text>
-              <Text style={styles.helpText}>Byt namn på kartan, namnet används som förslag på lokalnamn.</Text>
-              <Text style={styles.helpText}>Öppna kartan och registrera punkter eller polygoner.</Text>
-              <Text style={styles.helpText}>Exportera direkt till Artportalen eller skicka med epost.</Text>
-            </View>
-
             <Text style={styles.modalTitle}>Inställningar</Text>
 
             {/* GPS-inställning */}
@@ -371,6 +358,13 @@ export function MapListScreen({ navigation }: Props) {
                 <Text style={styles.saveBtnText}>Spara</Text>
               </Pressable>
 
+              <Pressable
+                style={styles.guideBtn}
+                onPress={() => setShowGuide(true)}
+              >
+                <Text style={styles.guideBtnText}>Kort guide</Text>
+              </Pressable>
+
               {/* Licens-knapp till höger */}
               <Pressable 
                 style={styles.copyrightBtn} 
@@ -383,6 +377,31 @@ export function MapListScreen({ navigation }: Props) {
               </Pressable>
             </View>
 
+          </View>
+        </View>
+      </Modal>
+
+      <Modal transparent visible={showGuide} onRequestClose={() => setShowGuide(false)} animationType="fade">
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Kort guide</Text>
+            <View style={styles.helpBox}>
+              <Text style={styles.helpText}>
+                Importera karta som GeoTIFF från{" "}
+                <Text style={styles.linkText} onPress={() => void Linking.openURL(SKOGSMONITOR_URL)}>
+                  Skogsmonitor
+                </Text>
+                . Du kan ha flera kartor.
+              </Text>
+              <Text style={styles.helpText}>Byt namn på kartan, namnet används som förslag på lokalnamn.</Text>
+              <Text style={styles.helpText}>Öppna kartan och registrera punkter eller polygoner.</Text>
+              <Text style={styles.helpText}>Exportera direkt till Artportalen eller skicka med epost.</Text>
+            </View>
+            <View style={styles.guideActions}>
+              <Pressable style={styles.okBtn} onPress={() => setShowGuide(false)}>
+                <Text style={styles.modalBtnText}>Ok</Text>
+              </Pressable>
+            </View>
           </View>
         </View>
       </Modal>
@@ -473,12 +492,25 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 14,
     paddingVertical: 10, 
-    alignSelf: 'flex-start',
-    marginTop: 10, 
   },
   saveBtnText: {
     color: "#fff",
     fontWeight: "700",
+  },
+  guideBtn: {
+    backgroundColor: "#e9d8a6",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  guideBtnText: {
+    color: "#3a2d0f",
+    fontWeight: "700",
+  },
+  guideActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    marginTop: 12,
   },
   listContent: {
     paddingHorizontal: 12,
@@ -660,7 +692,7 @@ const styles = StyleSheet.create({
   bottomBar: {
   flexDirection: 'row',          // Lägger elementen på rad
   justifyContent: 'space-between', // Trycker isär elementen (vänster/höger)
-  alignItems: 'baseline',          // Centrerar vertikalt
+  alignItems: 'center',          // Centrerar vertikalt
   paddingHorizontal: 20,         // Avstånd från skärmkanterna
   marginTop: 20,
 },
