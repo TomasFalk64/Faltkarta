@@ -450,8 +450,11 @@ async function optimizePhotoForZip(
   const exifDateISO = shouldCopyExif ? extractExifDateISO(originalBase64) : null;
   const dateISO = assetDateISO ?? exifDateISO ?? fallbackDateISO;
   const maxBytes = Math.max(0.2, maxImageSizeMB) * 1024 * 1024;
-  const info = await FileSystem.getInfoAsync(uri, { size: true });
-  const originalBytes = typeof info.size === "number" ? info.size : null;
+  const info = await FileSystem.getInfoAsync(uri, { size: true } as any);
+  const originalBytes =
+    info && "size" in info && typeof (info as { size?: number }).size === "number"
+      ? (info as { size?: number }).size ?? null
+      : null;
   const size = await getImageSizeSafe(uri);
   const maxSide = size ? Math.max(size.width, size.height) : null;
   const actions: ImageManipulator.Action[] = [];

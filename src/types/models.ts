@@ -63,4 +63,5 @@ export type AppSettings = {
   gpsPingSeconds: number;
   showQuantityField: boolean;
   maxImageSizeMB: number;
+  backgroundGPS: boolean;
 };

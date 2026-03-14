@@ -27,6 +27,7 @@ type Props = NativeStackScreenProps<RootStackParamList, "MapList">;
 export function MapListScreen({ navigation }: Props) {
   const [maps, setMaps] = useState<MapItem[]>([]);
   const [gpsPingSeconds, setGpsPingSeconds] = useState("3");
+  const [backgroundGPS, setBackgroundGPS] = useState(false);
   const [showQuantityField, setShowQuantityField] = useState(false);
   const [maxImageSizeMB, setMaxImageSizeMB] = useState("2");
   const [renameMap, setRenameMap] = useState<MapItem | null>(null);
@@ -41,8 +42,8 @@ export function MapListScreen({ navigation }: Props) {
 
   function clampPingInput(value: string): string {
     const parsed = Number.parseInt(value, 10);
-    if (!Number.isFinite(parsed)) return "3";
-    const clamped = Math.min(20, Math.max(3, parsed));
+    if (!Number.isFinite(parsed)) return "2";
+    const clamped = Math.min(20, Math.max(2, parsed));
     return String(clamped);
   }
 
@@ -57,6 +58,7 @@ export function MapListScreen({ navigation }: Props) {
     const [allMaps, settings] = await Promise.all([loadMaps(), loadSettings()]);
     setMaps(allMaps);
     setGpsPingSeconds(String(settings.gpsPingSeconds));
+    setBackgroundGPS(settings.backgroundGPS ?? false);
     setShowQuantityField(settings.showQuantityField ?? false);
     setMaxImageSizeMB(String(settings.maxImageSizeMB ?? 2));
   }, []);
@@ -118,6 +120,7 @@ export function MapListScreen({ navigation }: Props) {
         gpsPingSeconds: pingValue,
         showQuantityField: showQuantityField,
         maxImageSizeMB: maxSizeValue,
+        backgroundGPS: backgroundGPS,
       };
 
       // Spara allt på en gång
@@ -310,7 +313,7 @@ export function MapListScreen({ navigation }: Props) {
 
             {/* GPS-inställning */}
             <View style={styles.settingsRow}>
-              <Text style={styles.settingsTitle}>GPS pingfrekvens (3-20s)</Text>
+              <Text style={styles.settingsTitle}>GPS pingfrekvens (2-20s)</Text>
               <TextInput
                 value={gpsPingSeconds}
                 onChangeText={setGpsPingSeconds}
@@ -319,6 +322,18 @@ export function MapListScreen({ navigation }: Props) {
                 keyboardType="number-pad"
               />
             </View>
+
+            <Pressable
+              style={[styles.settingsRow, { marginVertical: 6, alignItems: "center" }]}
+              onPress={() => setBackgroundGPS((prev) => !prev)}
+            >
+              <Text style={styles.settingsTitle}>Begär GPS i bakgrund</Text>
+              <Ionicons
+                name={backgroundGPS ? "checkbox" : "square-outline"}
+                size={24}
+                color={backgroundGPS ? "#0a9396" : "#767577"}
+              />
+            </Pressable>
 
             <View style={styles.settingsRow}>
               <Text style={styles.settingsTitle}>Max bildstorlek vid export (MB)</Text>

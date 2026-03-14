@@ -16,7 +16,6 @@ import {
   updateObservation,
 } from "../storage/storage";
 import { LatLon, MapItem, Observation, PolygonObservation, PointObservation } from "../types/models";
-import { averageLatLon, distanceMeters } from "../services/coords";
 import { makeId } from "../utils/id";
 import { ensureMapGeorefBounds } from "../services/files";
 import { resolvePointPhotoUri } from "../services/photos";
@@ -41,10 +40,12 @@ export function MapScreen({ route, navigation }: Props) {
   const [draftPolygon, setDraftPolygon] = useState<LatLon[]>([]);
   const [gpsPingSeconds, setGpsPingSeconds] = useState(3);
   const [showQuantityField, setShowQuantityField] = useState(false);
+  const [backgroundGPS, setBackgroundGPS] = useState(false);
 
-  const { gpsPos, rawAccuracyMeters, error: gpsError } = useGps({ pingSeconds: gpsPingSeconds });
-  const lastGpsRef = useRef<{ pos: LatLon; ts: number } | null>(null);
-  const gpsTrailRef = useRef<Array<{ pos: LatLon; ts: number; rawAccuracyMeters: number | null }>>([]);
+  const { gpsPos, displayAccuracyMeters, rawAccuracyMeters, error: gpsError } = useGps({
+    pingSeconds: gpsPingSeconds,
+    backgroundGPS,
+  });
   const editingPhotoLookupRef = useRef<Record<string, { ref: string; assetId?: string }>>({});
   const editingMissingPhotosRef = useRef<Array<{ ref: string; assetId?: string }>>([]);
 
@@ -63,6 +64,7 @@ export function MapScreen({ route, navigation }: Props) {
       setObservations(obs);
       setGpsPingSeconds(settings.gpsPingSeconds);
       setShowQuantityField(settings.showQuantityField ?? false);
+      setBackgroundGPS(settings.backgroundGPS ?? false);
       if (hydrated?.bbox) {
         setCenterCoord({
           lat: (hydrated.bbox.minLat + hydrated.bbox.maxLat) / 2,
@@ -83,20 +85,6 @@ export function MapScreen({ route, navigation }: Props) {
       }
     })().catch((e) => Alert.alert("Fel", String(e)));
   }, [mapId]);
-
-  useEffect(() => {
-    if (!gpsPos) return;
-    const now = Date.now();
-    if (lastGpsRef.current) {
-      const dtSec = (now - lastGpsRef.current.ts) / 1000;
-      const jump = distanceMeters(lastGpsRef.current.pos, gpsPos);
-      if (dtSec < 2 && jump > 200) return;
-    }
-    lastGpsRef.current = { pos: gpsPos, ts: now };
-    gpsTrailRef.current = [...gpsTrailRef.current, { pos: gpsPos, ts: now, rawAccuracyMeters }]
-      .filter((item) => now - item.ts <= 60_000)
-      .slice(-20);
-  }, [gpsPos, rawAccuracyMeters]);
 
   const crosshairPos = centerCoord;
   const pointList = useMemo(
@@ -128,23 +116,10 @@ export function MapScreen({ route, navigation }: Props) {
     setCenterCoord(clampToMapBounds(gpsPos));
   }
 
-  function estimateGpsAccuracyMeters(): { estimated: number | null; raw: number | null; combined: number | null } {
-    const recent = gpsTrailRef.current.slice(-4);
-    const samples = recent.map((s) => s.pos);
-    const latestRaw = recent.length ? recent[recent.length - 1].rawAccuracyMeters : rawAccuracyMeters;
-    const raw = typeof latestRaw === "number" && Number.isFinite(latestRaw) ? Math.max(1, Math.round(latestRaw)) : null;
-    if (samples.length < 2) {
-      return { estimated: null, raw, combined: raw };
-    }
-    const center = averageLatLon(samples);
-    const avgDist = samples.reduce((sum, p) => sum + distanceMeters(p, center), 0) / samples.length;
-    const estimated = Math.max(1, Math.round(avgDist));
-    const combined = raw !== null ? Math.max(estimated, raw) : estimated;
-    return { estimated, raw, combined };
-  }
-
-  const gpsAccuracy = useMemo(() => estimateGpsAccuracyMeters(), [gpsPos, rawAccuracyMeters]);
-  const displayCombined = Math.min(99, Math.max(0, gpsAccuracy.combined ?? 0));
+  const displayCombined = Math.min(
+    99,
+    Math.max(0, (displayAccuracyMeters ?? rawAccuracyMeters ?? 0))
+  );
 
   function getNextPointNumber(): number {
     const numbers = observations
@@ -201,7 +176,7 @@ export function MapScreen({ route, navigation }: Props) {
             pointNumber,
             localName: payload.localName?.trim() || map.name,
             accuracyMeters: payload.accuracyMeters ?? null,
-            quantity: payload.quantity,
+            quantity: payload.quantity ?? editingPoint.quantity ?? 0,
             unit: payload.unit ?? "",
           }
         : {
@@ -215,7 +190,7 @@ export function MapScreen({ route, navigation }: Props) {
             photoAssetIds: hasAnyAssetId ? photoAssetIds : undefined,
             pointNumber,
             localName: payload.localName?.trim() || map.name,
-            accuracyMeters: payload.accuracyMeters ?? gpsAccuracy.combined,
+            accuracyMeters: payload.accuracyMeters ?? (displayAccuracyMeters ?? rawAccuracyMeters ?? null),
             quantity: payload.quantity ?? 0,
             unit: payload.unit ?? "",
             dateISO,
@@ -506,7 +481,7 @@ export function MapScreen({ route, navigation }: Props) {
                 photoUris: [],
                 photoAssetIds: [],
                 localName: map.name,
-                accuracyMeters: gpsAccuracy.combined,
+                accuracyMeters: displayAccuracyMeters ?? rawAccuracyMeters ?? null,
               }
         }
         title={editingPoint ? "Redigera punkt" : "Ny punktobservation"}

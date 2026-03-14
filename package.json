@@ -28,6 +28,7 @@
     "expo-mail-composer": "~15.0.8",
     "expo-media-library": "~18.2.1",
     "expo-sharing": "~14.0.8",
+    "expo-task-manager": "^55.0.9",
     "expo-web-browser": "~15.0.10",
     "jszip": "^3.10.1",
     "papaparse": "^5.5.3",
