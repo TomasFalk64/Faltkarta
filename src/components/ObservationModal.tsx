@@ -267,7 +267,7 @@ export function ObservationModal({
             </Pressable>
             </View>
             <ScrollView
-              keyboardShouldPersistTaps="handled"
+              keyboardShouldPersistTaps="always"
               keyboardDismissMode="on-drag"
               style={styles.scroll}
               contentContainerStyle={styles.scrollContent}
@@ -278,7 +278,8 @@ export function ObservationModal({
                 setSpecies(text); // Uppdatera texten
                 setIsShowingSuggestions(true);
               }}
-              onBlur={() => setIsShowingSuggestions(false)}
+              onFocus={() => setIsShowingSuggestions(true)}
+              onBlur={() => setTimeout(() => setIsShowingSuggestions(false), 120)}
               placeholder={speciesPlaceholder}
               style={styles.input}
             />

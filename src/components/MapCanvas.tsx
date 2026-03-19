@@ -145,10 +145,9 @@ export function MapCanvas({
                 VIRTUAL_IMAGE_WIDTH,
                 VIRTUAL_IMAGE_HEIGHT
               );
-              const safeScale = Math.max(0.01, scaleRef.current);
               const nextCenterPx = {
-                x: currentCenterPx.x - dx / safeScale,
-                y: currentCenterPx.y - dy / safeScale,
+                x: currentCenterPx.x - dx,
+                y: currentCenterPx.y - dy,
               };
               const nextCenter = imagePointToLatLon(
                 map,
