@@ -357,6 +357,9 @@ export function MapScreen({ route, navigation }: Props) {
         >
           <PolygonModeIcon />
         </Pressable>
+        <Pressable style={styles.mainBtn} onPress={() => setShowPointList((v) => !v)}>
+          <Text style={styles.mainBtnIcon}>≡</Text>
+        </Pressable>
         <Pressable style={styles.mainBtn} onPress={onCenterToGps}>
           <Text style={styles.mainBtnIcon}>↗</Text>
         </Pressable>
@@ -373,9 +376,6 @@ export function MapScreen({ route, navigation }: Props) {
           }}
         >
           <Text style={styles.mainBtnIcon}>📍</Text>
-        </Pressable>
-        <Pressable style={styles.mainBtn} onPress={() => setShowPointList((v) => !v)}>
-          <Text style={styles.mainBtnIcon}>≡</Text>
         </Pressable>
       </View>
 
@@ -486,6 +486,8 @@ export function MapScreen({ route, navigation }: Props) {
                 photoAssetIds: editingPointPhotoPreviewAssetIds,
                 localName: editingPoint.localName,
                 accuracyMeters: editingPoint.accuracyMeters,
+                quantity: editingPoint.quantity,
+                unit: editingPoint.unit,
               }
             : {
                 species: "",
