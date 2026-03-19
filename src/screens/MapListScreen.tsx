@@ -18,6 +18,7 @@ import { RootStackParamList } from "../navigation/types";
 import { MapItem } from "../types/models";
 import { AppSettings } from "../types/models";
 import { loadMaps, loadObservationsByMapId, loadSettings, removeMap, saveObservationsByMapId, saveSettings, upsertMap } from "../storage/storage";
+import { useGpsContext } from "../contexts/GpsContext";
 import { deleteIfExists, ensureMapGeorefBounds, pickAndImportGeoTiff } from "../services/files";
 import { cleanupAllPendingPhotoCopies } from "../services/photos";
 import { Ionicons } from '@expo/vector-icons';
@@ -32,6 +33,7 @@ export function MapListScreen({ navigation }: Props) {
   const [maps, setMaps] = useState<MapItem[]>([]);
   const [gpsPingSeconds, setGpsPingSeconds] = useState("3");
   const [backgroundGPS, setBackgroundGPS] = useState(false);
+  const { setGpsOptions } = useGpsContext();
   const [showQuantityField, setShowQuantityField] = useState(false);
   const [maxImageSizeMB, setMaxImageSizeMB] = useState("2");
   const [renameMap, setRenameMap] = useState<MapItem | null>(null);
@@ -130,6 +132,7 @@ export function MapListScreen({ navigation }: Props) {
 
       // Spara allt på en gång
       await saveSettings(newSettings);
+      setGpsOptions({ pingSeconds: pingValue, backgroundGPS: backgroundGPS });
       
       // Uppdatera UI
       setGpsPingSeconds(String(pingValue));

@@ -5,7 +5,7 @@ import Svg, { Circle, Polygon } from "react-native-svg";
 import { RootStackParamList } from "../navigation/types";
 import { MapCanvas } from "../components/MapCanvas";
 import { ObservationModal } from "../components/ObservationModal";
-import { useGps } from "../hooks/useGps";
+import { useGpsContext } from "../contexts/GpsContext";
 import {
   addObservation,
   deleteObservation,
@@ -43,10 +43,7 @@ export function MapScreen({ route, navigation }: Props) {
   const [backgroundGPS, setBackgroundGPS] = useState(false);
   const [showScaleBar, setShowScaleBar] = useState(false);
 
-  const { gpsPos, displayAccuracyMeters, rawAccuracyMeters, error: gpsError } = useGps({
-    pingSeconds: gpsPingSeconds,
-    backgroundGPS,
-  });
+  const { gpsPos, displayAccuracyMeters, rawAccuracyMeters, error: gpsError } = useGpsContext();
   const editingPhotoLookupRef = useRef<Record<string, { ref: string; assetId?: string }>>({});
   const editingMissingPhotosRef = useRef<Array<{ ref: string; assetId?: string }>>([]);
 

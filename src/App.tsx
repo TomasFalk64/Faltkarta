@@ -8,6 +8,7 @@ import { MapListScreen } from "./screens/MapListScreen";
 import { MapScreen } from "./screens/MapScreen";
 import { ExportScreen } from "./screens/ExportScreen";
 import { RootStackParamList } from "./navigation/types";
+import { GpsProvider } from "./contexts/GpsContext";
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -33,7 +34,8 @@ export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <NavigationContainer theme={theme}>
+        <GpsProvider>
+          <NavigationContainer theme={theme}>
           <Stack.Navigator
             screenOptions={{
               headerStyle: { backgroundColor: "#f4f0e7" },
@@ -59,6 +61,7 @@ export default function App() {
             />
           </Stack.Navigator>
         </NavigationContainer>
+        </GpsProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

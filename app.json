@@ -3,7 +3,7 @@
     "name": "Fältkarta",
     "slug": "faltkarta",
     "version": "1.2.0",
-    "icon": "./assets/logga.png", 
+    "icon": "./assets/logga.png",
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
@@ -22,7 +22,9 @@
         "NSPhotoLibraryAddUsageDescription": "Faltkarta behover spara kopior av observationsbilder i ditt galleri.",
         "UIBackgroundModes": [
           "location"
-        ]
+        ],
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Faltkarta behover din position i bakgrunden for att logga spar och mata avstand aven nar skarmen ar avstangd.",
+        "NSLocationAlwaysUsageDescription": "Faltkarta behover din position i bakgrunden for att fungera optimalt under faltarbete."
       }
     },
     "android": {
@@ -46,14 +48,20 @@
         "backgroundColor": "#ffffff"
       },
       "package": "com.tf64.faltkarta",
-      "softwareKeyboardLayoutMode": "resize"    
+      "softwareKeyboardLayoutMode": "resize"
     },
     "web": {
       "bundler": "metro"
     },
     "plugins": [
       "expo-document-picker",
-      "expo-location",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Faltkarta behover GPS for att visa din position och logga spar i bakgrunden.",
+          "isAndroidBackgroundLocationEnabled": true
+        }
+      ],
       "expo-media-library"
     ],
     "extra": {

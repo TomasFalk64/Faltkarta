@@ -125,21 +125,19 @@ export function useGps({ pingSeconds, backgroundGPS }: UseGpsOptions): UseGpsRes
     setBackgroundAllowed(false);
 
     (async () => {
+      const fg = await Location.requestForegroundPermissionsAsync();
+      if (fg.status !== "granted") {
+        if (!cancelled) {
+          setError("Platsbehorighet nekad.");
+          setPermissionGranted(false);
+        }
+        return;
+      }
+
       let backgroundGranted = false;
       if (backgroundGPS) {
         const bg = await Location.requestBackgroundPermissionsAsync();
         backgroundGranted = bg.status === "granted";
-      }
-
-      if (!backgroundGranted) {
-        const fg = await Location.requestForegroundPermissionsAsync();
-        if (fg.status !== "granted") {
-          if (!cancelled) {
-            setError("Platsbehorighet nekad.");
-            setPermissionGranted(false);
-          }
-          return;
-        }
       }
 
       if (!cancelled) {
@@ -206,8 +204,13 @@ export function useGps({ pingSeconds, backgroundGPS }: UseGpsOptions): UseGpsRes
         if (!started) {
           await Location.startLocationUpdatesAsync(GPS_BACK_TASK, {
             accuracy: Location.Accuracy.BestForNavigation,
-            timeInterval: 10_000,
+            timeInterval: Math.max(1, pingSeconds) * 1000,
             distanceInterval: 1,
+            foregroundService: {
+              notificationTitle: "Fältkarta",
+              notificationBody: "Positionering aktiv i bakgrunden",
+              notificationColor: "#005f73",
+            },
           });
         }
       } catch (e) {
