@@ -41,6 +41,7 @@ export function MapScreen({ route, navigation }: Props) {
   const [gpsPingSeconds, setGpsPingSeconds] = useState(3);
   const [showQuantityField, setShowQuantityField] = useState(false);
   const [backgroundGPS, setBackgroundGPS] = useState(false);
+  const [showScaleBar, setShowScaleBar] = useState(false);
 
   const { gpsPos, displayAccuracyMeters, rawAccuracyMeters, error: gpsError } = useGps({
     pingSeconds: gpsPingSeconds,
@@ -317,6 +318,7 @@ export function MapScreen({ route, navigation }: Props) {
         gpsPos={gpsPos}
         observations={observations}
         draftPolygon={draftPolygon}
+        showScaleBar={showScaleBar}
         onPanGeoDelta={(dLat, dLon) =>
           setCenterCoord((prev) => clampToMapBounds({ lat: prev.lat + dLat, lon: prev.lon + dLon }))
         }
@@ -330,12 +332,15 @@ export function MapScreen({ route, navigation }: Props) {
       />
 
       <View style={styles.northWrap}>
-        <View style={styles.northBtn}>
+        <Pressable
+          style={styles.northBtn}
+          onPress={() => setShowScaleBar((v) => !v)}
+        >
           <View style={styles.compassIcon}>
             <View style={styles.compassNeedleUp} />
             <View style={styles.compassNeedleDown} />
           </View>
-        </View>
+        </Pressable>
       </View>
 
       <View

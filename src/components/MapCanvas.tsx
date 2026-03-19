@@ -5,6 +5,7 @@ import {
   imagePointToLatLon,
   isCoordInsideMapBounds,
   latLonToImagePoint,
+  getMapBounds,
 } from "../services/mapProjection";
 import { LatLon, MapItem, Observation } from "../types/models";
 
@@ -15,6 +16,7 @@ type Props = {
   gpsPos: LatLon | null;
   observations: Observation[];
   draftPolygon: LatLon[];
+  showScaleBar: boolean;
   onPanGeoDelta: (deltaLat: number, deltaLon: number) => void;
   onManualPan: () => void;
   onPressPoint?: (observationId: string) => void;
@@ -36,6 +38,7 @@ export function MapCanvas({
   gpsPos,
   observations,
   draftPolygon,
+  showScaleBar,
   onPanGeoDelta,
   onManualPan,
   onPressPoint,
@@ -90,6 +93,23 @@ export function MapCanvas({
     MAX_TOUCH_SCREEN_SIZE / safeScale
   );
   const gpsBorderWidth = clamp(1.5 / safeScale, 0.8 / safeScale, 2.0 / safeScale);
+  const scaleBar = useMemo(() => {
+    if (!showScaleBar) return null;
+    const bounds = getMapBounds(map);
+    const midLat = (bounds.minLat + bounds.maxLat) / 2;
+    const widthMeters = metersBetween(
+      { lat: midLat, lon: bounds.minLon },
+      { lat: midLat, lon: bounds.maxLon }
+    );
+    const metersPerPixel = widthMeters / (VIRTUAL_IMAGE_WIDTH * scale);
+    const metersFor100px = metersPerPixel * 100;
+    const niceMeters = roundToNiceNumber(metersFor100px);
+    const barWidthPx = Math.max(20, Math.round(niceMeters / metersPerPixel));
+    return {
+      label: `${Math.round(niceMeters)} m`,
+      widthPx: barWidthPx,
+    };
+  }, [map, scale, showScaleBar]);
 
   const panResponder = useMemo(
     () =>
@@ -295,6 +315,13 @@ export function MapCanvas({
         <View style={styles.crosshairH} />
         <View style={styles.crosshairV} />
       </View>
+
+      {scaleBar && (
+        <View style={styles.scaleBarWrap}>
+          <Text style={styles.scaleBarText}>{scaleBar.label}</Text>
+          <View style={[styles.scaleBar, { width: scaleBar.widthPx }]} />
+        </View>
+      )}
     </View>
   );
 }
@@ -307,6 +334,30 @@ function touchDistance(a: { pageX: number; pageY: number }, b: { pageX: number; 
 
 function clamp(v: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, v));
+}
+
+function metersBetween(a: LatLon, b: LatLon): number {
+  const R = 6371000;
+  const lat1 = (a.lat * Math.PI) / 180;
+  const lat2 = (b.lat * Math.PI) / 180;
+  const dLat = lat2 - lat1;
+  const dLon = ((b.lon - a.lon) * Math.PI) / 180;
+  const sinDLat = Math.sin(dLat / 2);
+  const sinDLon = Math.sin(dLon / 2);
+  const h = sinDLat * sinDLat + Math.cos(lat1) * Math.cos(lat2) * sinDLon * sinDLon;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+function roundToNiceNumber(value: number): number {
+  if (!Number.isFinite(value) || value <= 0) return 0;
+  const pow = Math.pow(10, Math.floor(Math.log10(value)));
+  const n = value / pow;
+  let nice = 1;
+  if (n <= 1.5) nice = 1;
+  else if (n <= 3) nice = 2;
+  else if (n <= 7) nice = 5;
+  else nice = 10;
+  return nice * pow;
 }
 
 const styles = StyleSheet.create({
@@ -366,6 +417,32 @@ const styles = StyleSheet.create({
     width: 2,
     height: 40,
     backgroundColor: "#ff006e",
+  },
+  scaleBarWrap: {
+    position: "absolute",
+    right: 20,
+    bottom: 20,
+    alignItems: "flex-end",
+  },
+  scaleBarText: {
+    color: "#f4f0e7",
+    fontWeight: "700",
+    marginBottom: 6,
+    textShadowColor: "rgba(0,0,0,0.6)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  scaleBar: {
+    borderBottomWidth: 4,
+    borderLeftWidth: 3,
+    borderRightWidth: 3,
+    borderColor: "#f4f0e7",
+    height: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.8,
+    shadowRadius: 2,
+    elevation: 6,
   },
   gpsDot: {
     position: "absolute",
