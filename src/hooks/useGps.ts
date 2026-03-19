@@ -24,6 +24,7 @@ const STACK_MAX_AGE_MS = 30_000;
 const MEMORY_DEPTH = 2;
 const MAX_SPEED_MPS = 50;
 const MAX_GOOD_ACCURACY = 100;
+const DEBUG_GPS = false;
 
 if (!TaskManager.isTaskDefined(GPS_BACK_TASK)) {
   TaskManager.defineTask<{ locations?: Location.LocationObject[] }>(GPS_BACK_TASK, async ({ data, error }) => {
@@ -59,6 +60,12 @@ export function useGps({ pingSeconds, backgroundGPS }: UseGpsOptions): UseGpsRes
   const stackRef = useRef<GpsSample[]>([]);
 
   const handleSample = useCallback((sample: GpsSample) => {
+    if (DEBUG_GPS) {
+      console.log("[GPS] sample", {
+        accuracy: sample.rawAccuracy,
+        timestamp: sample.timestamp,
+      });
+    }
     if (!Number.isFinite(sample.rawAccuracy)) return;
     if (sample.rawAccuracy > MAX_GOOD_ACCURACY) return;
 
@@ -84,6 +91,16 @@ export function useGps({ pingSeconds, backgroundGPS }: UseGpsOptions): UseGpsRes
 
     stackRef.current = next;
 
+    if (DEBUG_GPS) {
+      console.log(
+        "[GPS] stack",
+        next.map((item) => ({
+          accuracy: item.rawAccuracy,
+          ageSec: Math.max(0, (now - item.timestamp) / 1000),
+        }))
+      );
+    }
+
     const recent = next.slice(-MEMORY_DEPTH);
     if (!recent.length) return;
 
@@ -102,6 +119,15 @@ export function useGps({ pingSeconds, backgroundGPS }: UseGpsOptions): UseGpsRes
     });
 
     if (!Number.isFinite(weightSum) || weightSum <= 0) return;
+
+    if (DEBUG_GPS) {
+      console.log("[GPS] weighted", {
+        lat: latSum / weightSum,
+        lon: lonSum / weightSum,
+        displayAccuracy: Math.max(1, Math.round(accSum / weightSum)),
+        weightSum,
+      });
+    }
 
     setGpsPos({
       lat: latSum / weightSum,
