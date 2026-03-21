@@ -6,6 +6,7 @@ import {
   Image,
   Modal,
   Pressable,
+  Platform,
   ScrollView, 
   StyleSheet,
   Text,
@@ -172,7 +173,14 @@ export function MapListScreen({ navigation }: Props) {
     } catch (error) {
       Alert.alert("Fel", String(error));
     } finally {
-      BackHandler.exitApp();
+      if (Platform.OS === "ios") {
+        Alert.alert(
+          "Klart",
+          "Passet är avslutat och spårningen stoppad. Du kan nu stänga appen manuellt."
+        );
+      } else {
+        BackHandler.exitApp();
+      }
     }
   };
 
