@@ -245,8 +245,11 @@ export function useGps({ pingSeconds, backgroundGPS }: UseGpsOptions): UseGpsRes
     };
 
     (async () => {
-      if (!backgroundGPS || !backgroundAllowed || appState === "active") {
+      if (!backgroundGPS) {
         await stopBackgroundUpdates();
+      }
+
+      if (!backgroundGPS || !backgroundAllowed || appState === "active") {
         if (!cancelled) {
           await startForegroundWatch();
         }
@@ -260,7 +263,6 @@ export function useGps({ pingSeconds, backgroundGPS }: UseGpsOptions): UseGpsRes
     return () => {
       cancelled = true;
       sub?.remove();
-      void stopBackgroundUpdates();
     };
   }, [appState, backgroundAllowed, backgroundGPS, handleSample, permissionGranted, pingSeconds]);
 

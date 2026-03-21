@@ -8,6 +8,8 @@ import {
   Pressable,
   Image,
   ScrollView,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
@@ -266,12 +268,17 @@ export function ObservationModal({
               </Svg>
             </Pressable>
             </View>
-            <ScrollView
-              keyboardShouldPersistTaps="always"
-              keyboardDismissMode="on-drag"
-              style={styles.scroll}
-              contentContainerStyle={styles.scrollContent}
+            <KeyboardAvoidingView
+              behavior={Platform.OS === "ios" ? "padding" : undefined}
+              keyboardVerticalOffset={0}
+              style={styles.keyboardAvoid}
             >
+              <ScrollView
+                keyboardShouldPersistTaps="always"
+                keyboardDismissMode="on-drag"
+                style={styles.scroll}
+                contentContainerStyle={styles.scrollContent}
+              >
             <TextInput
               value={species}
               onChangeText={(text) => {
@@ -377,7 +384,8 @@ export function ObservationModal({
                 </Pressable>
               ))}
             </View>
-            </ScrollView>
+              </ScrollView>
+            </KeyboardAvoidingView>
         </View>
 
         <Modal
@@ -578,7 +586,11 @@ const styles = StyleSheet.create({
     minHeight: 0,
   },
   scrollContent: {
-    paddingBottom: 16,
+    paddingBottom: 180,
+  },
+  keyboardAvoid: {
+    flex: 1,
+    minHeight: 0,
   },
   title: {
     fontSize: 18,
