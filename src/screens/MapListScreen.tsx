@@ -35,7 +35,7 @@ export function MapListScreen({ navigation }: Props) {
   const [backgroundGPS, setBackgroundGPS] = useState(false);
   const { setGpsOptions } = useGpsContext();
   const [showQuantityField, setShowQuantityField] = useState(false);
-  const [maxImageSizeMB, setMaxImageSizeMB] = useState("2");
+  const [maxImageSizeMB, setMaxImageSizeMB] = useState("3");
   const [renameMap, setRenameMap] = useState<MapItem | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [showRenameHint, setShowRenameHint] = useState(false);
@@ -756,7 +756,7 @@ const styles = StyleSheet.create({
   infoFab: {
     position: "absolute",
     left: 20,
-    bottom: 34,
+    bottom: 44,
     width: 42,
     height: 42,
     borderRadius: 21,

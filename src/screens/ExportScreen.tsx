@@ -167,8 +167,8 @@ export function ExportScreen({ route }: Props) {
       <Modal transparent visible={isCreatingZip} animationType="fade">
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Skapar Zip-fil</Text>
-            <Text style={styles.modalBody}>Ta det lugnt.</Text>
+            <Text style={styles.modalTitle}>Komprimerar bilder</Text>
+            <Text style={styles.modalBody}>Ta det lugnt, snart klar</Text>
           </View>
         </View>
       </Modal>

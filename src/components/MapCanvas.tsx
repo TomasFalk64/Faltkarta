@@ -421,7 +421,7 @@ const styles = StyleSheet.create({
   scaleBarWrap: {
     position: "absolute",
     right: 20,
-    bottom: 20,
+    bottom: 30,
     alignItems: "flex-end",
   },
   scaleBarText: {

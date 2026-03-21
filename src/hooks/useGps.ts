@@ -36,7 +36,7 @@ if (!TaskManager.isTaskDefined(GPS_BACK_TASK)) {
     locations.forEach((loc) => {
       const accuracy = loc.coords.accuracy;
       if (typeof accuracy !== "number" || !Number.isFinite(accuracy)) return;
-      //console.log("[GPS_BACK_TASK] pos", loc.coords.latitude, loc.coords.longitude, "acc", accuracy, "ts", loc.timestamp);
+      console.log("[GPS_BACK_TASK] pos", loc.coords.latitude, loc.coords.longitude, "acc", accuracy, "ts", loc.timestamp);
       emitGpsSample({
         lat: loc.coords.latitude,
         lon: loc.coords.longitude,
@@ -249,12 +249,17 @@ export function useGps({ pingSeconds, backgroundGPS }: UseGpsOptions): UseGpsRes
         await stopBackgroundUpdates();
       }
 
-      if (!backgroundGPS || !backgroundAllowed || appState === "active") {
+      // Starta bakgrundstjänsten tidigt så den redan är igång när appen går i bakgrunden.
+      if (backgroundGPS && backgroundAllowed) {
+        await startBackgroundUpdates();
+      }
+
+      if (appState === "active") {
         if (!cancelled) {
           await startForegroundWatch();
         }
       } else {
-        await startBackgroundUpdates();
+        sub?.remove();
       }
     })().catch((e) => {
       if (!cancelled) setError(String(e));
