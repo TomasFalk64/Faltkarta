@@ -3,7 +3,7 @@
     "name": "Fältkarta",
     "slug": "faltkarta",
     "version": "1.3.1",
-    "icon": "./assets/logga.png",
+    "icon": "./assets/icon.png",
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
