@@ -16,6 +16,7 @@ type UseGpsResult = {
   rawAccuracyMeters: number | null;
   displayAccuracyMeters: number | null;
   error: string | null;
+  stopAllGps: () => Promise<void>;
 };
 
 const GPS_BACK_TASK = "GPS_BACK_TASK";
@@ -36,7 +37,7 @@ if (!TaskManager.isTaskDefined(GPS_BACK_TASK)) {
     locations.forEach((loc) => {
       const accuracy = loc.coords.accuracy;
       if (typeof accuracy !== "number" || !Number.isFinite(accuracy)) return;
-      console.log("[GPS_BACK_TASK] pos", loc.coords.latitude, loc.coords.longitude, "acc", accuracy, "ts", loc.timestamp);
+      //console.log("[GPS_BACK_TASK] pos", loc.coords.latitude, loc.coords.longitude, "acc", accuracy, "ts", loc.timestamp);
       emitGpsSample({
         lat: loc.coords.latitude,
         lon: loc.coords.longitude,
@@ -58,6 +59,7 @@ export function useGps({ pingSeconds, backgroundGPS }: UseGpsOptions): UseGpsRes
 
   const lastSampleRef = useRef<GpsSample | null>(null);
   const stackRef = useRef<GpsSample[]>([]);
+  const foregroundWatchRef = useRef<{ remove: () => void } | null>(null);
 
   const handleSample = useCallback((sample: GpsSample) => {
     if (DEBUG_GPS) {
@@ -138,6 +140,24 @@ export function useGps({ pingSeconds, backgroundGPS }: UseGpsOptions): UseGpsRes
     setError(null);
   }, []);
 
+  const stopAllGps = useCallback(async () => {
+    try {
+      foregroundWatchRef.current?.remove();
+      foregroundWatchRef.current = null;
+    } catch (e) {
+      console.log("[GPS_FOREGROUND] stop rejected", String(e));
+    }
+
+    try {
+      const started = await Location.hasStartedLocationUpdatesAsync(GPS_BACK_TASK);
+      if (started) {
+        await Location.stopLocationUpdatesAsync(GPS_BACK_TASK);
+      }
+    } catch (e) {
+      console.log("[GPS_BACK_TASK] stop rejected", String(e));
+    }
+  }, []);
+
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (nextState) => {
       setAppState(nextState);
@@ -204,6 +224,10 @@ export function useGps({ pingSeconds, backgroundGPS }: UseGpsOptions): UseGpsRes
     };
 
     const startForegroundWatch = async () => {
+      if (foregroundWatchRef.current) {
+        foregroundWatchRef.current.remove();
+        foregroundWatchRef.current = null;
+      }
       sub = await Location.watchPositionAsync(
         {
           accuracy: Location.Accuracy.BestForNavigation,
@@ -222,6 +246,7 @@ export function useGps({ pingSeconds, backgroundGPS }: UseGpsOptions): UseGpsRes
           });
         }
       );
+      foregroundWatchRef.current = sub;
     };
 
     const startBackgroundUpdates = async () => {
@@ -268,8 +293,11 @@ export function useGps({ pingSeconds, backgroundGPS }: UseGpsOptions): UseGpsRes
     return () => {
       cancelled = true;
       sub?.remove();
+      if (foregroundWatchRef.current === sub) {
+        foregroundWatchRef.current = null;
+      }
     };
   }, [appState, backgroundAllowed, backgroundGPS, handleSample, permissionGranted, pingSeconds]);
 
-  return { gpsPos, rawAccuracyMeters, displayAccuracyMeters, error };
+  return { gpsPos, rawAccuracyMeters, displayAccuracyMeters, error, stopAllGps };
 }

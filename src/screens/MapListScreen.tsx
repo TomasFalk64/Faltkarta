@@ -1,6 +1,7 @@
 ﻿import React, { useCallback, useState } from "react";
 import {
   Alert,
+  BackHandler,
   FlatList,
   Image,
   Modal,
@@ -22,6 +23,7 @@ import { useGpsContext } from "../contexts/GpsContext";
 import { deleteIfExists, ensureMapGeorefBounds, pickAndImportGeoTiff } from "../services/files";
 import { cleanupAllPendingPhotoCopies } from "../services/photos";
 import { Ionicons } from '@expo/vector-icons';
+import * as Location from "expo-location";
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system/legacy";
 import { makeId } from "../utils/id";
@@ -33,7 +35,7 @@ export function MapListScreen({ navigation }: Props) {
   const [maps, setMaps] = useState<MapItem[]>([]);
   const [gpsPingSeconds, setGpsPingSeconds] = useState("3");
   const [backgroundGPS, setBackgroundGPS] = useState(false);
-  const { setGpsOptions } = useGpsContext();
+  const { setGpsOptions, stopAllGps } = useGpsContext();
   const [showQuantityField, setShowQuantityField] = useState(false);
   const [maxImageSizeMB, setMaxImageSizeMB] = useState("3");
   const [renameMap, setRenameMap] = useState<MapItem | null>(null);
@@ -142,6 +144,35 @@ export function MapListScreen({ navigation }: Props) {
     } catch (error) {
       console.error("Kunde inte spara inställningar:", error);
       Alert.alert("Fel", "Kunde inte spara inställningarna.");
+    }
+  };
+
+  const onExitApp = async () => {
+    try {
+      const parsedPing = Number.parseInt(gpsPingSeconds, 10);
+      const rawPing = Number.isFinite(parsedPing) ? parsedPing : 3;
+      const pingValue = Math.min(20, Math.max(3, rawPing));
+      const parsedMaxSize = Number.parseFloat(maxImageSizeMB.replace(",", "."));
+      const maxSizeValue = Number.isFinite(parsedMaxSize) && parsedMaxSize > 0 ? parsedMaxSize : 2;
+
+      const started = await Location.hasStartedLocationUpdatesAsync("GPS_BACK_TASK");
+      if (started) {
+        await Location.stopLocationUpdatesAsync("GPS_BACK_TASK");
+      }
+
+      await stopAllGps();
+      await saveSettings({
+        gpsPingSeconds: pingValue,
+        showQuantityField: showQuantityField,
+        maxImageSizeMB: maxSizeValue,
+        backgroundGPS: false,
+      });
+      setBackgroundGPS(false);
+      setGpsOptions({ pingSeconds: pingValue, backgroundGPS: false });
+    } catch (error) {
+      Alert.alert("Fel", String(error));
+    } finally {
+      BackHandler.exitApp();
     }
   };
 
@@ -327,6 +358,10 @@ export function MapListScreen({ navigation }: Props) {
 
       <Pressable style={styles.infoFab} onPress={() => setShowSettings(true)}>
         <Text style={styles.infoFabText}>i</Text>
+      </Pressable>
+
+      <Pressable style={styles.exitFab} onPress={() => void onExitApp()}>
+        <Text style={styles.exitFabText}>AVSLUTA</Text>
       </Pressable>
 
       <Modal transparent visible={showImportMenu} onRequestClose={() => setShowImportMenu(false)} animationType="fade">
@@ -771,6 +806,23 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: "800",
     lineHeight: 22,
+  },
+  exitFab: {
+    position: "absolute",
+    bottom: 44,
+    alignSelf: "center",
+    paddingHorizontal: 14,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: "#4a4a4a",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  exitFabText: {
+    color: "#fff",
+    fontWeight: "800",
+    fontSize: 12,
+    letterSpacing: 0.5,
   },
   modalBackdrop: {
     flex: 1,
