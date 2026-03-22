@@ -9,6 +9,7 @@ import { emitGpsSample, GpsSample, subscribeGpsSamples } from "../services/gpsEv
 type UseGpsOptions = {
   pingSeconds: number;
   backgroundGPS: boolean;
+  onBackgroundDenied?: () => void;
 };
 
 type UseGpsResult = {
@@ -184,6 +185,9 @@ export function useGps({ pingSeconds, backgroundGPS }: UseGpsOptions): UseGpsRes
       if (backgroundGPS) {
         const bg = await Location.requestBackgroundPermissionsAsync();
         backgroundGranted = bg.status === "granted";
+        if (!backgroundGranted) {
+          onBackgroundDenied?.();
+        }
       }
 
       if (!cancelled) {

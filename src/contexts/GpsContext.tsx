@@ -12,6 +12,7 @@ type GpsContextValue = {
   rawAccuracyMeters: number | null;
   displayAccuracyMeters: number | null;
   error: string | null;
+  gpsOptions: GpsOptions;
   setGpsOptions: (next: GpsOptions) => void;
   stopAllGps: () => Promise<void>;
 };
@@ -42,9 +43,14 @@ export function GpsProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
+  const handleBackgroundDenied = useCallback(() => {
+    setGpsOptionsState((prev) => ({ ...prev, backgroundGPS: false }));
+  }, []);
+
   const { gpsPos, rawAccuracyMeters, displayAccuracyMeters, error, stopAllGps } = useGps({
     pingSeconds: gpsOptions.pingSeconds,
     backgroundGPS: gpsOptions.backgroundGPS,
+    onBackgroundDenied: handleBackgroundDenied,
   });
 
   const setGpsOptions = useCallback((next: GpsOptions) => {
@@ -57,10 +63,11 @@ export function GpsProvider({ children }: { children: React.ReactNode }) {
       rawAccuracyMeters,
       displayAccuracyMeters,
       error,
+      gpsOptions,
       setGpsOptions,
       stopAllGps,
     }),
-    [displayAccuracyMeters, error, gpsPos, rawAccuracyMeters, setGpsOptions, stopAllGps]
+    [displayAccuracyMeters, error, gpsOptions, gpsPos, rawAccuracyMeters, setGpsOptions, stopAllGps]
   );
 
   return <GpsContext.Provider value={value}>{children}</GpsContext.Provider>;

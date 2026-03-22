@@ -34,8 +34,7 @@ type Props = NativeStackScreenProps<RootStackParamList, "MapList">;
 export function MapListScreen({ navigation }: Props) {
   const [maps, setMaps] = useState<MapItem[]>([]);
   const [gpsPingSeconds, setGpsPingSeconds] = useState("3");
-  const [backgroundGPS, setBackgroundGPS] = useState(false);
-  const { setGpsOptions } = useGpsContext();
+  const { gpsOptions, setGpsOptions } = useGpsContext();
   const [showQuantityField, setShowQuantityField] = useState(false);
   const [maxImageSizeMB, setMaxImageSizeMB] = useState("3");
   const [renameMap, setRenameMap] = useState<MapItem | null>(null);
@@ -67,7 +66,7 @@ export function MapListScreen({ navigation }: Props) {
     const [allMaps, settings] = await Promise.all([loadMaps(), loadSettings()]);
     setMaps(allMaps);
     setGpsPingSeconds(String(settings.gpsPingSeconds));
-    setBackgroundGPS(settings.backgroundGPS ?? false);
+    setGpsOptions({ pingSeconds: settings.gpsPingSeconds, backgroundGPS: settings.backgroundGPS ?? false });
     setShowQuantityField(settings.showQuantityField ?? false);
     setMaxImageSizeMB(String(settings.maxImageSizeMB ?? 2));
   }, []);
@@ -129,12 +128,12 @@ export function MapListScreen({ navigation }: Props) {
         gpsPingSeconds: pingValue,
         showQuantityField: showQuantityField,
         maxImageSizeMB: maxSizeValue,
-        backgroundGPS: backgroundGPS,
+        backgroundGPS: gpsOptions.backgroundGPS,
       };
 
       // Spara allt på en gång
       await saveSettings(newSettings);
-      setGpsOptions({ pingSeconds: pingValue, backgroundGPS: backgroundGPS });
+      setGpsOptions({ pingSeconds: pingValue, backgroundGPS: gpsOptions.backgroundGPS });
       
       // Uppdatera UI
       setGpsPingSeconds(String(pingValue));
@@ -149,8 +148,7 @@ export function MapListScreen({ navigation }: Props) {
 
 
 const toggleBackgroundGPS = async () => {
-  const nextState = !backgroundGPS;
-  setBackgroundGPS(nextState);
+  const nextState = !gpsOptions.backgroundGPS;
 
   // Gör om pingen till ett nummer och klampa till 3–20
   const pingValue = Number.parseInt(clampPingInput(gpsPingSeconds), 10) || 3;
@@ -361,7 +359,7 @@ const toggleBackgroundGPS = async () => {
       <Pressable 
         style={[
           styles.exitFab, 
-          backgroundGPS ? { backgroundColor: "#2da833" } : { backgroundColor: "#757575" }
+          gpsOptions.backgroundGPS ? { backgroundColor: "#3b9640" } : { backgroundColor: "#9b9b9b" }
         ]} 
         onPress={toggleBackgroundGPS}
       >
@@ -521,13 +519,18 @@ const toggleBackgroundGPS = async () => {
 
             <Pressable
               style={[styles.settingsRow, { marginVertical: 6, alignItems: "center" }]}
-              onPress={() => setBackgroundGPS((prev) => !prev)}
+              onPress={() =>
+                setGpsOptions({
+                  pingSeconds: gpsOptions.pingSeconds,
+                  backgroundGPS: !gpsOptions.backgroundGPS,
+                })
+              }
             >
               <Text style={styles.settingsTitle}>Begär GPS i bakgrund</Text>
               <Ionicons
-                name={backgroundGPS ? "checkbox" : "square-outline"}
+                name={gpsOptions.backgroundGPS ? "checkbox" : "square-outline"}
                 size={24}
-                color={backgroundGPS ? "#0a9396" : "#767577"}
+                color={gpsOptions.backgroundGPS ? "#0a9396" : "#767577"}
               />
             </Pressable>
 
