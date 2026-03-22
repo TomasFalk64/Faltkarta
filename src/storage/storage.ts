@@ -106,7 +106,7 @@ export async function loadSettings(): Promise<AppSettings> {
   const raw = await AsyncStorage.getItem(SETTINGS_KEY);
   if (!raw) {
     // Returnera standardvärden för båda inställningarna
-    return { gpsPingSeconds: 3, showQuantityField: false, maxImageSizeMB: 2, backgroundGPS: false };
+    return { gpsPingSeconds: 3, showQuantityField: false, maxImageSizeMB: 3, backgroundGPS: false };
   }
   const parsed = JSON.parse(raw) as Partial<AppSettings>;
   return {

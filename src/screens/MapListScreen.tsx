@@ -1,7 +1,6 @@
 ﻿import React, { useCallback, useState } from "react";
 import {
   Alert,
-  BackHandler,
   FlatList,
   Image,
   Modal,
@@ -36,7 +35,7 @@ export function MapListScreen({ navigation }: Props) {
   const [maps, setMaps] = useState<MapItem[]>([]);
   const [gpsPingSeconds, setGpsPingSeconds] = useState("3");
   const [backgroundGPS, setBackgroundGPS] = useState(false);
-  const { setGpsOptions, stopAllGps } = useGpsContext();
+  const { setGpsOptions } = useGpsContext();
   const [showQuantityField, setShowQuantityField] = useState(false);
   const [maxImageSizeMB, setMaxImageSizeMB] = useState("3");
   const [renameMap, setRenameMap] = useState<MapItem | null>(null);
@@ -121,7 +120,7 @@ export function MapListScreen({ navigation }: Props) {
     try {
       const parsedPing = Number.parseInt(gpsPingSeconds, 10);
       const rawPing = Number.isFinite(parsedPing) ? parsedPing : 3;
-      const pingValue = Math.min(20, Math.max(3, rawPing));
+      const pingValue = Math.min(20, Math.max(2, rawPing));
       const parsedMaxSize = Number.parseFloat(maxImageSizeMB.replace(",", "."));
       const maxSizeValue = Number.isFinite(parsedMaxSize) && parsedMaxSize > 0 ? parsedMaxSize : 2;
 
@@ -148,41 +147,32 @@ export function MapListScreen({ navigation }: Props) {
     }
   };
 
-  const onExitApp = async () => {
-    try {
-      const parsedPing = Number.parseInt(gpsPingSeconds, 10);
-      const rawPing = Number.isFinite(parsedPing) ? parsedPing : 3;
-      const pingValue = Math.min(20, Math.max(3, rawPing));
-      const parsedMaxSize = Number.parseFloat(maxImageSizeMB.replace(",", "."));
-      const maxSizeValue = Number.isFinite(parsedMaxSize) && parsedMaxSize > 0 ? parsedMaxSize : 2;
 
-      const started = await Location.hasStartedLocationUpdatesAsync("GPS_BACK_TASK");
-      if (started) {
-        await Location.stopLocationUpdatesAsync("GPS_BACK_TASK");
-      }
+const toggleBackgroundGPS = async () => {
+  const nextState = !backgroundGPS;
+  setBackgroundGPS(nextState);
 
-      await stopAllGps();
-      await saveSettings({
-        gpsPingSeconds: pingValue,
-        showQuantityField: showQuantityField,
-        maxImageSizeMB: maxSizeValue,
-        backgroundGPS: false,
-      });
-      setBackgroundGPS(false);
-      setGpsOptions({ pingSeconds: pingValue, backgroundGPS: false });
-    } catch (error) {
-      Alert.alert("Fel", String(error));
-    } finally {
-      if (Platform.OS === "ios") {
-        Alert.alert(
-          "Klart",
-          "Passet är avslutat och spårningen stoppad. Du kan nu stänga appen manuellt."
-        );
-      } else {
-        BackHandler.exitApp();
-      }
-    }
-  };
+  // Gör om pingen till ett nummer och klampa till 3–20
+  const pingValue = Number.parseInt(clampPingInput(gpsPingSeconds), 10) || 3;
+
+  // HÄR ÄR FIXEN: Skicka objektet direkt istället för att använda prev
+  setGpsOptions({
+    pingSeconds: pingValue,
+    backgroundGPS: nextState
+  });
+
+  // Spara även till AsyncStorage
+  try {
+    await saveSettings({
+      gpsPingSeconds: pingValue,
+      backgroundGPS: nextState,
+      showQuantityField: showQuantityField,
+      maxImageSizeMB: Number.parseFloat(maxImageSizeMB.replace(",", ".")) || 3,
+    });
+  } catch (error) {
+    console.error("Kunde inte spara inställningar:", error);
+  }
+};
 
   function onOpenMap(item: MapItem) {
     navigation.navigate("Map", { mapId: item.id });
@@ -368,8 +358,14 @@ export function MapListScreen({ navigation }: Props) {
         <Text style={styles.infoFabText}>i</Text>
       </Pressable>
 
-      <Pressable style={styles.exitFab} onPress={() => void onExitApp()}>
-        <Text style={styles.exitFabText}>AVSLUTA</Text>
+      <Pressable 
+        style={[
+          styles.exitFab, 
+          backgroundGPS ? { backgroundColor: "#2da833" } : { backgroundColor: "#757575" }
+        ]} 
+        onPress={toggleBackgroundGPS}
+      >
+        <Text style={styles.exitFabText}>AUTO-GPS</Text>
       </Pressable>
 
       <Modal transparent visible={showImportMenu} onRequestClose={() => setShowImportMenu(false)} animationType="fade">
@@ -819,18 +815,20 @@ const styles = StyleSheet.create({
     position: "absolute",
     bottom: 44,
     alignSelf: "center",
-    paddingHorizontal: 14,
+    paddingHorizontal: 18,
     height: 42,
     borderRadius: 21,
-    backgroundColor: "#4a4a4a",
+    // backgroundColor sätts direkt i Pressable ovan
     justifyContent: "center",
     alignItems: "center",
+    elevation: 5,   // Gör att den syns på Android
+    zIndex: 1000,   // Gör att den syns över kartan
   },
   exitFabText: {
     color: "#fff",
-    fontWeight: "800",
+    fontWeight: "900",
     fontSize: 12,
-    letterSpacing: 0.5,
+    letterSpacing: 1,
   },
   modalBackdrop: {
     flex: 1,
