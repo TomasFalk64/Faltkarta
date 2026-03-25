@@ -49,7 +49,7 @@ if (!TaskManager.isTaskDefined(GPS_BACK_TASK)) {
   });
 }
 
-export function useGps({ pingSeconds, backgroundGPS }: UseGpsOptions): UseGpsResult {
+export function useGps({ pingSeconds, backgroundGPS, onBackgroundDenied }: UseGpsOptions): UseGpsResult {
   const [gpsPos, setGpsPos] = useState<LatLon | null>(null);
   const [rawAccuracyMeters, setRawAccuracyMeters] = useState<number | null>(null);
   const [displayAccuracyMeters, setDisplayAccuracyMeters] = useState<number | null>(null);
@@ -213,7 +213,6 @@ export function useGps({ pingSeconds, backgroundGPS }: UseGpsOptions): UseGpsRes
 
   useEffect(() => {
     if (!permissionGranted) return;
-    let sub: { remove: () => void } | null = null;
     let cancelled = false;
 
     const stopBackgroundUpdates = async () => {
@@ -232,7 +231,7 @@ export function useGps({ pingSeconds, backgroundGPS }: UseGpsOptions): UseGpsRes
         foregroundWatchRef.current.remove();
         foregroundWatchRef.current = null;
       }
-      sub = await Location.watchPositionAsync(
+      const next = await Location.watchPositionAsync(
         {
           accuracy: Location.Accuracy.BestForNavigation,
           timeInterval: Math.max(1, pingSeconds) * 1000,
@@ -250,7 +249,7 @@ export function useGps({ pingSeconds, backgroundGPS }: UseGpsOptions): UseGpsRes
           });
         }
       );
-      foregroundWatchRef.current = sub;
+      foregroundWatchRef.current = next;
     };
 
     const startBackgroundUpdates = async () => {
@@ -288,7 +287,8 @@ export function useGps({ pingSeconds, backgroundGPS }: UseGpsOptions): UseGpsRes
           await startForegroundWatch();
         }
       } else {
-        sub?.remove();
+        foregroundWatchRef.current?.remove();
+        foregroundWatchRef.current = null;
       }
     })().catch((e) => {
       if (!cancelled) setError(String(e));
@@ -296,10 +296,8 @@ export function useGps({ pingSeconds, backgroundGPS }: UseGpsOptions): UseGpsRes
 
     return () => {
       cancelled = true;
-      sub?.remove();
-      if (foregroundWatchRef.current === sub) {
-        foregroundWatchRef.current = null;
-      }
+      foregroundWatchRef.current?.remove();
+      foregroundWatchRef.current = null;
     };
   }, [appState, backgroundAllowed, backgroundGPS, handleSample, permissionGranted, pingSeconds]);
 

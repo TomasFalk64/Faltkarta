@@ -7,7 +7,7 @@ const DEFAULT_BBOX = {
   maxLat: 69.5,
   maxLon: 24.2,
 };
-const DISPLAY_EPSG = 3857;
+const DISPLAY_EPSG_3857 = 3857;
 const WEB_MERCATOR_DEF =
   "+proj=merc +a=6378137 +b=6378137 +lat_ts=0.0 +lon_0=0.0 +x_0=0.0 +y_0=0 +k=1.0 +units=m +nadgrids=@null +no_defs";
 const SWEREF99_TM_DEF =
@@ -55,9 +55,14 @@ export function latLonToImagePoint(
   imageHeight: number
 ): { x: number; y: number } {
   if (map.georef) {
-    const display = projectCoords("EPSG:4326", `EPSG:${DISPLAY_EPSG}`, point.lon, point.lat);
+    const display = projectCoords("EPSG:4326", `EPSG:${DISPLAY_EPSG_3857}`, point.lon, point.lat);
     if (display) {
-      const source = projectCoords(`EPSG:${DISPLAY_EPSG}`, `EPSG:${map.georef.sourceEpsg}`, display.x, display.y);
+      const source = projectCoords(
+        `EPSG:${DISPLAY_EPSG_3857}`,
+        `EPSG:${map.georef.sourceEpsg}`,
+        display.x,
+        display.y
+      );
       if (source) {
         const pixel = sourceToPixel(map.georef.pixelToSource, source.x, source.y);
         if (pixel) {
@@ -69,8 +74,8 @@ export function latLonToImagePoint(
       }
     }
   }
-  const display = projectCoords("EPSG:4326", `EPSG:${DISPLAY_EPSG}`, point.lon, point.lat);
-  const bounds = getDisplayBounds(map);
+  const display = projectCoords("EPSG:4326", `EPSG:${DISPLAY_EPSG_3857}`, point.lon, point.lat);
+  const bounds = getDisplayBounds3857(map);
   if (display && bounds) {
     const x = ((display.x - bounds.minX) / (bounds.maxX - bounds.minX)) * imageWidth;
     const y = ((bounds.maxY - display.y) / (bounds.maxY - bounds.minY)) * imageHeight;
@@ -91,19 +96,19 @@ export function imagePointToLatLon(
       y: (point.y / imageHeight) * map.georef.imageHeight,
     };
     const source = pixelToSource(map.georef.pixelToSource, srcPx.x, srcPx.y);
-    const display = projectCoords(`EPSG:${map.georef.sourceEpsg}`, `EPSG:${DISPLAY_EPSG}`, source.x, source.y);
+    const display = projectCoords(`EPSG:${map.georef.sourceEpsg}`, `EPSG:${DISPLAY_EPSG_3857}`, source.x, source.y);
     const wgs84 = display
-      ? projectCoords(`EPSG:${DISPLAY_EPSG}`, "EPSG:4326", display.x, display.y)
+      ? projectCoords(`EPSG:${DISPLAY_EPSG_3857}`, "EPSG:4326", display.x, display.y)
       : null;
     if (wgs84) {
       return { lat: wgs84.y, lon: wgs84.x };
     }
   }
-  const bounds = getDisplayBounds(map);
+  const bounds = getDisplayBounds3857(map);
   if (bounds) {
     const x = bounds.minX + (point.x / imageWidth) * (bounds.maxX - bounds.minX);
     const y = bounds.maxY - (point.y / imageHeight) * (bounds.maxY - bounds.minY);
-    const wgs84 = projectCoords(`EPSG:${DISPLAY_EPSG}`, "EPSG:4326", x, y);
+    const wgs84 = projectCoords(`EPSG:${DISPLAY_EPSG_3857}`, "EPSG:4326", x, y);
     if (wgs84) {
       return { lat: wgs84.y, lon: wgs84.x };
     }
@@ -111,26 +116,31 @@ export function imagePointToLatLon(
   return { lat: 0, lon: 0 };
 }
 
-export function wgs84ToDisplayMeters(point: LatLon): { x: number; y: number } | null {
-  return projectCoords("EPSG:4326", `EPSG:${DISPLAY_EPSG}`, point.lon, point.lat);
+export function wgs84ToMeters3857(point: LatLon): { x: number; y: number } | null {
+  return projectCoords("EPSG:4326", `EPSG:${DISPLAY_EPSG_3857}`, point.lon, point.lat);
 }
 
-export function displayMetersToSource(
+export function meters3857ToSource(
   map: MapItem,
-  display: { x: number; y: number }
+  meters3857: { x: number; y: number }
 ): { x: number; y: number } | null {
   if (!map.georef) return null;
-  return projectCoords(`EPSG:${DISPLAY_EPSG}`, `EPSG:${map.georef.sourceEpsg}`, display.x, display.y);
+  return projectCoords(
+    `EPSG:${DISPLAY_EPSG_3857}`,
+    `EPSG:${map.georef.sourceEpsg}`,
+    meters3857.x,
+    meters3857.y
+  );
 }
 
-export function sourceToImagePoint(
+export function sourceCrsToImagePoint(
   map: MapItem,
-  source: { x: number; y: number },
+  sourceCrs: { x: number; y: number },
   imageWidth: number,
   imageHeight: number
 ): { x: number; y: number } | null {
   if (!map.georef) return null;
-  const pixel = sourceToPixel(map.georef.pixelToSource, source.x, source.y);
+  const pixel = sourceToPixel(map.georef.pixelToSource, sourceCrs.x, sourceCrs.y);
   if (!pixel) return null;
   return {
     x: (pixel.x / map.georef.imageWidth) * imageWidth,
@@ -138,14 +148,14 @@ export function sourceToImagePoint(
   };
 }
 
-export function displayMetersToImagePoint(
-  displayBounds: { minX: number; minY: number; maxX: number; maxY: number },
-  display: { x: number; y: number },
+export function meters3857ToImagePoint(
+  bounds3857: { minX: number; minY: number; maxX: number; maxY: number },
+  meters3857: { x: number; y: number },
   imageWidth: number,
   imageHeight: number
 ): { x: number; y: number } {
-  const x = ((display.x - displayBounds.minX) / (displayBounds.maxX - displayBounds.minX)) * imageWidth;
-  const y = ((displayBounds.maxY - display.y) / (displayBounds.maxY - displayBounds.minY)) * imageHeight;
+  const x = ((meters3857.x - bounds3857.minX) / (bounds3857.maxX - bounds3857.minX)) * imageWidth;
+  const y = ((bounds3857.maxY - meters3857.y) / (bounds3857.maxY - bounds3857.minY)) * imageHeight;
   return { x, y };
 }
 
@@ -186,15 +196,15 @@ function projectCoords(fromCrs: string, toCrs: string, x: number, y: number): { 
   }
 }
 
-export function getDisplayBounds(
+export function getDisplayBounds3857(
   map: MapItem
 ): { minX: number; minY: number; maxX: number; maxY: number } | null {
   const bounds = getMapBounds(map);
   const corners = [
-    projectCoords("EPSG:4326", `EPSG:${DISPLAY_EPSG}`, bounds.minLon, bounds.minLat),
-    projectCoords("EPSG:4326", `EPSG:${DISPLAY_EPSG}`, bounds.minLon, bounds.maxLat),
-    projectCoords("EPSG:4326", `EPSG:${DISPLAY_EPSG}`, bounds.maxLon, bounds.minLat),
-    projectCoords("EPSG:4326", `EPSG:${DISPLAY_EPSG}`, bounds.maxLon, bounds.maxLat),
+    projectCoords("EPSG:4326", `EPSG:${DISPLAY_EPSG_3857}`, bounds.minLon, bounds.minLat),
+    projectCoords("EPSG:4326", `EPSG:${DISPLAY_EPSG_3857}`, bounds.minLon, bounds.maxLat),
+    projectCoords("EPSG:4326", `EPSG:${DISPLAY_EPSG_3857}`, bounds.maxLon, bounds.minLat),
+    projectCoords("EPSG:4326", `EPSG:${DISPLAY_EPSG_3857}`, bounds.maxLon, bounds.maxLat),
   ].filter((p): p is { x: number; y: number } => !!p);
 
   if (corners.length < 4) return null;

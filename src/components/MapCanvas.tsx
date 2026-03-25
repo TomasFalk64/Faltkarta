@@ -5,11 +5,11 @@ import {
   imagePointToLatLon,
   isCoordInsideMapBounds,
   latLonToImagePoint,
-  getDisplayBounds,
-  wgs84ToDisplayMeters,
-  displayMetersToSource,
-  sourceToImagePoint,
-  displayMetersToImagePoint,
+  getDisplayBounds3857,
+  wgs84ToMeters3857,
+  meters3857ToSource,
+  sourceCrsToImagePoint,
+  meters3857ToImagePoint,
 } from "../services/mapProjection";
 import { LatLon, MapItem, Observation } from "../types/models";
 
@@ -26,9 +26,9 @@ type Props = {
   onPressPoint?: (observationId: string) => void;
 };
 
-type ProjectedPoint = {
-  display: { x: number; y: number };
-  source: { x: number; y: number } | null;
+type ProjectedPoint3857 = {
+  meters3857: { x: number; y: number };
+  sourceCrs: { x: number; y: number } | null;
 };
 
 const VIRTUAL_IMAGE_WIDTH = 1200;
@@ -57,7 +57,6 @@ export function MapCanvas({
   const [drag, setDrag] = useState({ x: 0, y: 0 });
   const [scale, setScale] = useState(1);
 
-  const panStepRef = useRef({ x: 0, y: 0 });
   const modeRef = useRef<"none" | "pan" | "pinch">("none");
   const pinchRef = useRef({ startDistance: 1, startScale: 1 });
   const centerRef = useRef(centerCoord);
@@ -72,10 +71,10 @@ export function MapCanvas({
     scaleRef.current = scale;
   }, [scale]);
 
-  const displayBounds = useMemo(() => getDisplayBounds(map), [map]);
+  const displayBounds3857 = useMemo(() => getDisplayBounds3857(map), [map]);
 
   const virtualSize = useMemo(() => {
-    const bounds = displayBounds;
+    const bounds = displayBounds3857;
     if (!bounds) return { width: VIRTUAL_IMAGE_WIDTH, height: VIRTUAL_IMAGE_HEIGHT };
     const widthMeters = bounds.maxX - bounds.minX;
     const heightMeters = bounds.maxY - bounds.minY;
@@ -90,7 +89,7 @@ export function MapCanvas({
       width: VIRTUAL_IMAGE_WIDTH,
       height: VIRTUAL_IMAGE_WIDTH / mapAspectRatio,
     };
-  }, [displayBounds]);
+  }, [displayBounds3857]);
 
   const centerImagePoint = useMemo(
     () => latLonToImagePoint(map, centerCoord, virtualSize.width, virtualSize.height),
@@ -101,48 +100,56 @@ export function MapCanvas({
 
   const toLocalPoint = useMemo(
     () =>
-      (p: ProjectedPoint) => {
-        if (map.georef && p.source) {
-          const px = sourceToImagePoint(map, p.source, virtualSize.width, virtualSize.height);
+      (p: ProjectedPoint3857) => {
+        if (map.georef && p.sourceCrs) {
+          const px = sourceCrsToImagePoint(map, p.sourceCrs, virtualSize.width, virtualSize.height);
           return px ?? { x: 0, y: 0 };
         }
-        if (!map.georef && displayBounds) {
-          return displayMetersToImagePoint(displayBounds, p.display, virtualSize.width, virtualSize.height);
+        if (!map.georef && displayBounds3857) {
+          return meters3857ToImagePoint(displayBounds3857, p.meters3857, virtualSize.width, virtualSize.height);
         }
         return { x: 0, y: 0 };
       },
-    [map, displayBounds, virtualSize.width, virtualSize.height]
+    [map, displayBounds3857, virtualSize.width, virtualSize.height]
   );
 
   const gpsPosProjected = useMemo(() => {
     if (!gpsPos) return null;
-    const display = wgs84ToDisplayMeters(gpsPos);
-    if (!display) return null;
-    const source = map.georef ? displayMetersToSource(map, display) : null;
-    return { display, source };
+    const meters3857 = wgs84ToMeters3857(gpsPos);
+    if (!meters3857) return null;
+    const sourceCrs = map.georef ? meters3857ToSource(map, meters3857) : null;
+    return { meters3857, sourceCrs };
   }, [gpsPos, map]);
 
   const projectedPoints = useMemo(() => {
     return pointMarkers
       .map((obs) => {
-        const display = wgs84ToDisplayMeters(obs.wgs84);
-        if (!display) return null;
-        const source = map.georef ? displayMetersToSource(map, display) : null;
-        return { obs, display, source };
+        const meters3857 = wgs84ToMeters3857(obs.wgs84);
+        if (!meters3857) return null;
+        const sourceCrs = map.georef ? meters3857ToSource(map, meters3857) : null;
+        if (map.georef && !sourceCrs) return null;
+        return { obs, meters3857, sourceCrs };
       })
-      .filter((item): item is { obs: (typeof pointMarkers)[number]; display: ProjectedPoint["display"]; source: ProjectedPoint["source"] } => !!item);
+      .filter(
+        (item): item is {
+          obs: (typeof pointMarkers)[number];
+          meters3857: ProjectedPoint3857["meters3857"];
+          sourceCrs: ProjectedPoint3857["sourceCrs"];
+        } => !!item
+      );
   }, [pointMarkers, map]);
 
   const projectedPolygons = useMemo(() => {
     return polygonObs.map((obs) => {
       const points = obs.wgs84
         .map((p) => {
-          const display = wgs84ToDisplayMeters(p);
-          if (!display) return null;
-          const source = map.georef ? displayMetersToSource(map, display) : null;
-          return { display, source };
+          const meters3857 = wgs84ToMeters3857(p);
+          if (!meters3857) return null;
+          const sourceCrs = map.georef ? meters3857ToSource(map, meters3857) : null;
+          if (map.georef && !sourceCrs) return null;
+          return { meters3857, sourceCrs };
         })
-        .filter((p): p is ProjectedPoint => !!p);
+        .filter((p): p is ProjectedPoint3857 => !!p);
       return { obs, points };
     });
   }, [polygonObs, map]);
@@ -150,12 +157,13 @@ export function MapCanvas({
   const projectedDraftPolygon = useMemo(() => {
     return draftPolygon
       .map((p) => {
-        const display = wgs84ToDisplayMeters(p);
-        if (!display) return null;
-        const source = map.georef ? displayMetersToSource(map, display) : null;
-        return { display, source };
+        const meters3857 = wgs84ToMeters3857(p);
+        if (!meters3857) return null;
+        const sourceCrs = map.georef ? meters3857ToSource(map, meters3857) : null;
+        if (map.georef && !sourceCrs) return null;
+        return { meters3857, sourceCrs };
       })
-      .filter((p): p is ProjectedPoint => !!p);
+      .filter((p): p is ProjectedPoint3857 => !!p);
   }, [draftPolygon, map]);
 
   const gpsPoint = gpsPosProjected ? toLocalPoint(gpsPosProjected) : null;
@@ -178,7 +186,7 @@ export function MapCanvas({
   const gpsBorderWidth = clamp(1.5 / safeScale, 0.8 / safeScale, 2.0 / safeScale);
   const scaleBar = useMemo(() => {
     if (!showScaleBar) return null;
-    const bounds = displayBounds;
+    const bounds = displayBounds3857;
     if (!bounds) return null;
     const widthMeters = bounds.maxX - bounds.minX;
     if (!Number.isFinite(widthMeters) || widthMeters <= 0) return null;
@@ -190,7 +198,7 @@ export function MapCanvas({
       label: `${Math.round(niceMeters)} m`,
       widthPx: barWidthPx,
     };
-  }, [displayBounds, scale, showScaleBar, virtualSize.width]);
+  }, [displayBounds3857, scale, showScaleBar, virtualSize.width]);
 
   const panResponder = useMemo(
     () =>
@@ -208,7 +216,6 @@ export function MapCanvas({
             };
           } else {
             modeRef.current = "pan";
-            panStepRef.current = { x: 0, y: 0 };
           }
         },
         onPanResponderMove: (evt, gs) => {
@@ -227,7 +234,6 @@ export function MapCanvas({
             setScale(clamp(pinchRef.current.startScale * ratio, 0.5, 4));
             return;
           }
-          panStepRef.current = { x: gs.dx, y: gs.dy };
           setDrag({ x: gs.dx, y: gs.dy });
           if (!touchedPanRef.current) {
             onManualPan();
@@ -255,12 +261,10 @@ export function MapCanvas({
             setDrag({ x: 0, y: 0 });
           }
           modeRef.current = "none";
-          panStepRef.current = { x: 0, y: 0 };
           touchedPanRef.current = false;
         },
         onPanResponderTerminate: () => {
           modeRef.current = "none";
-          panStepRef.current = { x: 0, y: 0 };
           touchedPanRef.current = false;
           setDrag({ x: 0, y: 0 });
         },
@@ -276,6 +280,7 @@ export function MapCanvas({
 
   return (
     <View style={styles.wrapper} {...panResponder.panHandlers}>
+      {!displayBounds3857 ? null : (
       <View
         style={[
           styles.layer,
@@ -295,11 +300,11 @@ export function MapCanvas({
         {imageUri ? (
           <Image
             source={{ uri: imageUri }}
-            style={[styles.image, { width: virtualSize.width, height: virtualSize.height }]}
+            style={{ width: virtualSize.width, height: virtualSize.height }}
             resizeMode="stretch"
           />
         ) : (
-          <View style={[styles.image, styles.placeholder, { width: virtualSize.width, height: virtualSize.height }]}>
+          <View style={[styles.placeholder, { width: virtualSize.width, height: virtualSize.height }]}>
             <Text style={styles.placeholderText}>Kunde inte visa GeoTIFF-preview</Text>
             <Text style={styles.placeholderSubtext}>Importera kartan igen med en enklare GeoTIFF</Text>
           </View>
@@ -354,9 +359,9 @@ export function MapCanvas({
           />
         )}
 
-        {projectedPoints.map(({ obs, display, source }) => {
+        {projectedPoints.map(({ obs, meters3857, sourceCrs }) => {
           if (obs.kind !== "point") return null;
-          const pt = toLocalPoint({ display, source });
+          const pt = toLocalPoint({ meters3857, sourceCrs });
           return (
             <Pressable
               key={obs.id}
@@ -386,13 +391,16 @@ export function MapCanvas({
           );
         })}
       </View>
+      )}
 
-      <View pointerEvents="none" style={styles.crosshair}>
-        <View style={styles.crosshairH} />
-        <View style={styles.crosshairV} />
-      </View>
+      {!displayBounds3857 ? null : (
+        <View pointerEvents="none" style={styles.crosshair}>
+          <View style={styles.crosshairH} />
+          <View style={styles.crosshairV} />
+        </View>
+      )}
 
-      {scaleBar && (
+      {!displayBounds3857 || !scaleBar ? null : (
         <View style={styles.scaleBarWrap}>
           <Text style={styles.scaleBarText}>{scaleBar.label}</Text>
           <View style={[styles.scaleBar, { width: scaleBar.widthPx }]} />
@@ -434,8 +442,6 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: "50%",
     top: "50%",
-  },
-  image: {
   },
   placeholder: {
     backgroundColor: "#22323b",
