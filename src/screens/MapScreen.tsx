@@ -509,7 +509,7 @@ export function MapScreen({ route, navigation }: Props) {
         visible={showPolygonModal}
         onClose={() => setShowPolygonModal(false)}
         onSave={onAddPolygon}
-        title="Ny polygonobservation"
+        title="Ny polygon"
         sessionToken={polygonModalSession}
         speciesPlaceholder="Polygonnamn"
         kind="polygon"

@@ -14,7 +14,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
 import * as ImagePicker from "expo-image-picker";
-import { speciesList } from "../data/species";
+import { speciesInfo } from "../data/species_info";
 import { addUserSpecies, loadUserSpecies } from "../storage/storage";
 
 type ModalPayload = {
@@ -71,6 +71,7 @@ export function ObservationModal({
   const isSubmittingRef = useRef(false);
   const [pendingNewSpecies, setPendingNewSpecies] = useState<string | null>(null);
   const isPolygon = kind === "polygon";
+  const [showSpeciesInfo, setShowSpeciesInfo] = useState(false);
 
   useEffect(() => {
     if (sessionToken !== undefined) {
@@ -89,6 +90,7 @@ export function ObservationModal({
             ? ""
             : String(initialValues.accuracyMeters)
         );
+        setShowSpeciesInfo(false);
         lastSessionTokenRef.current = sessionToken;
       }
       wasVisibleRef.current = visible;
@@ -111,6 +113,7 @@ export function ObservationModal({
           ? ""
           : String(initialValues.accuracyMeters)
       );
+      setShowSpeciesInfo(false);
     }
     wasVisibleRef.current = visible;
   }, [initialValues, isPolygon, sessionToken, visible]);
@@ -133,7 +136,7 @@ export function ObservationModal({
 
   const combinedSpecies = useMemo(() => {
     const byLower = new Map<string, string>();
-    speciesList.forEach((s) => {
+    Object.keys(speciesInfo).forEach((s) => {
       const key = s.toLowerCase();
       if (!byLower.has(key)) byLower.set(key, s);
     });
@@ -143,6 +146,34 @@ export function ObservationModal({
     });
     return Array.from(byLower.values());
   }, [userSpecies]);
+
+  const speciesInfoByLower = useMemo(() => {
+    const map = new Map<string, { redList: string; speciesInfo: string }>();
+    Object.entries(speciesInfo).forEach(([name, info]) => {
+      map.set(name.toLowerCase(), info);
+    });
+    return map;
+  }, []);
+
+  const selectedInfo = useMemo(() => {
+    if (!species) return null;
+    const direct = speciesInfo[species];
+    if (direct) return direct;
+    return speciesInfoByLower.get(species.toLowerCase()) ?? null;
+  }, [species, speciesInfoByLower]);
+
+  const selectedRedList = (selectedInfo?.redList ?? "")
+    .toUpperCase()
+    .replace(/[\s\u00A0]+/g, "");
+  const redListColors: Record<string, string> = {
+    CR: "#8b0000",
+    EN: "#c1121f",
+    VU: "#d24d25",
+    NT: "#e76f00",
+    DD: "#6b7280",
+    LC: "#172121",
+  };
+  const selectedSpeciesInfo = selectedInfo?.speciesInfo ?? "";
 
   const suggestions = useMemo(() => {
     const q = species.trim().toLowerCase();
@@ -178,6 +209,7 @@ export function ObservationModal({
     setPhotoAssetIds([]);
     setLocalName("");
     setAccuracyMeters("");
+    setShowSpeciesInfo(false);
     onClose();
   }
 
@@ -279,17 +311,45 @@ export function ObservationModal({
                 style={styles.scroll}
                 contentContainerStyle={styles.scrollContent}
               >
-            <TextInput
-              value={species}
-              onChangeText={(text) => {
-                setSpecies(text); // Uppdatera texten
-                setIsShowingSuggestions(true);
-              }}
-              onFocus={() => setIsShowingSuggestions(true)}
-              onBlur={() => setTimeout(() => setIsShowingSuggestions(false), 120)}
-              placeholder={speciesPlaceholder}
-              style={styles.input}
-            />
+            <View style={styles.speciesRow}>
+              <TextInput
+                value={species}
+                onChangeText={(text) => {
+                  setSpecies(text); // Uppdatera texten
+                  setIsShowingSuggestions(true);
+                }}
+                onFocus={() => setIsShowingSuggestions(true)}
+                onBlur={() => setTimeout(() => setIsShowingSuggestions(false), 120)}
+                placeholder={speciesPlaceholder}
+                style={[styles.input, styles.speciesInput]}
+              />
+              <Pressable
+                onPress={() => setShowSpeciesInfo((v) => !v)}
+                style={[
+                  styles.redListBadge,
+                  {
+                    backgroundColor: selectedRedList
+                      ? selectedRedList === "LC"
+                        ? "#1b5e3a"
+                        : selectedRedList === "NT"
+                          ? "#d97706"
+                          : selectedRedList === "VU"
+                            ? "#c2410c"
+                            : "#b91c1c"
+                      : "#e3e6ea",
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.redListBadgeText,
+                    { color: "#ffffff" },
+                  ]}
+                >
+                  {selectedRedList}
+                </Text>
+              </Pressable>
+            </View>
             {isShowingSuggestions && suggestions.length > 0 && (
               <View style={styles.suggestions}>
                 {suggestions.map((item) => (
@@ -297,6 +357,7 @@ export function ObservationModal({
                     key={item} 
                     onPress={() => {
                       setSpecies(item);
+                      setShowSpeciesInfo(false);
                       setIsShowingSuggestions(false); // StÃ¤ng menyn vid val
                     }} 
                     style={styles.suggestionItem}
@@ -306,6 +367,13 @@ export function ObservationModal({
                 ))}
               </View>
             )}
+            {!isPolygon && showSpeciesInfo ? (
+              <View style={styles.infoCard}>
+                <Text style={styles.infoText}>
+                  {selectedSpeciesInfo || "Information om arten saknas"}
+                </Text>
+              </View>
+            ) : null}
             <TextInput
               value={notes}
               onChangeText={setNotes}
@@ -473,6 +541,38 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     fontSize: 16,
     color: "#172121",
+  },
+  speciesRow: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: 8,
+  },
+  speciesInput: {
+    flex: 1,
+    height: 46,
+  },
+  redListBadge: {
+    minWidth: 44,
+    height: 46,
+    borderRadius: 8,
+    backgroundColor: "#e3e6ea",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 8,
+  },
+  redListBadgeText: {
+    fontWeight: "800",
+    fontSize: 14,
+  },
+  infoCard: {
+    backgroundColor: "#f5f7f9",
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 8,
+  },
+  infoText: {
+    color: "#23313a",
+    lineHeight: 18,
   },
   notes: {
     minHeight: 80,
