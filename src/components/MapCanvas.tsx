@@ -5,7 +5,11 @@ import {
   imagePointToLatLon,
   isCoordInsideMapBounds,
   latLonToImagePoint,
-  getMapBounds,
+  getDisplayBounds,
+  wgs84ToDisplayMeters,
+  displayMetersToSource,
+  sourceToImagePoint,
+  displayMetersToImagePoint,
 } from "../services/mapProjection";
 import { LatLon, MapItem, Observation } from "../types/models";
 
@@ -20,6 +24,11 @@ type Props = {
   onPanGeoDelta: (deltaLat: number, deltaLon: number) => void;
   onManualPan: () => void;
   onPressPoint?: (observationId: string) => void;
+};
+
+type ProjectedPoint = {
+  display: { x: number; y: number };
+  source: { x: number; y: number } | null;
 };
 
 const VIRTUAL_IMAGE_WIDTH = 1200;
@@ -63,19 +72,93 @@ export function MapCanvas({
     scaleRef.current = scale;
   }, [scale]);
 
+  const displayBounds = useMemo(() => getDisplayBounds(map), [map]);
+
+  const virtualSize = useMemo(() => {
+    const bounds = displayBounds;
+    if (!bounds) return { width: VIRTUAL_IMAGE_WIDTH, height: VIRTUAL_IMAGE_HEIGHT };
+    const widthMeters = bounds.maxX - bounds.minX;
+    const heightMeters = bounds.maxY - bounds.minY;
+    if (!Number.isFinite(widthMeters) || !Number.isFinite(heightMeters) || widthMeters <= 0 || heightMeters <= 0) {
+      return { width: VIRTUAL_IMAGE_WIDTH, height: VIRTUAL_IMAGE_HEIGHT };
+    }
+    const mapAspectRatio = widthMeters / heightMeters;
+    if (!Number.isFinite(mapAspectRatio) || mapAspectRatio <= 0) {
+      return { width: VIRTUAL_IMAGE_WIDTH, height: VIRTUAL_IMAGE_HEIGHT };
+    }
+    return {
+      width: VIRTUAL_IMAGE_WIDTH,
+      height: VIRTUAL_IMAGE_WIDTH / mapAspectRatio,
+    };
+  }, [displayBounds]);
+
   const centerImagePoint = useMemo(
-    () => latLonToImagePoint(map, centerCoord, VIRTUAL_IMAGE_WIDTH, VIRTUAL_IMAGE_HEIGHT),
-    [map, centerCoord]
+    () => latLonToImagePoint(map, centerCoord, virtualSize.width, virtualSize.height),
+    [map, centerCoord, virtualSize.width, virtualSize.height]
   );
-  const committedShiftX = VIRTUAL_IMAGE_WIDTH / 2 - centerImagePoint.x;
-  const committedShiftY = VIRTUAL_IMAGE_HEIGHT / 2 - centerImagePoint.y;
+  const committedShiftX = virtualSize.width / 2 - centerImagePoint.x;
+  const committedShiftY = virtualSize.height / 2 - centerImagePoint.y;
 
   const toLocalPoint = useMemo(
-    () => (p: LatLon) => latLonToImagePoint(map, p, VIRTUAL_IMAGE_WIDTH, VIRTUAL_IMAGE_HEIGHT),
-    [map]
+    () =>
+      (p: ProjectedPoint) => {
+        if (map.georef && p.source) {
+          const px = sourceToImagePoint(map, p.source, virtualSize.width, virtualSize.height);
+          return px ?? { x: 0, y: 0 };
+        }
+        if (!map.georef && displayBounds) {
+          return displayMetersToImagePoint(displayBounds, p.display, virtualSize.width, virtualSize.height);
+        }
+        return { x: 0, y: 0 };
+      },
+    [map, displayBounds, virtualSize.width, virtualSize.height]
   );
 
-  const gpsPoint = gpsPos && isCoordInsideMapBounds(map, gpsPos) ? toLocalPoint(gpsPos) : null;
+  const gpsPosProjected = useMemo(() => {
+    if (!gpsPos) return null;
+    const display = wgs84ToDisplayMeters(gpsPos);
+    if (!display) return null;
+    const source = map.georef ? displayMetersToSource(map, display) : null;
+    return { display, source };
+  }, [gpsPos, map]);
+
+  const projectedPoints = useMemo(() => {
+    return pointMarkers
+      .map((obs) => {
+        const display = wgs84ToDisplayMeters(obs.wgs84);
+        if (!display) return null;
+        const source = map.georef ? displayMetersToSource(map, display) : null;
+        return { obs, display, source };
+      })
+      .filter((item): item is { obs: (typeof pointMarkers)[number]; display: ProjectedPoint["display"]; source: ProjectedPoint["source"] } => !!item);
+  }, [pointMarkers, map]);
+
+  const projectedPolygons = useMemo(() => {
+    return polygonObs.map((obs) => {
+      const points = obs.wgs84
+        .map((p) => {
+          const display = wgs84ToDisplayMeters(p);
+          if (!display) return null;
+          const source = map.georef ? displayMetersToSource(map, display) : null;
+          return { display, source };
+        })
+        .filter((p): p is ProjectedPoint => !!p);
+      return { obs, points };
+    });
+  }, [polygonObs, map]);
+
+  const projectedDraftPolygon = useMemo(() => {
+    return draftPolygon
+      .map((p) => {
+        const display = wgs84ToDisplayMeters(p);
+        if (!display) return null;
+        const source = map.georef ? displayMetersToSource(map, display) : null;
+        return { display, source };
+      })
+      .filter((p): p is ProjectedPoint => !!p);
+  }, [draftPolygon, map]);
+
+  const gpsPoint = gpsPosProjected ? toLocalPoint(gpsPosProjected) : null;
   const safeScale = Math.max(0.01, scale);
   const gpsDotSize = clamp(
     TARGET_DOT_SCREEN_SIZE / safeScale,
@@ -95,13 +178,11 @@ export function MapCanvas({
   const gpsBorderWidth = clamp(1.5 / safeScale, 0.8 / safeScale, 2.0 / safeScale);
   const scaleBar = useMemo(() => {
     if (!showScaleBar) return null;
-    const bounds = getMapBounds(map);
-    const midLat = (bounds.minLat + bounds.maxLat) / 2;
-    const widthMeters = metersBetween(
-      { lat: midLat, lon: bounds.minLon },
-      { lat: midLat, lon: bounds.maxLon }
-    );
-    const metersPerPixel = widthMeters / (VIRTUAL_IMAGE_WIDTH * scale);
+    const bounds = displayBounds;
+    if (!bounds) return null;
+    const widthMeters = bounds.maxX - bounds.minX;
+    if (!Number.isFinite(widthMeters) || widthMeters <= 0) return null;
+    const metersPerPixel = widthMeters / (virtualSize.width * scale);
     const metersFor100px = metersPerPixel * 100;
     const niceMeters = roundToNiceNumber(metersFor100px);
     const barWidthPx = Math.max(20, Math.round(niceMeters / metersPerPixel));
@@ -109,7 +190,7 @@ export function MapCanvas({
       label: `${Math.round(niceMeters)} m`,
       widthPx: barWidthPx,
     };
-  }, [map, scale, showScaleBar]);
+  }, [displayBounds, scale, showScaleBar, virtualSize.width]);
 
   const panResponder = useMemo(
     () =>
@@ -159,22 +240,12 @@ export function MapCanvas({
             const dy = gs.dy;
             if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) {
               const currentCenter = centerRef.current;
-              const currentCenterPx = latLonToImagePoint(
-                map,
-                currentCenter,
-                VIRTUAL_IMAGE_WIDTH,
-                VIRTUAL_IMAGE_HEIGHT
-              );
+              const currentCenterPx = latLonToImagePoint(map, currentCenter, virtualSize.width, virtualSize.height);
               const nextCenterPx = {
                 x: currentCenterPx.x - dx,
                 y: currentCenterPx.y - dy,
               };
-              const nextCenter = imagePointToLatLon(
-                map,
-                nextCenterPx,
-                VIRTUAL_IMAGE_WIDTH,
-                VIRTUAL_IMAGE_HEIGHT
-              );
+              const nextCenter = imagePointToLatLon(map, nextCenterPx, virtualSize.width, virtualSize.height);
               onPanGeoDelta(nextCenter.lat - currentCenter.lat, nextCenter.lon - currentCenter.lon);
               pendingDragResetRef.current = true;
             } else {
@@ -209,6 +280,10 @@ export function MapCanvas({
         style={[
           styles.layer,
           {
+            width: virtualSize.width,
+            height: virtualSize.height,
+            marginLeft: -virtualSize.width / 2,
+            marginTop: -virtualSize.height / 2,
             transform: [
               { scale },
               { translateX: committedShiftX + drag.x },
@@ -218,25 +293,26 @@ export function MapCanvas({
         ]}
       >
         {imageUri ? (
-          <Image source={{ uri: imageUri }} style={styles.image} resizeMode="stretch" />
+          <Image
+            source={{ uri: imageUri }}
+            style={[styles.image, { width: virtualSize.width, height: virtualSize.height }]}
+            resizeMode="stretch"
+          />
         ) : (
-          <View style={[styles.image, styles.placeholder]}>
+          <View style={[styles.image, styles.placeholder, { width: virtualSize.width, height: virtualSize.height }]}>
             <Text style={styles.placeholderText}>Kunde inte visa GeoTIFF-preview</Text>
             <Text style={styles.placeholderSubtext}>Importera kartan igen med en enklare GeoTIFF</Text>
           </View>
         )}
 
-        <Svg style={StyleSheet.absoluteFill} width={VIRTUAL_IMAGE_WIDTH} height={VIRTUAL_IMAGE_HEIGHT}>
-          {polygonObs.map((obs) => {
+        <Svg style={StyleSheet.absoluteFill} width={virtualSize.width} height={virtualSize.height}>
+          {projectedPolygons.map(({ obs, points }) => {
             if (obs.kind !== "polygon") return null;
-            const points = obs.wgs84
-              .map((p) => toLocalPoint(p))
-              .map((p) => `${p.x},${p.y}`)
-              .join(" ");
+            const polyline = points.map((p) => toLocalPoint(p)).map((p) => `${p.x},${p.y}`).join(" ");
             return (
               <Polyline
                 key={obs.id}
-                points={points}
+                points={polyline}
                 stroke="#ca6702"
                 strokeWidth={3}
                 fill="rgba(202,103,2,0.15)"
@@ -244,9 +320,9 @@ export function MapCanvas({
             );
           })}
 
-          {draftPolygon.length > 1 && (
+          {projectedDraftPolygon.length > 1 && (
             <Polyline
-              points={draftPolygon
+              points={projectedDraftPolygon
                 .map((p) => toLocalPoint(p))
                 .map((p) => `${p.x},${p.y}`)
                 .join(" ")}
@@ -256,7 +332,7 @@ export function MapCanvas({
             />
           )}
 
-          {draftPolygon.map((p, i) => {
+          {projectedDraftPolygon.map((p, i) => {
             const pt = toLocalPoint(p);
             return <Circle key={`draft-${i}`} cx={pt.x} cy={pt.y} r={5} fill="#0a9396" />;
           })}
@@ -278,9 +354,9 @@ export function MapCanvas({
           />
         )}
 
-        {pointMarkers.map((obs) => {
+        {projectedPoints.map(({ obs, display, source }) => {
           if (obs.kind !== "point") return null;
-          const pt = toLocalPoint(obs.wgs84);
+          const pt = toLocalPoint({ display, source });
           return (
             <Pressable
               key={obs.id}
@@ -336,18 +412,6 @@ function clamp(v: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, v));
 }
 
-function metersBetween(a: LatLon, b: LatLon): number {
-  const R = 6371000;
-  const lat1 = (a.lat * Math.PI) / 180;
-  const lat2 = (b.lat * Math.PI) / 180;
-  const dLat = lat2 - lat1;
-  const dLon = ((b.lon - a.lon) * Math.PI) / 180;
-  const sinDLat = Math.sin(dLat / 2);
-  const sinDLon = Math.sin(dLon / 2);
-  const h = sinDLat * sinDLat + Math.cos(lat1) * Math.cos(lat2) * sinDLon * sinDLon;
-  return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
-}
-
 function roundToNiceNumber(value: number): number {
   if (!Number.isFinite(value) || value <= 0) return 0;
   const pow = Math.pow(10, Math.floor(Math.log10(value)));
@@ -367,17 +431,11 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   layer: {
-    width: VIRTUAL_IMAGE_WIDTH,
-    height: VIRTUAL_IMAGE_HEIGHT,
     position: "absolute",
     left: "50%",
     top: "50%",
-    marginLeft: -VIRTUAL_IMAGE_WIDTH / 2,
-    marginTop: -VIRTUAL_IMAGE_HEIGHT / 2,
   },
   image: {
-    width: VIRTUAL_IMAGE_WIDTH,
-    height: VIRTUAL_IMAGE_HEIGHT,
   },
   placeholder: {
     backgroundColor: "#22323b",

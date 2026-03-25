@@ -7,10 +7,13 @@ const DEFAULT_BBOX = {
   maxLat: 69.5,
   maxLon: 24.2,
 };
-const DISPLAY_EPSG = 3006;
+const DISPLAY_EPSG = 3857;
+const WEB_MERCATOR_DEF =
+  "+proj=merc +a=6378137 +b=6378137 +lat_ts=0.0 +lon_0=0.0 +x_0=0.0 +y_0=0 +k=1.0 +units=m +nadgrids=@null +no_defs";
 const SWEREF99_TM_DEF =
   "+proj=utm +zone=33 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs";
 
+proj4.defs("EPSG:3857", WEB_MERCATOR_DEF);
 proj4.defs("EPSG:3006", SWEREF99_TM_DEF);
 
 export function getMapBounds(map: MapItem) {
@@ -66,10 +69,14 @@ export function latLonToImagePoint(
       }
     }
   }
-  const bounds = getMapBounds(map);
-  const x = ((point.lon - bounds.minLon) / (bounds.maxLon - bounds.minLon)) * imageWidth;
-  const y = ((bounds.maxLat - point.lat) / (bounds.maxLat - bounds.minLat)) * imageHeight;
-  return { x, y };
+  const display = projectCoords("EPSG:4326", `EPSG:${DISPLAY_EPSG}`, point.lon, point.lat);
+  const bounds = getDisplayBounds(map);
+  if (display && bounds) {
+    const x = ((display.x - bounds.minX) / (bounds.maxX - bounds.minX)) * imageWidth;
+    const y = ((bounds.maxY - display.y) / (bounds.maxY - bounds.minY)) * imageHeight;
+    return { x, y };
+  }
+  return { x: 0, y: 0 };
 }
 
 export function imagePointToLatLon(
@@ -92,10 +99,54 @@ export function imagePointToLatLon(
       return { lat: wgs84.y, lon: wgs84.x };
     }
   }
-  const bounds = getMapBounds(map);
-  const lon = bounds.minLon + (point.x / imageWidth) * (bounds.maxLon - bounds.minLon);
-  const lat = bounds.maxLat - (point.y / imageHeight) * (bounds.maxLat - bounds.minLat);
-  return { lat, lon };
+  const bounds = getDisplayBounds(map);
+  if (bounds) {
+    const x = bounds.minX + (point.x / imageWidth) * (bounds.maxX - bounds.minX);
+    const y = bounds.maxY - (point.y / imageHeight) * (bounds.maxY - bounds.minY);
+    const wgs84 = projectCoords(`EPSG:${DISPLAY_EPSG}`, "EPSG:4326", x, y);
+    if (wgs84) {
+      return { lat: wgs84.y, lon: wgs84.x };
+    }
+  }
+  return { lat: 0, lon: 0 };
+}
+
+export function wgs84ToDisplayMeters(point: LatLon): { x: number; y: number } | null {
+  return projectCoords("EPSG:4326", `EPSG:${DISPLAY_EPSG}`, point.lon, point.lat);
+}
+
+export function displayMetersToSource(
+  map: MapItem,
+  display: { x: number; y: number }
+): { x: number; y: number } | null {
+  if (!map.georef) return null;
+  return projectCoords(`EPSG:${DISPLAY_EPSG}`, `EPSG:${map.georef.sourceEpsg}`, display.x, display.y);
+}
+
+export function sourceToImagePoint(
+  map: MapItem,
+  source: { x: number; y: number },
+  imageWidth: number,
+  imageHeight: number
+): { x: number; y: number } | null {
+  if (!map.georef) return null;
+  const pixel = sourceToPixel(map.georef.pixelToSource, source.x, source.y);
+  if (!pixel) return null;
+  return {
+    x: (pixel.x / map.georef.imageWidth) * imageWidth,
+    y: (pixel.y / map.georef.imageHeight) * imageHeight,
+  };
+}
+
+export function displayMetersToImagePoint(
+  displayBounds: { minX: number; minY: number; maxX: number; maxY: number },
+  display: { x: number; y: number },
+  imageWidth: number,
+  imageHeight: number
+): { x: number; y: number } {
+  const x = ((display.x - displayBounds.minX) / (displayBounds.maxX - displayBounds.minX)) * imageWidth;
+  const y = ((displayBounds.maxY - display.y) / (displayBounds.maxY - displayBounds.minY)) * imageHeight;
+  return { x, y };
 }
 
 function pixelToSource(
@@ -133,4 +184,29 @@ function projectCoords(fromCrs: string, toCrs: string, x: number, y: number): { 
   } catch {
     return null;
   }
+}
+
+export function getDisplayBounds(
+  map: MapItem
+): { minX: number; minY: number; maxX: number; maxY: number } | null {
+  const bounds = getMapBounds(map);
+  const corners = [
+    projectCoords("EPSG:4326", `EPSG:${DISPLAY_EPSG}`, bounds.minLon, bounds.minLat),
+    projectCoords("EPSG:4326", `EPSG:${DISPLAY_EPSG}`, bounds.minLon, bounds.maxLat),
+    projectCoords("EPSG:4326", `EPSG:${DISPLAY_EPSG}`, bounds.maxLon, bounds.minLat),
+    projectCoords("EPSG:4326", `EPSG:${DISPLAY_EPSG}`, bounds.maxLon, bounds.maxLat),
+  ].filter((p): p is { x: number; y: number } => !!p);
+
+  if (corners.length < 4) return null;
+  const xs = corners.map((p) => p.x);
+  const ys = corners.map((p) => p.y);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+  if (!Number.isFinite(minX) || !Number.isFinite(maxX) || !Number.isFinite(minY) || !Number.isFinite(maxY)) {
+    return null;
+  }
+  if (minX === maxX || minY === maxY) return null;
+  return { minX, minY, maxX, maxY };
 }
