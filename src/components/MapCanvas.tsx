@@ -31,8 +31,7 @@ type ProjectedPoint3857 = {
   sourceCrs: { x: number; y: number } | null;
 };
 
-const VIRTUAL_IMAGE_WIDTH = 1200;
-const VIRTUAL_IMAGE_HEIGHT = 1200;
+const VIRTUAL_MAX_SIDE = 800;
 const TARGET_DOT_SCREEN_SIZE = 22;
 const MIN_DOT_SCREEN_SIZE = 18;
 const MAX_DOT_SCREEN_SIZE = 40;
@@ -56,11 +55,13 @@ export function MapCanvas({
   const polygonObs = useMemo(() => observations.filter((o) => o.kind === "polygon"), [observations]);
   const [drag, setDrag] = useState({ x: 0, y: 0 });
   const [scale, setScale] = useState(1);
+  const [viewSize, setViewSize] = useState({ width: 0, height: 0 });
 
   const modeRef = useRef<"none" | "pan" | "pinch">("none");
   const pinchRef = useRef({ startDistance: 1, startScale: 1 });
   const centerRef = useRef(centerCoord);
   const scaleRef = useRef(scale);
+  const minScaleRef = useRef(1);
   const touchedPanRef = useRef(false);
   const pendingDragResetRef = useRef(false);
 
@@ -75,21 +76,48 @@ export function MapCanvas({
 
   const virtualSize = useMemo(() => {
     const bounds = displayBounds3857;
-    if (!bounds) return { width: VIRTUAL_IMAGE_WIDTH, height: VIRTUAL_IMAGE_HEIGHT };
+    if (!bounds) return { width: VIRTUAL_MAX_SIDE, height: VIRTUAL_MAX_SIDE };
     const widthMeters = bounds.maxX - bounds.minX;
     const heightMeters = bounds.maxY - bounds.minY;
     if (!Number.isFinite(widthMeters) || !Number.isFinite(heightMeters) || widthMeters <= 0 || heightMeters <= 0) {
-      return { width: VIRTUAL_IMAGE_WIDTH, height: VIRTUAL_IMAGE_HEIGHT };
+      return { width: VIRTUAL_MAX_SIDE, height: VIRTUAL_MAX_SIDE };
     }
     const mapAspectRatio = widthMeters / heightMeters;
     if (!Number.isFinite(mapAspectRatio) || mapAspectRatio <= 0) {
-      return { width: VIRTUAL_IMAGE_WIDTH, height: VIRTUAL_IMAGE_HEIGHT };
+      return { width: VIRTUAL_MAX_SIDE, height: VIRTUAL_MAX_SIDE };
+    }
+    if (mapAspectRatio >= 1) {
+      return {
+        width: VIRTUAL_MAX_SIDE,
+        height: VIRTUAL_MAX_SIDE / mapAspectRatio,
+      };
     }
     return {
-      width: VIRTUAL_IMAGE_WIDTH,
-      height: VIRTUAL_IMAGE_WIDTH / mapAspectRatio,
+      width: VIRTUAL_MAX_SIDE * mapAspectRatio,
+      height: VIRTUAL_MAX_SIDE,
     };
   }, [displayBounds3857]);
+
+  const minScale = useMemo(
+    () => computeMinScale(viewSize.width, viewSize.height, virtualSize.width, virtualSize.height),
+    [viewSize.width, viewSize.height, virtualSize.width, virtualSize.height]
+  );
+
+  useEffect(() => {
+    if (!Number.isFinite(minScale)) return;
+    minScaleRef.current = minScale;
+    setScale((prev) => Math.max(prev, minScale));
+  }, [minScale]);
+
+  useEffect(() => {
+    if (!viewSize.width || !viewSize.height) return;
+    console.log("[MapCanvas] metrics", {
+      viewSize,
+      virtualSize,
+      minScale,
+      scale: scaleRef.current,
+    });
+  }, [viewSize.width, viewSize.height, virtualSize.width, virtualSize.height, minScale]);
 
   const centerImagePoint = useMemo(
     () => latLonToImagePoint(map, centerCoord, virtualSize.width, virtualSize.height),
@@ -231,10 +259,11 @@ export function MapCanvas({
             }
             const d = touchDistance(touches[0], touches[1]);
             const ratio = d / Math.max(1, pinchRef.current.startDistance);
-            setScale(clamp(pinchRef.current.startScale * ratio, 0.5, 4));
+            setScale(clamp(pinchRef.current.startScale * ratio, minScaleRef.current, 4));
             return;
           }
-          setDrag({ x: gs.dx, y: gs.dy });
+          const currentScale = Math.max(0.01, scaleRef.current);
+          setDrag({ x: gs.dx / currentScale, y: gs.dy / currentScale });
           if (!touchedPanRef.current) {
             onManualPan();
             touchedPanRef.current = true;
@@ -246,10 +275,11 @@ export function MapCanvas({
             const dy = gs.dy;
             if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) {
               const currentCenter = centerRef.current;
+              const currentScale = Math.max(0.01, scaleRef.current);
               const currentCenterPx = latLonToImagePoint(map, currentCenter, virtualSize.width, virtualSize.height);
               const nextCenterPx = {
-                x: currentCenterPx.x - dx,
-                y: currentCenterPx.y - dy,
+                x: currentCenterPx.x - dx / currentScale,
+                y: currentCenterPx.y - dy / currentScale,
               };
               const nextCenter = imagePointToLatLon(map, nextCenterPx, virtualSize.width, virtualSize.height);
               onPanGeoDelta(nextCenter.lat - currentCenter.lat, nextCenter.lon - currentCenter.lon);
@@ -279,7 +309,23 @@ export function MapCanvas({
   }, [centerCoord]);
 
   return (
-    <View style={styles.wrapper} {...panResponder.panHandlers}>
+    <View
+      style={styles.wrapper}
+      {...panResponder.panHandlers}
+      onLayout={(event) => {
+        const { width, height } = event.nativeEvent.layout;
+        if (width > 0 && height > 0) {
+          setViewSize({ width, height });
+          const nextMinScale = computeMinScale(width, height, virtualSize.width, virtualSize.height);
+          if (Number.isFinite(nextMinScale)) {
+            minScaleRef.current = nextMinScale;
+            if (scaleRef.current < nextMinScale) {
+              setScale(nextMinScale);
+            }
+          }
+        }
+      }}
+    >
       {!displayBounds3857 ? null : (
       <View
         style={[
@@ -418,6 +464,19 @@ function touchDistance(a: { pageX: number; pageY: number }, b: { pageX: number; 
 
 function clamp(v: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, v));
+}
+
+function computeMinScale(
+  viewWidth: number,
+  viewHeight: number,
+  virtualWidth: number,
+  virtualHeight: number
+): number {
+  if (!viewWidth || !viewHeight || !virtualWidth || !virtualHeight) return 1;
+  const scaleX = viewWidth / virtualWidth;
+  const scaleY = viewHeight / virtualHeight;
+  const fitScale = Math.min(scaleX, scaleY);
+  return Math.max(0.1, Math.min(1, fitScale));
 }
 
 function roundToNiceNumber(value: number): number {

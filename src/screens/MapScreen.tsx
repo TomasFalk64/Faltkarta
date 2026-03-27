@@ -59,6 +59,24 @@ export function MapScreen({ route, navigation }: Props) {
       if (hydrated && hydrated !== current) {
         await upsertMap(hydrated);
       }
+      if (hydrated) {
+        console.log("[Map] loaded", {
+          id: hydrated.id,
+          name: hydrated.name,
+          importName: hydrated.importName,
+          bbox: hydrated.bbox ?? null,
+          georef: hydrated.georef
+            ? {
+                sourceEpsg: hydrated.georef.sourceEpsg,
+                imageWidth: hydrated.georef.imageWidth,
+                imageHeight: hydrated.georef.imageHeight,
+                pixelToSource: hydrated.georef.pixelToSource,
+              }
+            : null,
+        });
+      } else {
+        console.log("[Map] loaded", { id: mapId, hydrated: null });
+      }
       setObservations(obs);
       setGpsPingSeconds(settings.gpsPingSeconds);
       setShowQuantityField(settings.showQuantityField ?? false);
