@@ -14,6 +14,7 @@ import { Observation, PointObservation } from "../types/models";
 import { averageLatLon, wgs84ToSweref99tm } from "./coords";
 import { exportDir } from "./files";
 import { buildPointPhotoFileName, guessImageExtension, resolvePointPhotoUri, sanitizeForFileName } from "./photos";
+import { speciesInfo } from "../data/species_info";
 
 function observationToRepresentativeWgs84(obs: Observation): { lat: number; lon: number } {
   if (obs.kind === "point") {
@@ -36,6 +37,19 @@ function observationName(obs: Observation, polygonIndex: number): string {
   }
   const name = obs.polygonName?.trim();
   return name && name.length > 0 ? name : `Polygon${polygonIndex}`;
+}
+
+function getRedList(species: string): string {
+  if (!species) return "";
+  const direct = speciesInfo[species];
+  if (direct?.redList) return String(direct.redList).trim();
+  const lower = species.toLowerCase();
+  for (const [name, info] of Object.entries(speciesInfo)) {
+    if (name.toLowerCase() === lower && info?.redList) {
+      return String(info.redList).trim();
+    }
+  }
+  return "";
 }
 
 function toArtportalenNotes(obs: Observation): string {
@@ -168,6 +182,7 @@ export function buildXlsx(observations: Observation[]): string {
     "Ost",
     "Lokalnamn",
     "Noggrannhet",
+    "Rödlistning",
     "Publik kommentar",
     "Antal",
     "Enhet",
@@ -187,6 +202,7 @@ export function buildXlsx(observations: Observation[]): string {
     const quantity = (obs.kind === "point" && obs.quantity && obs.quantity !== 0) ? String(obs.quantity) : "";
     const unit = obs.kind === "point" ? obs.unit : "";
     const species = obs.kind === "point" ? obs.species : "";
+    const redList = obs.kind === "point" ? getRedList(obs.species) : "";
     const polygonName = obs.kind === "polygon" ? name : "";
     return [
       species,
@@ -199,6 +215,7 @@ export function buildXlsx(observations: Observation[]): string {
       formatNumberForExcel(sweref.x, 2),
       pointLocalName(obs),
       pointAccuracy(obs),
+      redList,
       obs.notes,
       quantity,
       unit,
@@ -606,6 +623,7 @@ function observationToGeoJsonFeature(
       properties: {
         ...baseProps,
         species: point.species,
+        redList: getRedList(point.species),
         localName: point.localName,
         accuracyMeters: point.accuracyMeters,
         quantity: point.quantity,

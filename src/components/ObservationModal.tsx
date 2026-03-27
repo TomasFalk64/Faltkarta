@@ -317,8 +317,14 @@ export function ObservationModal({
                 onChangeText={(text) => {
                   setSpecies(text); // Uppdatera texten
                   setIsShowingSuggestions(true);
+                  if (showSpeciesInfo) {
+                    setShowSpeciesInfo(false);
+                  }
                 }}
-                onFocus={() => setIsShowingSuggestions(true)}
+                onFocus={() => {
+                  setIsShowingSuggestions(true);
+                  setShowSpeciesInfo(false);
+                }}
                 onBlur={() => setTimeout(() => setIsShowingSuggestions(false), 120)}
                 placeholder={speciesPlaceholder}
                 style={[styles.input, styles.speciesInput]}

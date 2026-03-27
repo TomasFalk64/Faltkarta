@@ -109,16 +109,6 @@ export function MapCanvas({
     setScale((prev) => Math.max(prev, minScale));
   }, [minScale]);
 
-  useEffect(() => {
-    if (!viewSize.width || !viewSize.height) return;
-    console.log("[MapCanvas] metrics", {
-      viewSize,
-      virtualSize,
-      minScale,
-      scale: scaleRef.current,
-    });
-  }, [viewSize.width, viewSize.height, virtualSize.width, virtualSize.height, minScale]);
-
   const centerImagePoint = useMemo(
     () => latLonToImagePoint(map, centerCoord, virtualSize.width, virtualSize.height),
     [map, centerCoord, virtualSize.width, virtualSize.height]
