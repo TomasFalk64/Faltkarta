@@ -39,6 +39,7 @@ export function MapListScreen({ navigation }: Props) {
   const [maxImageSizeMB, setMaxImageSizeMB] = useState("3");
   const [renameMap, setRenameMap] = useState<MapItem | null>(null);
   const [renameValue, setRenameValue] = useState("");
+  const [renameMode, setRenameMode] = useState<"import" | "edit" | null>(null);
   const [showRenameHint, setShowRenameHint] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
@@ -84,7 +85,8 @@ export function MapListScreen({ navigation }: Props) {
       const next = await upsertMap(item);
       setMaps(next);
       setRenameMap(item);
-      setRenameValue(item.name);
+      setRenameValue(item.name.toLowerCase().includes("skogsmonitor") ? "" : item.name);
+      setRenameMode("import");
       setShowRenameHint(true);
     } catch (error) {
       Alert.alert("Importfel", String(error));
@@ -100,20 +102,45 @@ export function MapListScreen({ navigation }: Props) {
   function openRename(item: MapItem) {
     setRenameMap(item);
     setRenameValue(item.name);
+    setRenameMode("edit");
     setShowRenameHint(false);
   }
 
   async function confirmRename() {
     if (!renameMap) return;
+    const trimmed = renameValue.trim();
+    if (!trimmed) {
+      Alert.alert("Namn saknas", "Du måste ange ett namn på kartan.");
+      return;
+    }
     const updated: MapItem = {
       ...renameMap,
-      name: renameValue.trim() || renameMap.name,
+      name: trimmed,
     };
     const next = await upsertMap(updated);
     setMaps(next);
     setRenameMap(null);
     setRenameValue("");
     setShowRenameHint(false);
+    setRenameMode(null);
+  }
+
+  async function cancelRename() {
+    const current = renameMap;
+    const mode = renameMode;
+    setRenameMap(null);
+    setRenameValue("");
+    setShowRenameHint(false);
+    setRenameMode(null);
+
+    if (mode === "import" && current) {
+      await deleteIfExists(current.fileUri);
+      if (current.thumbnailUri) {
+        await deleteIfExists(current.thumbnailUri);
+      }
+      const next = await removeMap(current.id);
+      setMaps(next);
+    }
   }
   const onSaveSettings = async () => {
     try {
@@ -407,7 +434,7 @@ const toggleBackgroundGPS = async () => {
       </Modal>
 
 
-      <Modal transparent visible={!!renameMap} onRequestClose={() => setRenameMap(null)} animationType="fade">
+      <Modal transparent visible={!!renameMap} onRequestClose={() => { void cancelRename(); }} animationType="fade">
         <View style={[styles.modalBackdrop, { justifyContent: 'flex-start' }]}>
           <View style={[styles.modalCard, { marginTop: 60, maxHeight: '80%' }]}>
             <ScrollView keyboardShouldPersistTaps="handled">
@@ -421,14 +448,22 @@ const toggleBackgroundGPS = async () => {
               <View style={styles.modalActions}>
                 <Pressable
                   onPress={() => {
-                    setRenameMap(null);
-                    setShowRenameHint(false);
+                    void cancelRename();
                   }}
                   style={[styles.modalBtn, styles.cancelBtn, styles.modalBtnShort]}
                 >
                   <Text style={styles.modalBtnText}>Avbryt</Text>
                 </Pressable>
-                <Pressable onPress={confirmRename} style={[styles.modalBtn, styles.okBtn, styles.modalBtnWide]}>
+                <Pressable
+                  onPress={confirmRename}
+                  disabled={renameValue.trim().length === 0}
+                  style={[
+                    styles.modalBtn,
+                    styles.okBtn,
+                    styles.modalBtnWide,
+                    renameValue.trim().length === 0 ? { opacity: 0.6 } : undefined,
+                  ]}
+                >
                   <Text style={styles.modalBtnText}>Spara</Text>
                 </Pressable>
               </View>
