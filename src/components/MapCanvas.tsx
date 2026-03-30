@@ -11,6 +11,7 @@ import {
   sourceCrsToImagePoint,
   meters3857ToImagePoint,
 } from "../services/mapProjection";
+import { distanceMeters } from "../services/coords";
 import { LatLon, MapItem, Observation } from "../types/models";
 
 type Props = {
@@ -208,15 +209,23 @@ export function MapCanvas({
     if (!bounds) return null;
     const widthMeters = bounds.maxX - bounds.minX;
     if (!Number.isFinite(widthMeters) || widthMeters <= 0) return null;
-    const metersPerPixel = widthMeters / (virtualSize.width * scale);
-    const metersFor100px = metersPerPixel * 100;
+
+    // Geodesic distance for 100 screen pixels, independent of source CRS.
+    const pixels = 100;
+    const deltaImagePx = pixels / Math.max(0.01, scale);
+    const p1 = centerImagePoint;
+    const p2 = { x: centerImagePoint.x + deltaImagePx, y: centerImagePoint.y };
+    const w1 = imagePointToLatLon(map, p1, virtualSize.width, virtualSize.height);
+    const w2 = imagePointToLatLon(map, p2, virtualSize.width, virtualSize.height);
+    const metersFor100px = distanceMeters(w1, w2);
+    if (!Number.isFinite(metersFor100px) || metersFor100px <= 0) return null;
     const niceMeters = roundToNiceNumber(metersFor100px);
-    const barWidthPx = Math.max(20, Math.round(niceMeters / metersPerPixel));
+    const barWidthPx = Math.max(20, Math.round((niceMeters / metersFor100px) * pixels));
     return {
       label: `${Math.round(niceMeters)} m`,
       widthPx: barWidthPx,
     };
-  }, [displayBounds3857, scale, showScaleBar, virtualSize.width]);
+  }, [centerImagePoint, displayBounds3857, map, scale, showScaleBar, virtualSize.height, virtualSize.width]);
 
   const panResponder = useMemo(
     () =>
@@ -249,7 +258,7 @@ export function MapCanvas({
             }
             const d = touchDistance(touches[0], touches[1]);
             const ratio = d / Math.max(1, pinchRef.current.startDistance);
-            setScale(clamp(pinchRef.current.startScale * ratio, minScaleRef.current, 4));
+            setScale(clamp(pinchRef.current.startScale * ratio, minScaleRef.current, 6));
             return;
           }
           const currentScale = Math.max(0.01, scaleRef.current);
@@ -438,8 +447,13 @@ export function MapCanvas({
 
       {!displayBounds3857 || !scaleBar ? null : (
         <View style={styles.scaleBarWrap}>
-          <Text style={styles.scaleBarText}>{scaleBar.label}</Text>
-          <View style={[styles.scaleBar, { width: scaleBar.widthPx }]} />
+          <View style={styles.scaleBar}>
+            <Text style={styles.scaleBarText}>{scaleBar.label}</Text>
+            <View style={[styles.scaleBarLine, { width: scaleBar.widthPx }]}>
+              <View style={styles.scaleBarTickLeft} />
+              <View style={styles.scaleBarTickRight} />
+            </View>
+          </View>
         </View>
       )}
     </View>
@@ -534,28 +548,50 @@ const styles = StyleSheet.create({
   scaleBarWrap: {
     position: "absolute",
     right: 20,
-    bottom: 35,
+    bottom: 40,
     alignItems: "flex-end",
   },
   scaleBarText: {
-    color: "#f4f0e7",
-    fontWeight: "700",
-    marginBottom: 6,
-    textShadowColor: "rgba(0,0,0,0.6)",
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
+    color: "#000",
+    fontSize: 11,
+    fontWeight: "400",
+    textAlign: "center",
   },
   scaleBar: {
-    borderBottomWidth: 4,
-    borderLeftWidth: 3,
-    borderRightWidth: 3,
-    borderColor: "#f4f0e7",
+    backgroundColor: "rgba(255,255,255,0.5)",
+    borderRadius: 6,
+    minHeight: 22,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 3,
+    paddingVertical: 3,
+    borderWidth: 2,
+    borderColor: "rgba(0,0,0,0.2)",
+    alignSelf: "flex-start",
+  },
+  scaleBarLine: {
+    marginTop: 2,
+    height: 2,
+    backgroundColor: "#000",
+    borderRadius: 1,
+  },
+  scaleBarTickLeft: {
+    position: "absolute",
+    left: 0,
+    width: 2,
     height: 8,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.8,
-    shadowRadius: 2,
-    elevation: 6,
+    top: -8,
+    backgroundColor: "#000",
+    borderRadius: 1,
+  },
+  scaleBarTickRight: {
+    position: "absolute",
+    right: 0,
+    width: 2,
+    height: 8,
+    top: -8,
+    backgroundColor: "#000",
+    borderRadius: 1,
   },
   gpsDot: {
     position: "absolute",
