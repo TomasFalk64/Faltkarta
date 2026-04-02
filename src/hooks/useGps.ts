@@ -69,6 +69,7 @@ export function useGps({ pingSeconds, backgroundGPS, onBackgroundDenied }: UseGp
         timestamp: sample.timestamp,
       });
     }
+    if (lastSampleRef.current?.timestamp === sample.timestamp) return;
     if (!Number.isFinite(sample.rawAccuracy)) return;
     if (sample.rawAccuracy > MAX_GOOD_ACCURACY) return;
 
@@ -123,11 +124,15 @@ export function useGps({ pingSeconds, backgroundGPS, onBackgroundDenied }: UseGp
 
     if (!Number.isFinite(weightSum) || weightSum <= 0) return;
 
+    const weightedAccuracy = Math.max(1, Math.round(accSum / weightSum));
+    const lastThreeRaw = next.slice(-3).map((item) => item.rawAccuracy);
+
     if (DEBUG_GPS) {
+      console.log(`[GPS] accuracy raw=[${lastThreeRaw.join(",")}] weighted=${weightedAccuracy}`);
       console.log("[GPS] weighted", {
         lat: latSum / weightSum,
         lon: lonSum / weightSum,
-        displayAccuracy: Math.max(1, Math.round(accSum / weightSum)),
+        displayAccuracy: weightedAccuracy,
         weightSum,
       });
     }
@@ -137,7 +142,7 @@ export function useGps({ pingSeconds, backgroundGPS, onBackgroundDenied }: UseGp
       lon: lonSum / weightSum,
     });
     setRawAccuracyMeters(sample.rawAccuracy);
-    setDisplayAccuracyMeters(Math.max(1, Math.round(accSum / weightSum)));
+    setDisplayAccuracyMeters(weightedAccuracy);
     setError(null);
   }, []);
 

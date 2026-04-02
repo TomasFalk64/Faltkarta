@@ -114,10 +114,13 @@ export function MapScreen({ route, navigation }: Props) {
     setCenterCoord(clampToMapBounds(gpsPos));
   }
 
-  const displayCombined = Math.min(
-    99,
-    Math.max(0, (displayAccuracyMeters ?? rawAccuracyMeters ?? 0))
-  );
+  const combinedRaw = displayAccuracyMeters ?? rawAccuracyMeters ?? 0;
+  const displayCombined = combinedRaw > 0 ? Math.min(99, Math.max(5, combinedRaw)) : 0;
+  const clampAccuracy = (value?: number | null): number | null => {
+    if (value === null || value === undefined) return null;
+    if (!Number.isFinite(value) || value <= 0) return null;
+    return Math.min(99, Math.max(5, value));
+  };
 
   function getNextPointNumber(): number {
     const numbers = observations
@@ -178,7 +181,7 @@ export function MapScreen({ route, navigation }: Props) {
             photoAssetIds: hasAnyAssetId ? photoAssetIds : undefined,
             pointNumber,
             localName: payload.localName?.trim() || map.name,
-            accuracyMeters: payload.accuracyMeters ?? null,
+            accuracyMeters: clampAccuracy(payload.accuracyMeters),
             quantity: payload.quantity ?? editingPoint.quantity ?? 0,
             unit: payload.unit ?? "",
           }
@@ -193,7 +196,9 @@ export function MapScreen({ route, navigation }: Props) {
             photoAssetIds: hasAnyAssetId ? photoAssetIds : undefined,
             pointNumber,
             localName: payload.localName?.trim() || map.name,
-            accuracyMeters: payload.accuracyMeters ?? (displayAccuracyMeters ?? rawAccuracyMeters ?? null),
+            accuracyMeters: clampAccuracy(
+              payload.accuracyMeters ?? (displayAccuracyMeters ?? rawAccuracyMeters ?? null)
+            ),
             quantity: payload.quantity ?? 0,
             unit: payload.unit ?? "",
             dateISO,
