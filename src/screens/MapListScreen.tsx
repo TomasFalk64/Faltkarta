@@ -446,7 +446,7 @@ const toggleBackgroundGPS = async () => {
         ]} 
         onPress={toggleBackgroundGPS}
       >
-        <Text style={styles.exitFabText}>AUTO-GPS</Text>
+        <Text style={styles.exitFabText}>BakgrundsGPS</Text> 
       </Pressable>
 
       <Modal transparent visible={showImportMenu} onRequestClose={() => setShowImportMenu(false)} animationType="fade">

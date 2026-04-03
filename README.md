@@ -1,15 +1,15 @@
 ﻿# Fältkarta (Expo / React Native)
 
-Fältkarta är en mobilapp för att dokumentera artobservationer i fält på egna kartor, även utan uppkoppling.
+Fältkarta är en mobilapp för att dokumentera artobservationer i fält på egna kartor, även utan uppkoppling. Samt att exportera resultatet direkt till aRportalen eller till egna datorn
 
 Funktioner & Fördelar
-- **Enkel registrering:** Enkelt inmatningsformulär med klickbara artförslag gör att du aldrig mer behöver skriva vågbandad barkborre eller fyrflikig jordstjärna
+- **Enkel registrering:** Enkelt inmatningsformulär med klickbara artförslag gör att du aldrig mer behöver skriva hela namnet vågbandad barkborre eller fyrflikig jordstjärna
 - **Export till Artportalen:** Appen skapar en TSV, kopierar till urklipp och öppnar Artportalens import-sida.
 - **Efterbearbetning med Excel:** Du kan exportera Excel för att redigera poster innan import eller analys.
 - **Enkel export:** Exportera via e-post eller dela till exempelvis Google Drive. Du får med observationsdata, karta, GeoJSON och bilder (beroende på exportval).
 - **Obegränsade kartlager:** Importera godtyckligt många GeoTIFF-kartor (.tif/.tiff).
-- **GPS-optimering:** Ställ in GPS-frekvensen efter behov – välj hög precision för noggrann inmätningskarta eller lägre frekvens för att spara batteri.
-- **Smart bildhantering:** Bilder döps automatiskt om efter art och klockslag, vilket gör det enkelt att hitta rätt bild till rätt observation i Artportalen.
+- **GPS-optimering:** Ställ in GPS-frekvensen efter behov – välj hög precision för noggrann inmätningskarta eller lägre frekvens för att spara batteri. Välj bakgrundsGPS för att mobilen ska komma ihåg satelliter även när skärmen är släckt.
+- **Bildhantering:** Bilder döps automatiskt om efter art och klockslag, vilket gör det enkelt att hitta rätt bild till rätt observation i Artportalen.
 
 ## Vad appen gör
 - Importerar GeoTIFF-kartor (`.tif/.tiff`) till lokal lagring i appen.
@@ -21,12 +21,12 @@ Funktioner & Fördelar
 ## Kartunderlag
 - Kartor kan laddas ner från till exempel `Skogsmonitor.se` och importeras i appen som GeoTIFF.
 - Appen läser georeferens och koordinatsystem från GeoTIFF-metadata.
-- Rendering bygger på pixeltransform (GeoTIFF geotransform), inte enbart bbox-approximation.
-- Om en karta saknar korrekt georeferens blir GPS-placering och koordinatkoppling osäker.
+
 
 ## Vilka data som samlas i appen
 För varje observation sparas lokalt i appen:
 - Artnamn
+- Rödlistekategori (om finns i artlistan)
 - Typ av observation (`point` eller `polygon`)
 - Antal
 - Datum/tid (`dateISO`)
@@ -37,6 +37,9 @@ För varje observation sparas lokalt i appen:
 - Beskrivning/anteckning
 - Antal och enhet (om arten är knärot sätts enhet automatiskt till plantor/tuvor)
 - Foton (filnamn + gallery asset-id för punktobservationer)
+
+Appen lagrar även användarens nya arter i den lokala förslagslistan så att de dyker upp i artförslagen.
+Artlistan som används för förslag och rödlistekategori finns i `src/data/species_info.ts`.
 
 ## Koordinatsystem
 - Intern lagring av observationspositioner: `WGS84` (`EPSG:4326`, lat/lon).
@@ -77,21 +80,6 @@ Kända begränsningar:
 - ZIP med bilder och GeoJSON: skapar ZIP med karta + Excel + GeoJSON + tillhörande bilder.
 
 
-## Kör appen lokalt
-1. Installera beroenden:
-``` bash 
-npm install```
-
-2. Starta Expo:
-```bash
-npm start
-```
-3. Kör på enhet/emulator via Expo Go eller `a` (Android) / `i` (iOS) i terminalen. 
-```bash
-eas login
-eas build -p android --profile preview
-```
-
 ## Projektstruktur
 - `src/screens/MapListScreen.tsx` - kartlista, import, meny, GPS-frekvens
 - `src/screens/MapScreen.tsx` - kartvy, GPS, korshår, observationer, polygon
@@ -99,6 +87,7 @@ eas build -p android --profile preview
 - `src/components/MapCanvas.tsx` - kartlager, pan/zoom och overlays
 - `src/components/ObservationModal.tsx` - formulär för observation
 - `src/storage/storage.ts` - lokalt AsyncStorage-lager
+- `src/data/species_info.ts` - artlista med rödlistekategori och artinfo (förslag)
 - `src/services/coords.ts` - koordinatkonvertering (WGS84 <-> SWEREF99TM, EPSG:3857 <-> WGS84)
 - `src/services/export.ts` - exportlogik (TSV/Excel, urklipp, delning, webbläsare)
 
