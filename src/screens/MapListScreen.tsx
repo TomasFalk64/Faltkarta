@@ -21,6 +21,7 @@ import { AppSettings } from "../types/models";
 import { loadMaps, loadObservationsByMapId, loadSettings, removeMap, saveObservationsByMapId, saveSettings, upsertMap } from "../storage/storage";
 import { useGpsContext } from "../contexts/GpsContext";
 import { deleteIfExists, ensureMapGeorefBounds, pickAndImportGeoTiff } from "../services/files";
+import { meters3857ToWgs84, sweref99tmToWgs84 } from "../services/coords";
 import { cleanupAllPendingPhotoCopies } from "../services/photos";
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from "expo-location";
@@ -229,6 +230,15 @@ const toggleBackgroundGPS = async () => {
 
       const raw = await FileSystem.readAsStringAsync(asset.uri);
       const parsed = JSON.parse(raw) as any;
+      const crsName = String(parsed?.crs?.properties?.name ?? parsed?.crs?.name ?? "").toUpperCase();
+      const sourceCrs =
+        crsName.includes("EPSG:3857") || crsName.includes("EPSG::3857")
+          ? "EPSG:3857"
+          : crsName.includes("EPSG:3006") || crsName.includes("EPSG::3006") || crsName.includes("SWEREF")
+            ? "EPSG:3006"
+            : crsName.includes("EPSG:4326") || crsName.includes("EPSG::4326") || crsName.includes("CRS84")
+            ? "EPSG:4326"
+            : null;
       const features = Array.isArray(parsed?.features)
         ? parsed.features
         : parsed?.type === "Feature"
@@ -242,34 +252,80 @@ const toggleBackgroundGPS = async () => {
       }
 
       const nextPolygons: PolygonObservation[] = [];
+      let autoNameCounter = 0;
       const now = new Date().toISOString();
 
       for (const feature of features) {
-        if (feature?.geometry?.type !== "Polygon") continue;
+        const geomType = String(feature?.geometry?.type ?? "");
         const coords = feature?.geometry?.coordinates;
-        if (!Array.isArray(coords) || !Array.isArray(coords[0]) || coords[0].length < 3) continue;
-        const ring = coords[0];
-        const points = ring
-          .map((pair: any) => ({ lon: Number(pair?.[0]), lat: Number(pair?.[1]) }))
-          .filter((p: any) => Number.isFinite(p.lon) && Number.isFinite(p.lat));
-        if (points.length < 3) continue;
-        const clipped = clipPolygonToBbox(points, bbox);
-        if (clipped.length < 3) continue;
+        const polygons =
+          geomType === "Polygon"
+            ? [coords]
+            : geomType === "MultiPolygon"
+              ? coords
+              : [];
+        if (!Array.isArray(polygons) || polygons.length === 0) continue;
 
-        const polygonName = String(feature?.properties?.polygonName ?? "").trim() || "Nytt område";
-        const notes = String(feature?.properties?.notes ?? "").trim();
+        const featurePolygonName = String(feature?.properties?.polygonName ?? "").trim();
+        const featureId = String(feature?.properties?.id ?? "").trim();
+        const baseName = featurePolygonName || featureId || "";
+        const hasMultiple = polygons.length > 1;
+        let partIndex = 0;
 
-        nextPolygons.push({
-          id: makeId("obs"),
-          mapId: map.id,
-          kind: "polygon",
-          polygonName,
-          count: 1,
-          notes,
-          photoUris: [],
-          dateISO: now,
-          wgs84: clipped,
-        });
+        for (const poly of polygons) {
+          if (!Array.isArray(poly) || !Array.isArray(poly[0]) || poly[0].length < 3) continue;
+          const ring = poly[0];
+          const points = ring
+            .map((pair: any) => {
+              const rawLon = Number(pair?.[0]);
+              const rawLat = Number(pair?.[1]);
+              if (!Number.isFinite(rawLon) || !Number.isFinite(rawLat)) return null;
+              const inferredCrs =
+                sourceCrs ??
+                (Math.abs(rawLon) > 180 || Math.abs(rawLat) > 90
+                  ? Math.abs(rawLon) <= 1_200_000 && Math.abs(rawLat) >= 5_000_000 && Math.abs(rawLat) <= 8_000_000
+                    ? "EPSG:3006"
+                    : "EPSG:3857"
+                  : "EPSG:4326");
+              if (inferredCrs === "EPSG:3006") {
+                const wgs84 = sweref99tmToWgs84(rawLon, rawLat);
+                if (!wgs84) return null;
+                return { lon: wgs84.lon, lat: wgs84.lat };
+              }
+              if (inferredCrs === "EPSG:3857") {
+                const wgs84 = meters3857ToWgs84(rawLon, rawLat);
+                if (!wgs84) return null;
+                return { lon: wgs84.lon, lat: wgs84.lat };
+              }
+              return { lon: rawLon, lat: rawLat };
+            })
+            .filter((p: any): p is { lon: number; lat: number } => !!p);
+          if (points.length < 3) continue;
+          const clipped = clipPolygonToBbox(points, bbox);
+          if (clipped.length < 3) continue;
+
+          partIndex += 1;
+          let polygonName = baseName;
+          if (!polygonName) {
+            autoNameCounter += 1;
+            polygonName = `Område ${autoNameCounter}`;
+          } else if (hasMultiple) {
+            polygonName = `${polygonName} ${partIndex}`;
+          }
+          const notes = String(feature?.properties?.notes ?? "").trim();
+
+          nextPolygons.push({
+            id: makeId("obs"),
+            mapId: map.id,
+            kind: "polygon",
+            polygonName,
+            count: 1,
+            notes,
+            photoUris: [],
+            dateISO: now,
+            wgs84: clipped,
+          });
+        }
       }
 
       if (!nextPolygons.length) {
@@ -506,7 +562,7 @@ const toggleBackgroundGPS = async () => {
                 setMenuMap(null);
                 Alert.alert(
                   "Importera polygon",
-                  "V\u00e4nligen v\u00e4lj en GeoJSON eller JSON-fil.\n\nF\u00f6r att importen ska lyckas beh\u00f6ver filen vara en Polygon.\nMinsta krav:\n\ngeometry.type: 'Polygon'\n\ncoordinates: [[ [lon, lat], ... ]]\n\nAppen klipper automatiskt polygoner som ligger utanf\u00f6r kartans gr\u00e4nser.",
+                  "V\u00e4lj en GeoJSON/JSON-fil med Polygon eller MultiPolygon.\n\n St\u00f6dda koordinatsystem:\n- WGS84 (EPSG:4326) / CRS84 (lon, lat)\n- SWEREF 99 TM (EPSG:3006)\n- Web Mercator (EPSG:3857)\n\nAppen klipper automatiskt polygoner som ligger utanf\u00f6r kartans gr\u00e4nser.",
                   [
                     {
                       text: "OK",

@@ -1,0 +1,198 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "Kkkk",
+        "mapName": "Hem",
+        "kind": "polygon",
+        "count": 1,
+        "notes": "",
+        "dateISO": "2026-03-14T11:54:56.334Z",
+        "photos": [],
+        "polygonName": "Kkkk"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              17.664268112184843,
+              59.86582134744208
+            ],
+            [
+              17.664268112184843,
+              59.86582134744208
+            ],
+            [
+              17.662949752809837,
+              59.86647389937529
+            ],
+            [
+              17.663816213610012,
+              59.866902360806165
+            ],
+            [
+              17.664712285997705,
+              59.86639017612887
+            ],
+            [
+              17.66432733535988,
+              59.866006032634324
+            ],
+            [
+              17.664268112184843,
+              59.86582134744208
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "Obs18",
+        "mapName": "Hem",
+        "kind": "point",
+        "count": 1,
+        "notes": "",
+        "dateISO": "2026-03-12T09:02:24.540Z",
+        "photos": [],
+        "species": "Harticka",
+        "localName": "Hem",
+        "accuracyMeters": 11,
+        "quantity": 0,
+        "unit": ""
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          17.664495992662744,
+          59.8670057824633
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "Obs17",
+        "mapName": "Hem",
+        "kind": "point",
+        "count": 1,
+        "notes": "",
+        "dateISO": "2026-03-12T08:01:21.274Z",
+        "photos": [],
+        "species": "Ullticka",
+        "localName": "Hem",
+        "accuracyMeters": 20,
+        "unit": ""
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          17.66633834839088,
+          59.86735297845941
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "Obs16",
+        "mapName": "Hem",
+        "kind": "point",
+        "count": 1,
+        "notes": "",
+        "dateISO": "2026-03-12T07:45:52.956Z",
+        "photos": [],
+        "species": "Harticka",
+        "localName": "Hem",
+        "accuracyMeters": 11,
+        "quantity": 0,
+        "unit": ""
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          17.665586471559838,
+          59.866914673341
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "Obs15",
+        "mapName": "Hem",
+        "kind": "point",
+        "count": 1,
+        "notes": "",
+        "dateISO": "2026-03-11T21:12:45.797Z",
+        "photos": [
+          "file:///data/user/0/host.exp.exponent/cache/ImagePicker/9e961539-b81e-4c3f-a928-6252ee591133.jpeg"
+        ],
+        "species": "Knärot",
+        "localName": "Hem",
+        "accuracyMeters": 12,
+        "unit": ""
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          17.6648912965027,
+          59.86836009086431
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "Obs14",
+        "mapName": "Hem",
+        "kind": "point",
+        "count": 1,
+        "notes": "",
+        "dateISO": "2026-03-11T21:07:48.958Z",
+        "photos": [],
+        "species": "Knärot",
+        "localName": "Hem",
+        "accuracyMeters": 13,
+        "quantity": 5,
+        "unit": ""
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          17.666250801088637,
+          59.86666104438068
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "Obs12",
+        "mapName": "Hem",
+        "kind": "point",
+        "count": 1,
+        "notes": "Satt på ett träd",
+        "dateISO": "2026-03-11T20:52:30.446Z",
+        "photos": [
+          "file:///data/user/0/host.exp.exponent/cache/ImagePicker/5af2c632-08ef-47d9-a730-310a75d686b2.jpeg"
+        ],
+        "species": "Skinnlav",
+        "localName": "Hem",
+        "accuracyMeters": 11,
+        "unit": ""
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          17.66614909172279,
+          59.86772479530513
+        ]
+      }
+    }
+  ]
+}
