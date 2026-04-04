@@ -258,7 +258,7 @@ export function MapCanvas({
             }
             const d = touchDistance(touches[0], touches[1]);
             const ratio = d / Math.max(1, pinchRef.current.startDistance);
-            setScale(clamp(pinchRef.current.startScale * ratio, minScaleRef.current, 6));
+            setScale(clamp(pinchRef.current.startScale * ratio, minScaleRef.current, 8));
             return;
           }
           const currentScale = Math.max(0.01, scaleRef.current);

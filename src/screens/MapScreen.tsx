@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import Svg, { Circle, Polygon } from "react-native-svg";
 import { RootStackParamList } from "../navigation/types";
@@ -34,6 +34,7 @@ export function MapScreen({ route, navigation }: Props) {
   const [pointModalSession, setPointModalSession] = useState(0);
   const [polygonModalSession, setPolygonModalSession] = useState(0);
   const [editingPoint, setEditingPoint] = useState<PointObservation | null>(null);
+  const [editingPolygon, setEditingPolygon] = useState<PolygonObservation | null>(null);
   const [editingPointPhotoPreviewUris, setEditingPointPhotoPreviewUris] = useState<string[]>([]);
   const [editingPointPhotoPreviewAssetIds, setEditingPointPhotoPreviewAssetIds] = useState<string[]>([]);
   const [polygonMode, setPolygonMode] = useState(false);
@@ -42,6 +43,7 @@ export function MapScreen({ route, navigation }: Props) {
   const [showQuantityField, setShowQuantityField] = useState(false);
   const [backgroundGPS, setBackgroundGPS] = useState(false);
   const [showScaleBar, setShowScaleBar] = useState(false);
+  const [showAccuracyHelp, setShowAccuracyHelp] = useState(false);
 
   const { gpsPos, displayAccuracyMeters, rawAccuracyMeters, error: gpsError } = useGpsContext();
   const editingPhotoLookupRef = useRef<Record<string, { ref: string; assetId?: string }>>({});
@@ -232,6 +234,14 @@ export function MapScreen({ route, navigation }: Props) {
     showToast("Punkt raderad");
   }
 
+  async function onDeletePolygon() {
+    if (!map || !editingPolygon) return;
+    const next = await deleteObservation(map.id, editingPolygon.id);
+    setObservations(next);
+    setEditingPolygon(null);
+    showToast("Polygon raderad");
+  }
+
   async function onAddPolygon(payload: {
     polygonName?: string;
     notes: string;
@@ -239,13 +249,26 @@ export function MapScreen({ route, navigation }: Props) {
     photoAssetIds?: string[];
   }) {
     if (!map) return;
-    if (draftPolygon.length < 2) {
-      Alert.alert("Polygon", "Minst 2 punkter kravs.");
-      return;
-    }
     const polygonName = payload.polygonName?.trim();
     if (!polygonName) {
-      Alert.alert("Polygon", "Du måste ange ett namn.");
+      Alert.alert("Polygon", "Du m??ste ange ett namn.");
+      return;
+    }
+    if (editingPolygon) {
+      const obs: PolygonObservation = {
+        ...editingPolygon,
+        polygonName,
+        notes: payload.notes,
+        photoUris: payload.photoUris,
+      };
+      const next = await updateObservation(obs);
+      setObservations(next);
+      setEditingPolygon(null);
+      showToast("Polygon uppdaterad");
+      return;
+    }
+    if (draftPolygon.length < 2) {
+      Alert.alert("Polygon", "Minst 2 punkter kravs.");
       return;
     }
     const obs: PolygonObservation = {
@@ -303,6 +326,12 @@ export function MapScreen({ route, navigation }: Props) {
     setShowPointModal(true);
   }
 
+  function openPolygonEditor(obs: PolygonObservation) {
+    setEditingPolygon(obs);
+    setPolygonModalSession((v) => v + 1);
+    setShowPolygonModal(true);
+  }
+
   if (!map) {
     return (
       <View style={styles.centered}>
@@ -345,14 +374,17 @@ export function MapScreen({ route, navigation }: Props) {
         </Pressable>
       </View>
 
-      <View
+      <Pressable
         style={[
           styles.accuracyPill,
           displayCombined > 15 ? styles.accuracyPillBad : undefined,
         ]}
+        onPress={() => {
+          setShowAccuracyHelp(true);
+        }}
       >
-        <Text style={styles.accuracyPillText}>{displayCombined > 0 ? String(displayCombined) : '...'}</Text>
-      </View>
+        <Text style={styles.accuracyPillText}>{displayCombined > 0 ? String(displayCombined) : "..."}</Text>
+      </Pressable>
 
       <View style={styles.controls}>
         <Pressable
@@ -451,7 +483,11 @@ export function MapScreen({ route, navigation }: Props) {
                     style={styles.pointListItem}
                     onPress={() => {
                       setShowPointList(false);
-                      void openPointEditor(obs as any);
+                      if (obs.kind === "point") {
+                        void openPointEditor(obs);
+                      } else {
+                        openPolygonEditor(obs);
+                      }
                     }}
                   >
                     <Text style={styles.pointListItemSpecies}>
@@ -471,6 +507,22 @@ export function MapScreen({ route, navigation }: Props) {
           </View>
         </View>
       )}
+
+      <Modal transparent visible={showAccuracyHelp} onRequestClose={() => setShowAccuracyHelp(false)} animationType="fade">
+        <View style={styles.modalBackdrop}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setShowAccuracyHelp(false)} />
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Felmarginal i meter</Text>
+            <View style={styles.helpBox}>
+              <Text style={styles.helpText}>
+                Din faktiska position ligger med ca 68 % sannolikhet inom en cirkel med denna radie från pricken på
+                kartan. Ju fler satelliter telefonen når, desto lägre värde. Siffran kan dock bli missvisande om signalen
+                studsar mot t.ex. en husvägg eller bergvägg.
+              </Text>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <ObservationModal
         visible={showPointModal}
@@ -512,9 +564,26 @@ export function MapScreen({ route, navigation }: Props) {
       />
       <ObservationModal
         visible={showPolygonModal}
-        onClose={() => setShowPolygonModal(false)}
+        onClose={() => {
+          setShowPolygonModal(false);
+          setEditingPolygon(null);
+        }}
         onSave={onAddPolygon}
-        title="Ny polygon"
+        onDelete={editingPolygon ? onDeletePolygon : undefined}
+        initialValues={
+          editingPolygon
+            ? {
+                polygonName: editingPolygon.polygonName,
+                notes: editingPolygon.notes,
+                photoUris: editingPolygon.photoUris,
+              }
+            : {
+                polygonName: "",
+                notes: "",
+                photoUris: [],
+              }
+        }
+        title={editingPolygon ? "Redigera polygon" : "Ny polygon"}
         sessionToken={polygonModalSession}
         speciesPlaceholder="Polygonnamn"
         kind="polygon"
@@ -561,6 +630,36 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontWeight: "700",
     fontSize: 14,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.35)",
+    justifyContent: "center",
+    padding: 16,
+  },
+  modalCard: {
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    padding: 12,
+  },
+  modalTitle: {
+    fontWeight: "700",
+    marginBottom: 8,
+    fontSize: 16,
+  },
+  helpBox: {
+    backgroundColor: "#eef6f7",
+    borderColor: "#c8dde1",
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginBottom: 10,
+  },
+  helpText: {
+    color: "#22323b",
+    lineHeight: 18,
+    marginBottom: 4,
   },
   northBtn: {
     paddingVertical: 2,

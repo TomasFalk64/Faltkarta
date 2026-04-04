@@ -47,6 +47,7 @@ export function MapListScreen({ navigation }: Props) {
   const [menuMap, setMenuMap] = useState<MapItem | null>(null);
   const [deleteMap, setDeleteMap] = useState<MapItem | null>(null);
   const [showImportMenu, setShowImportMenu] = useState(false);
+  const [importPolygonMap, setImportPolygonMap] = useState<MapItem | null>(null);
 
   const SKOGSMONITOR_URL = "https://karta.skogsmonitor.se/?background=Lantm%C3%A4terietTopowebb&lat=60.55728&layers=17-26-21-14&lng=16.88599&zoom=7";
 
@@ -480,7 +481,7 @@ const toggleBackgroundGPS = async () => {
             <Text style={styles.helpText}>Välj en GeoTIFF-fil som redan finns på din telefon.</Text>
 
             <Pressable
-              style={[styles.menuActionBtn, styles.cancelBtn]}
+              style={{ display: "none" }}
               onPress={() => setShowImportMenu(false)}
             >
               <Text style={styles.menuActionText}>Stäng</Text>
@@ -560,18 +561,7 @@ const toggleBackgroundGPS = async () => {
                 if (!menuMap) return;
                 const selected = menuMap;
                 setMenuMap(null);
-                Alert.alert(
-                  "Importera polygon",
-                  "V\u00e4lj en GeoJSON/JSON-fil med Polygon eller MultiPolygon.\n\n St\u00f6dda koordinatsystem:\n- WGS84 (EPSG:4326) / CRS84 (lon, lat)\n- SWEREF 99 TM (EPSG:3006)\n- Web Mercator (EPSG:3857)\n\nAppen klipper automatiskt polygoner som ligger utanf\u00f6r kartans gr\u00e4nser.",
-                  [
-                    {
-                      text: "OK",
-                      onPress: () => {
-                        void importPolygonAreas(selected);
-                      },
-                    },
-                  ]
-                );
+                setImportPolygonMap(selected);
               }}
             >
               <Text style={styles.menuActionText}>Importera område (Polygon)</Text>
@@ -702,6 +692,43 @@ const toggleBackgroundGPS = async () => {
             </View>
             <View style={styles.guideActions}>
               <Pressable style={styles.okBtn} onPress={() => setShowGuide(false)}>
+                <Text style={styles.modalBtnText}>Ok</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal transparent visible={!!importPolygonMap} onRequestClose={() => setImportPolygonMap(null)} animationType="fade">
+        <View style={styles.modalBackdrop}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setImportPolygonMap(null)} />
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Importera polygon</Text>
+            <View style={styles.helpBox}>
+              <Text style={styles.helpText}>
+                Välj en GeoJSON/JSON-fil med Polygon eller MultiPolygon.
+              </Text>
+              <Text style={styles.helpText}>
+                Stödda koordinatsystem:
+              </Text>
+              <Text style={styles.helpText}>- WGS84 (EPSG:4326) / CRS84 (lon, lat)</Text>
+              <Text style={styles.helpText}>- SWEREF 99 TM (EPSG:3006)</Text>
+              <Text style={styles.helpText}>- Web Mercator (EPSG:3857)</Text>
+              <Text style={styles.helpText}>
+                Appen klipper automatiskt polygoner som ligger utanför kartans gränser.
+              </Text>
+            </View>
+            <View style={styles.guideActions}>
+              <Pressable
+                style={styles.okBtn}
+                onPress={() => {
+                  const selected = importPolygonMap;
+                  setImportPolygonMap(null);
+                  if (selected) {
+                    void importPolygonAreas(selected);
+                  }
+                }}
+              >
                 <Text style={styles.modalBtnText}>Ok</Text>
               </Pressable>
             </View>

@@ -2,7 +2,7 @@
   "expo": {
     "name": "Fältkarta",
     "slug": "faltkarta",
-    "version": "1.4.2",
+    "version": "1.4.3",
     "icon": "./assets/icon.png",
     "splash": {
       "image": "./assets/splash.png",
