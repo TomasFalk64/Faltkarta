@@ -61,7 +61,7 @@ export function ExportScreen({ route }: Props) {
     }
     const tsv = buildArtportalenTsv(observations);
     await copyTsvAndOpenArtportalen(tsv);
-    Alert.alert("Klart", "TSV kopierad till urklipp. Artportalen oppnad.");
+    Alert.alert("Klart", "TSV kopierad till urklipp. Artportalen öppnad.");
   }
 
   async function onSaveCsv() {
@@ -117,7 +117,7 @@ export function ExportScreen({ route }: Props) {
     <View style={styles.container}>
       <Text style={styles.title}>Exportera observationer</Text>
       <Text style={styles.subtitle}>
-        {observations.length} observationer pa kartan {mapName}
+        {observations.length} observationer på kartan {mapName}
       </Text>
 
       <Pressable style={styles.primaryBtn} onPress={onCopyArtportalen}>
@@ -130,7 +130,7 @@ export function ExportScreen({ route }: Props) {
         <Text style={styles.primaryText}>Exportera ZIP med bilder och GeoJSON</Text>
       </Pressable>
 
-      <Text style={styles.previewTitle}>Forhandsvisning TSV</Text>
+      <Text style={styles.previewTitle}>Förhandsvisning</Text>
       <ScrollView style={styles.previewBox}>
         <Text style={styles.previewText}>{preview || "Tomt"}</Text>
       </ScrollView>
@@ -168,7 +168,7 @@ export function ExportScreen({ route }: Props) {
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Komprimerar bilder</Text>
-            <Text style={styles.modalBody}>Ta det lugnt, snart klar</Text>
+            <Text style={styles.modalBody}>Snart klar, ta det lugnt. </Text>
           </View>
         </View>
       </Modal>

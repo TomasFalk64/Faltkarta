@@ -124,7 +124,7 @@ export function useGps({ pingSeconds, backgroundGPS, onBackgroundDenied }: UseGp
 
     if (!Number.isFinite(weightSum) || weightSum <= 0) return;
 
-    const weightedAccuracy = Math.max(1, Math.round(accSum / weightSum));
+    const weightedAccuracy = Math.max(5, Math.round(accSum / weightSum));
     const lastThreeRaw = next.slice(-3).map((item) => item.rawAccuracy);
 
     if (DEBUG_GPS) {
