@@ -237,6 +237,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     borderRadius: 12,
     padding: 12,
+    width: "100%",
+    maxWidth: 520,
+    alignSelf: "center",
   },
   modalTitle: {
     fontSize: 18,

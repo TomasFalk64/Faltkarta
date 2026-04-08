@@ -49,7 +49,16 @@
       "softwareKeyboardLayoutMode": "resize"
     },
     "web": {
-      "bundler": "metro"
+      "bundler": "metro",
+      "favicon": "./assets/icon.png",
+      "backgroundColor": "#f4f0e7",
+      "themeColor": "#005f73",
+      "display": "standalone",
+      "name": "Faltkarta",
+      "shortName": "Faltkarta",
+      "serviceWorker": {
+        "enabled": true
+      }
     },
     "plugins": [
       "expo-document-picker",

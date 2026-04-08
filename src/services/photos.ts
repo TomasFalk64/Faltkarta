@@ -1,8 +1,21 @@
 import * as FileSystem from "expo-file-system/legacy";
 import * as MediaLibrary from "expo-media-library";
+import { Platform } from "react-native";
 import { makeId } from "../utils/id";
+import {
+  deleteWebFile,
+  getWebObjectUrl,
+  isWebUri,
+  listWebFiles,
+  makeWebUri,
+  readWebFileAsBlob,
+  writeWebFileBlob,
+  webBucketPrefix,
+} from "./webFileSystem";
 
 const TEMP_PREFIX = "faltkarta_pending_";
+const WEB_PHOTO_BUCKET = "photos";
+const WEB_CACHE_BUCKET = "cache";
 
 type SavePhotosOptions = {
   sourceUris: string[];
@@ -15,6 +28,27 @@ type SavePhotosOptions = {
 export async function savePointPhotosToGallery(
   options: SavePhotosOptions
 ): Promise<{ photoNames: string[]; photoAssetIds: string[] }> {
+  if (Platform.OS === "web") {
+    const photoNames: string[] = [];
+    for (let i = 0; i < options.sourceUris.length; i++) {
+      const sourceUri = options.sourceUris[i];
+      const sequence = options.startIndex + i;
+      const extension = guessImageExtension(sourceUri);
+      const fileName = buildPointPhotoFileName(
+        options.pointNumber,
+        options.species,
+        options.dateISO,
+        sequence,
+        extension
+      );
+      const blob = await blobFromUri(sourceUri);
+      if (!blob) continue;
+      const target = makeWebUri(WEB_PHOTO_BUCKET, `${makeId("img")}_${fileName}`);
+      await writeWebFileBlob(target, blob);
+      photoNames.push(target);
+    }
+    return { photoNames, photoAssetIds: [] };
+  }
   if (!options.sourceUris.length) {
     return { photoNames: [], photoAssetIds: [] };
   }
@@ -56,6 +90,9 @@ export async function resolvePointPhotoUri(
   if (looksLikeUri(photoName)) {
     return photoName;
   }
+  if (Platform.OS === "web" && isWebUri(photoName)) {
+    return await getWebObjectUrl(photoName);
+  }
   if (photoAssetId) {
     try {
       const info = await MediaLibrary.getAssetInfoAsync(photoAssetId);
@@ -85,6 +122,14 @@ export function sanitizeForFileName(value: string): string {
 }
 
 export async function createPendingPhotoCopy(sourceUri: string): Promise<string> {
+  if (Platform.OS === "web") {
+    const extension = guessImageExtension(sourceUri);
+    const target = makeWebUri(WEB_CACHE_BUCKET, `${TEMP_PREFIX}${makeId("tmp")}.${extension}`);
+    const blob = await blobFromUri(sourceUri);
+    if (!blob) return sourceUri;
+    await writeWebFileBlob(target, blob);
+    return target;
+  }
   const extension = guessImageExtension(sourceUri);
   const target = `${FileSystem.cacheDirectory}${TEMP_PREFIX}${makeId("tmp")}.${extension}`;
   await FileSystem.copyAsync({ from: sourceUri, to: target });
@@ -100,6 +145,12 @@ export async function deletePendingPhotoCopies(uris: string[]): Promise<void> {
 }
 
 export async function cleanupAllPendingPhotoCopies(): Promise<void> {
+  if (Platform.OS === "web") {
+    const keys = await listWebFiles(webBucketPrefix(WEB_CACHE_BUCKET));
+    const pending = keys.filter((key) => key.includes(TEMP_PREFIX));
+    await Promise.all(pending.map((key) => deleteWebFile(key)));
+    return;
+  }
   const cache = FileSystem.cacheDirectory;
   if (!cache) return;
   try {
@@ -170,6 +221,10 @@ async function findAssetUriByFilename(fileName: string): Promise<string | null> 
 
 async function deleteIfExists(uri: string): Promise<void> {
   try {
+    if (Platform.OS === "web" && isWebUri(uri)) {
+      await deleteWebFile(uri);
+      return;
+    }
     const info = await FileSystem.getInfoAsync(uri);
     if (info.exists) {
       await FileSystem.deleteAsync(uri, { idempotent: true });
@@ -188,9 +243,42 @@ function toAscii(value: string): string {
 }
 
 function looksLikeUri(value: string): boolean {
-  return value.startsWith("file://") || value.startsWith("content://") || value.startsWith("ph://");
+  return (
+    value.startsWith("file://") ||
+    value.startsWith("content://") ||
+    value.startsWith("ph://") ||
+    value.startsWith("blob:") ||
+    value.startsWith("data:")
+  );
 }
 
 function pad2(value: number): string {
   return String(value).padStart(2, "0");
+}
+
+async function blobFromUri(uri: string): Promise<Blob | null> {
+  if (Platform.OS === "web" && isWebUri(uri)) {
+    return await readWebFileAsBlob(uri);
+  }
+  if (uri.startsWith("blob:") || uri.startsWith("data:") || uri.startsWith("http")) {
+    const res = await fetch(uri);
+    if (!res.ok) return null;
+    return await res.blob();
+  }
+  return null;
+}
+
+export async function persistWebPhotoFromPicker(
+  asset: { uri?: string; file?: File; mimeType?: string; fileName?: string }
+): Promise<string | null> {
+  if (Platform.OS !== "web") return asset.uri ?? null;
+  const file = asset.file;
+  const blob =
+    file ?? (asset.uri ? await blobFromUri(asset.uri) : null);
+  if (!blob) return null;
+  const extGuess = guessImageExtension(asset.fileName ?? asset.uri ?? "");
+  const name = `${makeId("img")}.${extGuess}`;
+  const target = makeWebUri(WEB_PHOTO_BUCKET, name);
+  await writeWebFileBlob(target, blob);
+  return target;
 }

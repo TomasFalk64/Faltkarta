@@ -9,12 +9,14 @@ import JSZip from "jszip";
 import * as XLSX from "xlsx";
 import Papa from "papaparse";
 import piexif from "piexifjs";
-import { Image } from "react-native";
+import { Image, Platform } from "react-native";
+import { toByteArray } from "base64-js";
 import { Observation, PointObservation } from "../types/models";
 import { averageLatLon, wgs84ToSweref99tm } from "./coords";
 import { exportDir } from "./files";
 import { buildPointPhotoFileName, guessImageExtension, resolvePointPhotoUri, sanitizeForFileName } from "./photos";
 import { speciesInfo } from "../data/species_info";
+import { downloadBlob, isWebUri, readWebFileAsArrayBuffer } from "./webFileSystem";
 
 function observationToRepresentativeWgs84(obs: Observation): { lat: number; lon: number } {
   if (obs.kind === "point") {
@@ -236,6 +238,11 @@ export async function saveXlsxAndShare(
   mapName: string,
   xlsxBase64: string
 ): Promise<{ xlsxPath: string; shared: boolean }> {
+  if (Platform.OS === "web") {
+    const blob = base64ToBlob(xlsxBase64, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    await downloadBlob(`${sanitizeForFileName(mapName)}.xlsx`, blob);
+    return { xlsxPath: "web:download", shared: true };
+  }
   const xlsxPath = await saveXlsxFile(mapName, xlsxBase64);
   const canShare = await Sharing.isAvailableAsync();
   let shared = false;
@@ -253,6 +260,11 @@ export async function saveXlsxAndComposeEmail(
   mapName: string,
   xlsxBase64: string
 ): Promise<{ path: string; opened: boolean }> {
+  if (Platform.OS === "web") {
+    const blob = base64ToBlob(xlsxBase64, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    await downloadBlob(`${sanitizeForFileName(mapName)}.xlsx`, blob);
+    return { path: "web:download", opened: false };
+  }
   const path = await saveXlsxFile(mapName, xlsxBase64);
   const canEmail = await MailComposer.isAvailableAsync();
   if (!canEmail) {
@@ -272,6 +284,16 @@ export async function saveXlsxGeoJsonAndMapAndComposeEmail(
   xlsxBase64: string,
   mapFileUri?: string | null
 ): Promise<{ paths: string[]; opened: boolean }> {
+  if (Platform.OS === "web") {
+    const xlsxBlob = base64ToBlob(
+      xlsxBase64,
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    await downloadBlob(`${sanitizeForFileName(mapName)}.xlsx`, xlsxBlob);
+    const zipBlob = await buildZipBundleWeb(mapName, observations, mapFileUri);
+    await downloadBlob(`${sanitizeForFileName(mapName)}_email.zip`, zipBlob);
+    return { paths: ["web:download"], opened: false };
+  }
   const xlsxPath = await saveXlsxFile(mapName, xlsxBase64);
   const canEmail = await MailComposer.isAvailableAsync();
   if (!canEmail) {
@@ -298,6 +320,11 @@ export async function saveZipBundleAndShare(
   mapFileUri?: string | null,
   maxImageSizeMB = 2
 ): Promise<{ shared: boolean }> {
+  if (Platform.OS === "web") {
+    const blob = await buildZipBundleWeb(mapName, observations, mapFileUri);
+    await downloadBlob(`${sanitizeForFileName(mapName)}.zip`, blob);
+    return { shared: true };
+  }
   const dir = await createExportSessionDir();
   const zip = new JSZip();
   const safeMapName = sanitizeForFileName(mapName);
@@ -476,6 +503,9 @@ async function optimizePhotoForZip(
   fallbackDateISO: string,
   maxImageSizeMB: number
 ): Promise<{ base64: string; extension: string; dateISO: string } | null> {
+  if (Platform.OS === "web") {
+    return null;
+  }
   const uri = await resolvePointPhotoUri(ref, assetId);
   if (!uri) return null;
   const originalExt = guessImageExtension(uri);
@@ -662,4 +692,68 @@ function ensureUtf8Bom(value: string): string {
 
 function formatNumberForExcel(value: number, decimals: number): string {
   return value.toFixed(decimals).replace(".", ",");
+}
+
+function base64ToBlob(base64: string, mime: string): Blob {
+  const bytes = toByteArray(base64);
+  return new Blob([bytes], { type: mime });
+}
+
+async function buildZipBundleWeb(
+  mapName: string,
+  observations: Observation[],
+  mapFileUri?: string | null
+): Promise<Blob> {
+  const zip = new JSZip();
+  const safeMapName = sanitizeForFileName(mapName);
+  const xlsx = buildXlsx(observations);
+  zip.file(`${safeMapName}.xlsx`, toByteArray(xlsx));
+  zip.file(`${safeMapName}.geojson`, buildGeoJson(mapName, observations));
+
+  if (mapFileUri) {
+    const ext = mapFileUri.toLowerCase().endsWith(".tiff") ? "tiff" : "tif";
+    const buffer = await readFileAsArrayBuffer(mapFileUri);
+    if (buffer) {
+      zip.file(`${safeMapName}.${ext}`, buffer);
+    }
+  }
+
+  let polygonCounter = 0;
+  for (const obs of observations) {
+    if (obs.kind === "polygon") polygonCounter += 1;
+    const label = observationLabel(obs, polygonCounter);
+    const name = observationName(obs, polygonCounter);
+    for (let index = 0; index < obs.photoUris.length; index++) {
+      const ref = String(obs.photoUris[index] ?? "").trim();
+      if (!ref) continue;
+      const assetId = obs.kind === "point" ? obs.photoAssetIds?.[index] : undefined;
+      const uri = await resolvePointPhotoUri(ref, assetId);
+      if (!uri) continue;
+      const extension = guessImageExtension(uri);
+      const fileName = buildPhotoFileName(label, name, obs.dateISO, index, extension);
+      const buffer = await readFileAsArrayBuffer(uri);
+      if (!buffer) continue;
+      zip.file(`bilder/${fileName}`, buffer);
+    }
+  }
+
+  return await zip.generateAsync({ type: "blob" });
+}
+
+async function readFileAsArrayBuffer(uri: string): Promise<ArrayBuffer | null> {
+  if (Platform.OS === "web" && isWebUri(uri)) {
+    return await readWebFileAsArrayBuffer(uri);
+  }
+  if (uri.startsWith("blob:") || uri.startsWith("data:") || uri.startsWith("http")) {
+    const res = await fetch(uri);
+    if (!res.ok) return null;
+    return await res.arrayBuffer();
+  }
+  try {
+    const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+    const bytes = toByteArray(base64);
+    return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+  } catch {
+    return null;
+  }
 }

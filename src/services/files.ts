@@ -1,16 +1,27 @@
 import * as FileSystem from "expo-file-system/legacy";
 import * as DocumentPicker from "expo-document-picker";
-import { Alert } from "react-native";
+import { Alert, Platform } from "react-native";
 import { fromByteArray, toByteArray } from "base64-js";
 import * as UTIF from "utif";
 import UPNG from "upng-js";
 import proj4 from "proj4";
 import { MapItem } from "../types/models";
 import { makeId } from "../utils/id";
+import {
+  deleteWebFile,
+  getWebObjectUrl,
+  isWebUri,
+  makeWebUri,
+  readWebFileAsArrayBuffer,
+  writeWebFileBlob,
+} from "./webFileSystem";
 
 const MAPS_DIR = `${FileSystem.documentDirectory}maps`;
 const PREVIEWS_DIR = `${FileSystem.documentDirectory}previews`;
 const EXPORT_DIR = `${FileSystem.documentDirectory}exports`;
+const WEB_MAPS_BUCKET = "maps";
+const WEB_PREVIEWS_BUCKET = "previews";
+const WEB_EXPORTS_BUCKET = "exports";
 const LEGACY_SWEDEN_BBOX = {
   minLat: 55.0,
   minLon: 11.0,
@@ -23,6 +34,7 @@ const SWEREF99_TM_DEF =
 proj4.defs("EPSG:3006", SWEREF99_TM_DEF);
 
 export async function ensureDataDirs() {
+  if (Platform.OS === "web") return;
   await ensureDir(MAPS_DIR);
   await ensureDir(PREVIEWS_DIR);
   await ensureDir(EXPORT_DIR);
@@ -53,8 +65,20 @@ export async function pickAndImportGeoTiff(): Promise<MapItem | null> {
   }
   const id = makeId("map");
   const safeName = sanitizeFileName(asset.name);
-  const targetUri = `${MAPS_DIR}/${id}_${safeName}`;
-  await FileSystem.copyAsync({ from: asset.uri, to: targetUri });
+  const targetUri =
+    Platform.OS === "web"
+      ? makeWebUri(WEB_MAPS_BUCKET, `${id}_${safeName}`)
+      : `${MAPS_DIR}/${id}_${safeName}`;
+  if (Platform.OS === "web") {
+    const blob = await readAssetAsBlob(asset);
+    if (!blob) {
+      Alert.alert("Importfel", "Kunde inte läsa filen i webbläsaren.");
+      return null;
+    }
+    await writeWebFileBlob(targetUri, blob);
+  } else {
+    await FileSystem.copyAsync({ from: asset.uri, to: targetUri });
+  }
   const metadata = await extractGeoTiffMetadata(targetUri);
   const thumbnailUri = await generatePreviewFromGeoTiff(targetUri, id);
 
@@ -81,8 +105,18 @@ export async function downloadAndImportGeoTiffFromUrl(url: string): Promise<MapI
   }
   const id = makeId("map");
   const safeName = sanitizeFileName(info.fileName);
-  const targetUri = `${MAPS_DIR}/${id}_${safeName}`;
-  await FileSystem.downloadAsync(url, targetUri);
+  const targetUri =
+    Platform.OS === "web"
+      ? makeWebUri(WEB_MAPS_BUCKET, `${id}_${safeName}`)
+      : `${MAPS_DIR}/${id}_${safeName}`;
+  if (Platform.OS === "web") {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    await writeWebFileBlob(targetUri, blob);
+  } else {
+    await FileSystem.downloadAsync(url, targetUri);
+  }
   const metadata = await extractGeoTiffMetadata(targetUri);
   const thumbnailUri = await generatePreviewFromGeoTiff(targetUri, id);
   return {
@@ -131,13 +165,26 @@ export async function pickPreviewImageForMap(mapId: string): Promise<string | nu
   }
   const asset = result.assets[0];
   const safeName = sanitizeFileName(asset.name);
-  const targetUri = `${PREVIEWS_DIR}/${mapId}_${safeName}`;
-  await FileSystem.copyAsync({ from: asset.uri, to: targetUri });
+  const targetUri =
+    Platform.OS === "web"
+      ? makeWebUri(WEB_PREVIEWS_BUCKET, `${mapId}_${safeName}`)
+      : `${PREVIEWS_DIR}/${mapId}_${safeName}`;
+  if (Platform.OS === "web") {
+    const blob = await readAssetAsBlob(asset);
+    if (!blob) return null;
+    await writeWebFileBlob(targetUri, blob);
+  } else {
+    await FileSystem.copyAsync({ from: asset.uri, to: targetUri });
+  }
   return targetUri;
 }
 
 export async function deleteIfExists(uri: string) {
   if (!uri) return;
+  if (Platform.OS === "web" && isWebUri(uri)) {
+    await deleteWebFile(uri);
+    return;
+  }
   const info = await FileSystem.getInfoAsync(uri);
   if (info.exists) {
     await FileSystem.deleteAsync(uri, { idempotent: true });
@@ -169,16 +216,16 @@ function extractFileNameFromUrl(url: string): { fileName: string; baseName: stri
 
 
 export function exportDir(): string {
+  if (Platform.OS === "web") {
+    return makeWebUri(WEB_EXPORTS_BUCKET, "");
+  }
   return EXPORT_DIR;
 }
 
 async function generatePreviewFromGeoTiff(geoTiffUri: string, mapId: string): Promise<string | null> {
   try {
-    const base64 = await FileSystem.readAsStringAsync(geoTiffUri, {
-      encoding: FileSystem.EncodingType.Base64,
-    });
-    const tiffBytes = toByteArray(base64);
-    const tiffBuffer = toArrayBuffer(tiffBytes);
+    const tiffBuffer = await readGeoTiffBuffer(geoTiffUri);
+    if (!tiffBuffer) return null;
     const ifds = UTIF.decode(tiffBuffer);
     if (!ifds.length) {
       return null;
@@ -197,11 +244,19 @@ async function generatePreviewFromGeoTiff(geoTiffUri: string, mapId: string): Pr
     const scaled = resizeRgbaNearest(rgba, srcW, srcH, dstW, dstH);
     const pngArrayBuffer = UPNG.encode([toArrayBuffer(scaled)], dstW, dstH, 0);
     const pngBytes = new Uint8Array(pngArrayBuffer);
-    const pngBase64 = fromByteArray(pngBytes);
-    const outUri = `${PREVIEWS_DIR}/${mapId}_preview.png`;
-    await FileSystem.writeAsStringAsync(outUri, pngBase64, {
-      encoding: FileSystem.EncodingType.Base64,
-    });
+    const outUri =
+      Platform.OS === "web"
+        ? makeWebUri(WEB_PREVIEWS_BUCKET, `${mapId}_preview.png`)
+        : `${PREVIEWS_DIR}/${mapId}_preview.png`;
+    if (Platform.OS === "web") {
+      const blob = new Blob([pngBytes], { type: "image/png" });
+      await writeWebFileBlob(outUri, blob);
+    } else {
+      const pngBase64 = fromByteArray(pngBytes);
+      await FileSystem.writeAsStringAsync(outUri, pngBase64, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+    }
     return outUri;
   } catch {
     return null;
@@ -212,11 +267,8 @@ async function extractGeoTiffMetadata(
   geoTiffUri: string
 ): Promise<{ bbox: MapItem["bbox"]; georef: NonNullable<MapItem["georef"]> } | null> {
   try {
-    const base64 = await FileSystem.readAsStringAsync(geoTiffUri, {
-      encoding: FileSystem.EncodingType.Base64,
-    });
-    const tiffBytes = toByteArray(base64);
-    const tiffBuffer = toArrayBuffer(tiffBytes);
+    const tiffBuffer = await readGeoTiffBuffer(geoTiffUri);
+    if (!tiffBuffer) return null;
     const ifds = UTIF.decode(tiffBuffer);
     if (!ifds.length) return null;
 
@@ -265,6 +317,50 @@ async function extractGeoTiffMetadata(
   } catch {
     return null;
   }
+}
+
+async function readGeoTiffBuffer(uri: string): Promise<ArrayBuffer | null> {
+  if (Platform.OS === "web" && isWebUri(uri)) {
+    return await readWebFileAsArrayBuffer(uri);
+  }
+  const base64 = await FileSystem.readAsStringAsync(uri, {
+    encoding: FileSystem.EncodingType.Base64,
+  });
+  const tiffBytes = toByteArray(base64);
+  return toArrayBuffer(tiffBytes);
+}
+
+async function readAssetAsBlob(asset: DocumentPicker.DocumentPickerAsset): Promise<Blob | null> {
+  const file = (asset as DocumentPicker.DocumentPickerAsset & { file?: File }).file;
+  if (file) return file;
+  if (asset.uri) {
+    const res = await fetch(asset.uri);
+    if (!res.ok) return null;
+    return await res.blob();
+  }
+  return null;
+}
+
+export async function readDocumentAssetAsText(asset: DocumentPicker.DocumentPickerAsset): Promise<string> {
+  if (Platform.OS !== "web") {
+    return await FileSystem.readAsStringAsync(asset.uri);
+  }
+  const file = (asset as DocumentPicker.DocumentPickerAsset & { file?: File }).file;
+  if (file) return await file.text();
+  if (asset.uri) {
+    const res = await fetch(asset.uri);
+    if (!res.ok) throw new Error("Kunde inte läsa filen.");
+    return await res.text();
+  }
+  throw new Error("Kunde inte läsa filen.");
+}
+
+export async function resolveImageUri(uri?: string | null): Promise<string | null> {
+  if (!uri) return null;
+  if (Platform.OS === "web" && isWebUri(uri)) {
+    return await getWebObjectUrl(uri);
+  }
+  return uri;
 }
 
 function hasNonLegacyBbox(map: MapItem): boolean {

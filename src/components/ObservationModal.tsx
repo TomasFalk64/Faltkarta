@@ -16,6 +16,8 @@ import Svg, { Path } from "react-native-svg";
 import * as ImagePicker from "expo-image-picker";
 import { speciesInfo } from "../data/species_info";
 import { addUserSpecies, loadUserSpecies } from "../storage/storage";
+import { resolveImageUri } from "../services/files";
+import { persistWebPhotoFromPicker } from "../services/photos";
 
 type ModalPayload = {
   species?: string;
@@ -59,6 +61,7 @@ export function ObservationModal({
   const [species, setSpecies] = useState("");
   const [notes, setNotes] = useState("");
   const [photoUris, setPhotoUris] = useState<string[]>([]);
+  const [displayPhotoUris, setDisplayPhotoUris] = useState<string[]>([]);
   const [photoAssetIds, setPhotoAssetIds] = useState<string[]>([]);
   const [localName, setLocalName] = useState("");
   const [quantity, setQuantity] = useState("");
@@ -126,6 +129,21 @@ export function ObservationModal({
   }, [visible, sessionToken]);
 
   useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const resolved = await Promise.all(
+        photoUris.map(async (uri) => (await resolveImageUri(uri)) ?? uri)
+      );
+      if (!cancelled) setDisplayPhotoUris(resolved);
+    })().catch(() => {
+      if (!cancelled) setDisplayPhotoUris(photoUris);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [photoUris]);
+
+  useEffect(() => {
     // 1. Arten måste vara knärot
     // 2. Användaren måste ha skrivit in ett antal (quantity är inte tomt)
     // 3. Enheten måste vara tom (så vi inte skriver över om användaren redan valt en annan)
@@ -191,6 +209,14 @@ export function ObservationModal({
       selectionLimit: 1,
     });
     if (!result.canceled && result.assets[0]?.uri) {
+      if (Platform.OS === "web") {
+        const stored = await persistWebPhotoFromPicker(result.assets[0] as any);
+        if (stored) {
+          setPhotoUris((prev) => [...prev, stored]);
+          setPhotoAssetIds((prev) => [...prev, ""]);
+        }
+        return;
+      }
       setPhotoUris((prev) => [...prev, result.assets[0].uri]);
       setPhotoAssetIds((prev) => [...prev, String(result.assets[0].assetId ?? "")]);
     }
@@ -445,7 +471,7 @@ export function ObservationModal({
               </View>
             )}
             <View style={styles.photoRow}>
-              {photoUris.map((uri, index) => (
+              {displayPhotoUris.map((uri, index) => (
                 <Pressable
                   key={`${uri}-${index}`}
                   onPress={() => void removePhotoAt(index)}
@@ -529,8 +555,10 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 0,
     maxHeight: "85%",
-    alignSelf: "stretch",
     overflow: "hidden",
+    width: "100%",
+    maxWidth: 520,
+    alignSelf: "center",
     //minHeight: "100%",
     //maxHeight: "80%",
     //maxHeight: "80%",

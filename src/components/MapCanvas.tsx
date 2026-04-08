@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Image, PanResponder, Pressable, StyleSheet, Text, View } from "react-native";
+import { Image, PanResponder, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import Svg, { Circle, Polyline } from "react-native-svg";
 import {
   imagePointToLatLon,
@@ -439,7 +439,7 @@ export function MapCanvas({
       )}
 
       {!displayBounds3857 ? null : (
-        <View pointerEvents="none" style={styles.crosshair}>
+        <View pointerEvents={Platform.OS === "web" ? undefined : "none"} style={styles.crosshair}>
           <View style={styles.crosshairH} />
           <View style={styles.crosshairV} />
         </View>

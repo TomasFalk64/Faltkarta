@@ -17,7 +17,7 @@ import {
 } from "../storage/storage";
 import { LatLon, MapItem, Observation, PolygonObservation, PointObservation } from "../types/models";
 import { makeId } from "../utils/id";
-import { ensureMapGeorefBounds } from "../services/files";
+import { ensureMapGeorefBounds, resolveImageUri } from "../services/files";
 import { resolvePointPhotoUri } from "../services/photos";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Map">;
@@ -44,6 +44,7 @@ export function MapScreen({ route, navigation }: Props) {
   const [backgroundGPS, setBackgroundGPS] = useState(false);
   const [showScaleBar, setShowScaleBar] = useState(false);
   const [showAccuracyHelp, setShowAccuracyHelp] = useState(false);
+  const [mapImageUri, setMapImageUri] = useState<string | null>(null);
 
   const { gpsPos, displayAccuracyMeters, rawAccuracyMeters, error: gpsError } = useGpsContext();
   const editingPhotoLookupRef = useRef<Record<string, { ref: string; assetId?: string }>>({});
@@ -72,6 +73,8 @@ export function MapScreen({ route, navigation }: Props) {
         });
       }
       setMap(hydrated);
+      const resolved = await resolveImageUri(hydrated?.thumbnailUri ?? null);
+      setMapImageUri(resolved);
       if (hydrated) {
         navigation.setOptions({
           title: hydrated.name,
@@ -85,6 +88,19 @@ export function MapScreen({ route, navigation }: Props) {
       }
     })().catch((e) => Alert.alert("Fel", String(e)));
   }, [mapId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const resolved = await resolveImageUri(map?.thumbnailUri ?? null);
+      if (!cancelled) setMapImageUri(resolved);
+    })().catch(() => {
+      if (!cancelled) setMapImageUri(map?.thumbnailUri ?? null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [map?.thumbnailUri]);
 
   const crosshairPos = centerCoord;
   const pointList = useMemo(
@@ -344,7 +360,7 @@ export function MapScreen({ route, navigation }: Props) {
     <View style={styles.container}>
       <MapCanvas
         map={map}
-        imageUri={map.thumbnailUri}
+        imageUri={mapImageUri ?? undefined}
         centerCoord={centerCoord}
         gpsPos={gpsPos}
         observations={observations}

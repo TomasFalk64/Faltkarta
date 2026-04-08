@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AppState } from "react-native";
+import { AppState, Platform } from "react-native";
 import * as Location from "expo-location";
 import * as TaskManager from "expo-task-manager";
 import { LatLon } from "../types/models";
@@ -28,7 +28,7 @@ const MAX_SPEED_MPS = 50;
 const MAX_GOOD_ACCURACY = 100;
 const DEBUG_GPS = false;
 
-if (!TaskManager.isTaskDefined(GPS_BACK_TASK)) {
+if (Platform.OS !== "web" && !TaskManager.isTaskDefined(GPS_BACK_TASK)) {
   TaskManager.defineTask<{ locations?: Location.LocationObject[] }>(GPS_BACK_TASK, async ({ data, error }) => {
     if (error) {
       return;
@@ -60,7 +60,23 @@ export function useGps({ pingSeconds, backgroundGPS, onBackgroundDenied }: UseGp
 
   const lastSampleRef = useRef<GpsSample | null>(null);
   const stackRef = useRef<GpsSample[]>([]);
-  const foregroundWatchRef = useRef<{ remove: () => void } | null>(null);
+  const foregroundWatchRef = useRef<{ remove?: () => void } | null>(null);
+
+  const safeRemoveSubscription = useCallback((sub: { remove?: () => void } | null) => {
+    if (!sub) return;
+    try {
+      if (typeof sub.remove === "function") {
+        sub.remove();
+        return;
+      }
+      const anySub = sub as { removeSubscription?: () => void };
+      if (typeof anySub.removeSubscription === "function") {
+        anySub.removeSubscription();
+      }
+    } catch (e) {
+      console.log("[GPS_FOREGROUND] remove rejected", String(e));
+    }
+  }, []);
 
   const handleSample = useCallback((sample: GpsSample) => {
     if (DEBUG_GPS) {
@@ -148,16 +164,18 @@ export function useGps({ pingSeconds, backgroundGPS, onBackgroundDenied }: UseGp
 
   const stopAllGps = useCallback(async () => {
     try {
-      foregroundWatchRef.current?.remove();
+      safeRemoveSubscription(foregroundWatchRef.current);
       foregroundWatchRef.current = null;
     } catch (e) {
       console.log("[GPS_FOREGROUND] stop rejected", String(e));
     }
 
     try {
-      const started = await Location.hasStartedLocationUpdatesAsync(GPS_BACK_TASK);
-      if (started) {
-        await Location.stopLocationUpdatesAsync(GPS_BACK_TASK);
+      if (Platform.OS !== "web") {
+        const started = await Location.hasStartedLocationUpdatesAsync(GPS_BACK_TASK);
+        if (started) {
+          await Location.stopLocationUpdatesAsync(GPS_BACK_TASK);
+        }
       }
     } catch (e) {
       console.log("[GPS_BACK_TASK] stop rejected", String(e));
@@ -187,7 +205,7 @@ export function useGps({ pingSeconds, backgroundGPS, onBackgroundDenied }: UseGp
       }
 
       let backgroundGranted = false;
-      if (backgroundGPS) {
+      if (backgroundGPS && Platform.OS !== "web") {
         const bg = await Location.requestBackgroundPermissionsAsync();
         backgroundGranted = bg.status === "granted";
         if (!backgroundGranted) {
@@ -222,6 +240,7 @@ export function useGps({ pingSeconds, backgroundGPS, onBackgroundDenied }: UseGp
 
     const stopBackgroundUpdates = async () => {
       try {
+        if (Platform.OS === "web") return;
         const started = await Location.hasStartedLocationUpdatesAsync(GPS_BACK_TASK);
         if (started) {
           await Location.stopLocationUpdatesAsync(GPS_BACK_TASK);
@@ -233,7 +252,7 @@ export function useGps({ pingSeconds, backgroundGPS, onBackgroundDenied }: UseGp
 
     const startForegroundWatch = async () => {
       if (foregroundWatchRef.current) {
-        foregroundWatchRef.current.remove();
+        safeRemoveSubscription(foregroundWatchRef.current);
         foregroundWatchRef.current = null;
       }
       const next = await Location.watchPositionAsync(
@@ -259,6 +278,7 @@ export function useGps({ pingSeconds, backgroundGPS, onBackgroundDenied }: UseGp
 
     const startBackgroundUpdates = async () => {
       try {
+        if (Platform.OS === "web") return;
         const started = await Location.hasStartedLocationUpdatesAsync(GPS_BACK_TASK);
         if (!started) {
           await Location.startLocationUpdatesAsync(GPS_BACK_TASK, {
@@ -283,7 +303,7 @@ export function useGps({ pingSeconds, backgroundGPS, onBackgroundDenied }: UseGp
       }
 
       // Starta bakgrundstjänsten tidigt så den redan är igång när appen går i bakgrunden.
-      if (backgroundGPS && backgroundAllowed) {
+      if (backgroundGPS && backgroundAllowed && Platform.OS !== "web") {
         await startBackgroundUpdates();
       }
 
@@ -292,7 +312,7 @@ export function useGps({ pingSeconds, backgroundGPS, onBackgroundDenied }: UseGp
           await startForegroundWatch();
         }
       } else {
-        foregroundWatchRef.current?.remove();
+        safeRemoveSubscription(foregroundWatchRef.current);
         foregroundWatchRef.current = null;
       }
     })().catch((e) => {
@@ -301,10 +321,10 @@ export function useGps({ pingSeconds, backgroundGPS, onBackgroundDenied }: UseGp
 
     return () => {
       cancelled = true;
-      foregroundWatchRef.current?.remove();
+      safeRemoveSubscription(foregroundWatchRef.current);
       foregroundWatchRef.current = null;
     };
-  }, [appState, backgroundAllowed, backgroundGPS, handleSample, permissionGranted, pingSeconds]);
+  }, [appState, backgroundAllowed, backgroundGPS, handleSample, permissionGranted, pingSeconds, safeRemoveSubscription]);
 
   return { gpsPos, rawAccuracyMeters, displayAccuracyMeters, error, stopAllGps };
 }

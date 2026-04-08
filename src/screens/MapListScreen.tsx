@@ -1,4 +1,4 @@
-﻿import React, { useCallback, useState } from "react";
+﻿import React, { useCallback, useEffect, useState } from "react";
 import {
   Alert,
   FlatList,
@@ -20,13 +20,17 @@ import { MapItem } from "../types/models";
 import { AppSettings } from "../types/models";
 import { loadMaps, loadObservationsByMapId, loadSettings, removeMap, saveObservationsByMapId, saveSettings, upsertMap } from "../storage/storage";
 import { useGpsContext } from "../contexts/GpsContext";
-import { deleteIfExists, ensureMapGeorefBounds, pickAndImportGeoTiff } from "../services/files";
+import {
+  deleteIfExists,
+  ensureMapGeorefBounds,
+  pickAndImportGeoTiff,
+  readDocumentAssetAsText,
+  resolveImageUri,
+} from "../services/files";
 import { meters3857ToWgs84, sweref99tmToWgs84 } from "../services/coords";
 import { cleanupAllPendingPhotoCopies } from "../services/photos";
 import { Ionicons } from '@expo/vector-icons';
-import * as Location from "expo-location";
 import * as DocumentPicker from "expo-document-picker";
-import * as FileSystem from "expo-file-system/legacy";
 import { makeId } from "../utils/id";
 import { PolygonObservation } from "../types/models";
 
@@ -48,6 +52,7 @@ export function MapListScreen({ navigation }: Props) {
   const [deleteMap, setDeleteMap] = useState<MapItem | null>(null);
   const [showImportMenu, setShowImportMenu] = useState(false);
   const [importPolygonMap, setImportPolygonMap] = useState<MapItem | null>(null);
+  const [resolvedThumbs, setResolvedThumbs] = useState<Record<string, string>>({});
 
   const SKOGSMONITOR_URL = "https://karta.skogsmonitor.se/?background=Lantm%C3%A4terietTopowebb&lat=60.55728&layers=17-26-21-14&lng=16.88599&zoom=7";
 
@@ -79,6 +84,29 @@ export function MapListScreen({ navigation }: Props) {
       refresh();
     }, [refresh])
   );
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const pairs = await Promise.all(
+        maps.map(async (map) => ({
+          id: map.id,
+          uri: await resolveImageUri(map.thumbnailUri ?? null),
+        }))
+      );
+      if (cancelled) return;
+      const next: Record<string, string> = {};
+      pairs.forEach((item) => {
+        if (item.uri) next[item.id] = item.uri;
+      });
+      setResolvedThumbs(next);
+    })().catch(() => {
+      if (!cancelled) setResolvedThumbs({});
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [maps]);
 
   async function onImport() {
     try {
@@ -177,6 +205,10 @@ export function MapListScreen({ navigation }: Props) {
 
 
 const toggleBackgroundGPS = async () => {
+  if (Platform.OS === "web") {
+    Alert.alert("BakgrundsGPS", "BakgrundsGPS stöds inte i webbläsaren.");
+    return;
+  }
   const nextState = !gpsOptions.backgroundGPS;
 
   // Gör om pingen till ett nummer och klampa till 3–20
@@ -229,7 +261,7 @@ const toggleBackgroundGPS = async () => {
         return;
       }
 
-      const raw = await FileSystem.readAsStringAsync(asset.uri);
+      const raw = await readDocumentAssetAsText(asset);
       const parsed = JSON.parse(raw) as any;
       const crsName = String(parsed?.crs?.properties?.name ?? parsed?.crs?.name ?? "").toUpperCase();
       const sourceCrs =
@@ -412,8 +444,8 @@ const toggleBackgroundGPS = async () => {
         }
         renderItem={({ item }) => (
           <Pressable style={styles.mapRow} onPress={() => onOpenMap(item)}>
-            {item.thumbnailUri ? (
-              <Image source={{ uri: item.thumbnailUri }} style={styles.thumb} />
+            {resolvedThumbs[item.id] ? (
+              <Image source={{ uri: resolvedThumbs[item.id] }} style={styles.thumb} />
             ) : (
               <View style={[styles.thumb, styles.thumbPlaceholder]}>
                 <Text style={styles.thumbText}>TIFF</Text>
@@ -961,6 +993,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     borderRadius: 12,
     padding: 12,
+    width: "100%",
+    maxWidth: 520,
+    alignSelf: "center",
   },
   modalTitle: {
     fontWeight: "700",
@@ -1017,7 +1052,8 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     borderRadius: 12,
     padding: 12,
-    width: "86%",
+    width: "100%",
+    maxWidth: 420,
     alignSelf: "center",
   },
   menuActionBtn: {
@@ -1053,3 +1089,25 @@ copyrightText: {
   color: '#888',
 },
 });
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

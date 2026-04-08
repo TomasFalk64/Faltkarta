@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { Platform } from "react-native";
 import { useGps } from "../hooks/useGps";
 import { loadSettings } from "../storage/storage";
 
@@ -18,6 +19,39 @@ type GpsContextValue = {
 };
 
 const GpsContext = createContext<GpsContextValue | null>(null);
+
+class GpsErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean }
+> {
+  state = { hasError: false };
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: unknown) {
+    if (Platform.OS === "web") {
+      console.warn("[GPS] ErrorBoundary caught:", error);
+    }
+  }
+
+  render() {
+    if (this.state.hasError) {
+      const fallback: GpsContextValue = {
+        gpsPos: null,
+        rawAccuracyMeters: null,
+        displayAccuracyMeters: null,
+        error: "GPS är inte tillgängligt i webbläsaren.",
+        gpsOptions: { pingSeconds: 3, backgroundGPS: false },
+        setGpsOptions: () => {},
+        stopAllGps: async () => {},
+      };
+      return <GpsContext.Provider value={fallback}>{this.props.children}</GpsContext.Provider>;
+    }
+    return this.props.children as React.ReactElement;
+  }
+}
 
 export function GpsProvider({ children }: { children: React.ReactNode }) {
   const [gpsOptions, setGpsOptionsState] = useState<GpsOptions>({
@@ -70,7 +104,11 @@ export function GpsProvider({ children }: { children: React.ReactNode }) {
     [displayAccuracyMeters, error, gpsOptions, gpsPos, rawAccuracyMeters, setGpsOptions, stopAllGps]
   );
 
-  return <GpsContext.Provider value={value}>{children}</GpsContext.Provider>;
+  return (
+    <GpsErrorBoundary>
+      <GpsContext.Provider value={value}>{children}</GpsContext.Provider>
+    </GpsErrorBoundary>
+  );
 }
 
 export function useGpsContext() {
