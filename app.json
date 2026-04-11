@@ -15,11 +15,14 @@
       "**/*"
     ],
     "ios": {
+      "bundleIdentifier": "com.tf64.faltkarta",
       "supportsTablet": true,
+      "config": {
+        "usesNonExemptEncryption": false 
+      },
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Faltkarta behover GPS for att visa din position pa kartan.",
         "NSPhotoLibraryUsageDescription": "Faltkarta behover atkomst till bilder for att lagga till foton till observationer.",
-        "NSPhotoLibraryAddUsageDescription": "Faltkarta behover spara kopior av observationsbilder i ditt galleri.",
         "UIBackgroundModes": [
           "location"
         ],
