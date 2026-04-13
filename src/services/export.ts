@@ -107,46 +107,51 @@ export async function copyTsvAndOpenArtportalen(tsv: string) {
 }
 
 export function buildCsv(observations: Observation[]): string {
+  const pointsOnly = observations.filter((obs) => obs.kind === "point");
   const fields = [
     "Artnamn",
-    "Startdatum",
-    "Starttid",
-    "Nord",
-    "Ost",
-    "Lokalnamn",
-    "Noggrannhet",
-    "Publik kommentar",
     "Antal",
     "Enhet",
+    "Lokalnamn",
+    "Ost",
+    "Nord",
+    "Noggrannhet",
+    "Startdatum",
+    "Starttid",
+    "Publik kommentar",
     "Biotop",
     "Art som substrat",
     "Substrat",
-    "Substratbeskrivning",
+    "Substrat-beskrivning",
+    "Rödlistning",
   ];
-  const data = observations.map((obs) => {
+  const data = pointsOnly.map((obs) => {
     const rep = observationToRepresentativeWgs84(obs);
     const sweref = wgs84ToSweref99tm(rep.lon, rep.lat);
     const d = new Date(obs.dateISO);
     const date = `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
     const time = `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
     const quantity = (obs.kind === "point" && obs.quantity && obs.quantity !== 0) ? String(obs.quantity) : "";
-    const unit = obs.kind === "point" ? obs.unit : "";
+    const unit = obs.kind === "point" ? (obs.unit ?? "") : "";
     const species = obs.kind === "point" ? obs.species : "";
+    const notes = obs.notes ?? "";
+    const redList = obs.kind === "point" ? getRedList(obs.species) : "";
     return [
       species,
-      date,
-      time,
-      formatNumberForExcel(sweref.y, 2),
-      formatNumberForExcel(sweref.x, 2),
-      pointLocalName(obs),
-      pointAccuracy(obs),
-      obs.notes,
       quantity,
       unit,
+      pointLocalName(obs),
+      String(Math.round(sweref.x)),
+      String(Math.round(sweref.y)),
+      pointAccuracy(obs),
+      date,
+      time,
+      notes,
       "",
       "",
       "",
       "",
+      redList,
     ];
   });
   const csvBody = Papa.unparse(
@@ -165,49 +170,51 @@ export function buildCsv(observations: Observation[]): string {
 }
 
 export function buildXlsx(observations: Observation[]): string {
+  const pointsOnly = observations.filter((obs) => obs.kind === "point");
   const fields = [
     "Artnamn",
-    "Startdatum",
-    "Starttid",
-    "Nord",
-    "Ost",
-    "Lokalnamn",
-    "Noggrannhet",
-    "Rödlistning",
-    "Publik kommentar",
     "Antal",
     "Enhet",
+    "Lokalnamn",
+    "Ost",
+    "Nord",
+    "Noggrannhet",
+    "Startdatum",
+    "Starttid",
+    "Publik kommentar",
     "Biotop",
     "Art som substrat",
     "Substrat",
-    "Substratbeskrivning",
+    "Substrat-beskrivning",
+    "Rödlistning",
   ];
-  const data = observations.map((obs) => {
+  const data = pointsOnly.map((obs) => {
     const rep = observationToRepresentativeWgs84(obs);
     const sweref = wgs84ToSweref99tm(rep.lon, rep.lat);
     const d = new Date(obs.dateISO);
     const date = `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
     const time = `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
     const quantity = (obs.kind === "point" && obs.quantity && obs.quantity !== 0) ? String(obs.quantity) : "";
-    const unit = obs.kind === "point" ? obs.unit : "";
+    const unit = obs.kind === "point" ? (obs.unit ?? "") : "";
     const species = obs.kind === "point" ? obs.species : "";
+    const notes = obs.notes ?? "";
     const redList = obs.kind === "point" ? getRedList(obs.species) : "";
     return [
       species,
-      date,
-      time,
-      formatNumberForExcel(sweref.y, 2),
-      formatNumberForExcel(sweref.x, 2),
-      pointLocalName(obs),
-      pointAccuracy(obs),
-      redList,
-      obs.notes,
       quantity,
       unit,
+      pointLocalName(obs),
+      String(Math.round(sweref.x)),
+      String(Math.round(sweref.y)),
+      pointAccuracy(obs),
+      date,
+      time,
+      notes,
       "",
       "",
       "",
       "",
+      redList,
     ];
   });
   const worksheet = XLSX.utils.aoa_to_sheet([fields, ...data]);
