@@ -38,6 +38,7 @@ export function MapListScreen({ navigation }: Props) {
   const { gpsOptions, setGpsOptions } = useGpsContext();
   const [showQuantityField, setShowQuantityField] = useState(false);
   const [maxImageSizeMB, setMaxImageSizeMB] = useState("3");
+  const [coordinateSystem, setCoordinateSystem] = useState<"SWEREF99" | "WGS84">("SWEREF99");
   const [renameMap, setRenameMap] = useState<MapItem | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [renameMode, setRenameMode] = useState<"import" | "edit" | null>(null);
@@ -72,6 +73,7 @@ export function MapListScreen({ navigation }: Props) {
     setGpsOptions({ pingSeconds: settings.gpsPingSeconds, backgroundGPS: settings.backgroundGPS ?? false });
     setShowQuantityField(settings.showQuantityField ?? false);
     setMaxImageSizeMB(String(settings.maxImageSizeMB ?? 2));
+    setCoordinateSystem(settings.coordinateSystem ?? "SWEREF99");
   }, []);
 
   useFocusEffect(
@@ -158,6 +160,7 @@ export function MapListScreen({ navigation }: Props) {
         showQuantityField: showQuantityField,
         maxImageSizeMB: maxSizeValue,
         backgroundGPS: gpsOptions.backgroundGPS,
+        coordinateSystem: coordinateSystem,
       };
 
       // Spara allt på en gång
@@ -195,6 +198,7 @@ const toggleBackgroundGPS = async () => {
       backgroundGPS: nextState,
       showQuantityField: showQuantityField,
       maxImageSizeMB: Number.parseFloat(maxImageSizeMB.replace(",", ".")) || 3,
+      coordinateSystem: coordinateSystem,
     });
   } catch (error) {
     console.error("Kunde inte spara inställningar:", error);
@@ -638,6 +642,12 @@ const toggleBackgroundGPS = async () => {
                 color={showQuantityField ? "#0a9396" : "#767577"} 
               />
             </Pressable>
+
+            <View style={styles.settingsRow}>
+              <Text style={styles.settingsTitle}>
+                SWEREF99 TM används vid export till Excel och Artportalen
+              </Text>
+            </View>
 
             <View style={styles.bottomBar}>
               {/* Spara-knapp till vänster */}
