@@ -644,7 +644,7 @@ const toggleBackgroundGPS = async () => {
             </Pressable>
 
             <View style={styles.settingsRow}>
-              <Text style={styles.settingsTitle}>
+              <Text style={styles.settingsInfoText}>
                 SWEREF99 TM används vid export till Excel och Artportalen
               </Text>
             </View>
@@ -816,6 +816,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
     marginBottom: 10,
+  },
+  settingsInfoText: {
+    color: "#292c30",
+    fontWeight: "400",
+    flex: 1,
   },
   pingInput: {
     backgroundColor: "#fff",
