@@ -65,4 +65,5 @@ export type AppSettings = {
   showQuantityField: boolean;
   maxImageSizeMB: number;
   backgroundGPS: boolean;
+  coordinateSystem: "WGS84" | "SWEREF99";
 };

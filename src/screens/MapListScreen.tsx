@@ -42,6 +42,7 @@ export function MapListScreen({ navigation }: Props) {
   const { gpsOptions, setGpsOptions } = useGpsContext();
   const [showQuantityField, setShowQuantityField] = useState(false);
   const [maxImageSizeMB, setMaxImageSizeMB] = useState("3");
+  const [coordinateSystem, setCoordinateSystem] = useState<"WGS84" | "SWEREF99">("SWEREF99");
   const [renameMap, setRenameMap] = useState<MapItem | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [renameMode, setRenameMode] = useState<"import" | "edit" | null>(null);
@@ -77,6 +78,7 @@ export function MapListScreen({ navigation }: Props) {
     setGpsOptions({ pingSeconds: settings.gpsPingSeconds, backgroundGPS: settings.backgroundGPS ?? false });
     setShowQuantityField(settings.showQuantityField ?? false);
     setMaxImageSizeMB(String(settings.maxImageSizeMB ?? 2));
+    setCoordinateSystem(settings.coordinateSystem ?? "SWEREF99");
   }, []);
 
   useFocusEffect(
@@ -186,6 +188,7 @@ export function MapListScreen({ navigation }: Props) {
         showQuantityField: showQuantityField,
         maxImageSizeMB: maxSizeValue,
         backgroundGPS: gpsOptions.backgroundGPS,
+        coordinateSystem: coordinateSystem,
       };
 
       // Spara allt på en gång
@@ -227,6 +230,7 @@ const toggleBackgroundGPS = async () => {
       backgroundGPS: nextState,
       showQuantityField: showQuantityField,
       maxImageSizeMB: Number.parseFloat(maxImageSizeMB.replace(",", ".")) || 3,
+      coordinateSystem: coordinateSystem,
     });
   } catch (error) {
     console.error("Kunde inte spara inställningar:", error);
@@ -671,6 +675,37 @@ const toggleBackgroundGPS = async () => {
               />
             </Pressable>
 
+            <View style={styles.settingsSplitRow}>
+              <View style={styles.settingsSplitLeft}>
+                <Text style={styles.settingsTitleBlock}>Koordinatsystem</Text>
+                <Text style={styles.settingsSubtitle}>för Excel & Artportalen</Text>
+              </View>
+              <View style={styles.coordOptionsColumn}>
+                <Pressable
+                  style={styles.coordOption}
+                  onPress={() => setCoordinateSystem("SWEREF99")}
+                >
+                  <Ionicons
+                    name={coordinateSystem === "SWEREF99" ? "radio-button-on" : "radio-button-off"}
+                    size={20}
+                    color={coordinateSystem === "SWEREF99" ? "#0a9396" : "#767577"}
+                  />
+                  <Text style={styles.coordOptionText}>SWEREF99</Text>
+                </Pressable>
+                <Pressable
+                  style={styles.coordOption}
+                  onPress={() => setCoordinateSystem("WGS84")}
+                >
+                  <Ionicons
+                    name={coordinateSystem === "WGS84" ? "radio-button-on" : "radio-button-off"}
+                    size={20}
+                    color={coordinateSystem === "WGS84" ? "#0a9396" : "#767577"}
+                  />
+                  <Text style={styles.coordOptionText}>WGS84</Text>
+                </Pressable>
+              </View>
+            </View>
+
             <View style={styles.bottomBar}>
               {/* Spara-knapp till vänster */}
               <Pressable 
@@ -814,6 +849,24 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     flex: 1,
   },
+  settingsTitleBlock: {
+    fontWeight: "700",
+    marginBottom: 1,
+    color: "#22323b",
+  },
+  settingsSubtitle: {
+    color: "#5c6770",
+    fontWeight: "600",
+  },
+  settingsSplitRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginBottom: 10,
+  },
+  settingsSplitLeft: {
+    flex: 1,
+  },
   helpBox: {
     backgroundColor: "#eef6f7",
     borderColor: "#c8dde1",
@@ -838,6 +891,22 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
     marginBottom: 10,
+  },
+  coordOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+  },
+  coordOptionsColumn: {
+    flexDirection: "column",
+    alignItems: "flex-start",
+    gap: 0,
+  },
+  coordOptionText: {
+    fontWeight: "600",
+    color: "#22323b",
   },
   pingInput: {
     backgroundColor: "#fff",

@@ -106,7 +106,13 @@ export async function loadSettings(): Promise<AppSettings> {
   const raw = await AsyncStorage.getItem(SETTINGS_KEY);
   if (!raw) {
     // Returnera standardvärden för båda inställningarna
-    return { gpsPingSeconds: 3, showQuantityField: false, maxImageSizeMB: 3, backgroundGPS: false };
+    return {
+      gpsPingSeconds: 3,
+      showQuantityField: false,
+      maxImageSizeMB: 3,
+      backgroundGPS: false,
+      coordinateSystem: "SWEREF99",
+    };
   }
   const parsed = JSON.parse(raw) as Partial<AppSettings>;
   return {
@@ -114,6 +120,7 @@ export async function loadSettings(): Promise<AppSettings> {
     showQuantityField: parsed.showQuantityField ?? false,
     maxImageSizeMB: parsed.maxImageSizeMB ?? 2,
     backgroundGPS: parsed.backgroundGPS ?? false,
+    coordinateSystem: parsed.coordinateSystem === "WGS84" ? "WGS84" : "SWEREF99",
   };
 }
 

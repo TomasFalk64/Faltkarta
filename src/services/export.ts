@@ -111,11 +111,8 @@ export async function copyTsvAndOpenArtportalen(tsv: string) {
 export function buildCsv(observations: Observation[]): string {
   const fields = [
     "Artnamn",
-    "Polygonnamn",
-    "Typ",
-    "Datum",
-    "Lat",
-    "Lon",
+    "Startdatum",
+    "Starttid",
     "Nord",
     "Ost",
     "Lokalnamn",
@@ -123,7 +120,6 @@ export function buildCsv(observations: Observation[]): string {
     "Publik kommentar",
     "Antal",
     "Enhet",
-    "Foton",
   ];
   let polygonCounter = 0;
   const data = observations.map((obs) => {
@@ -190,29 +186,20 @@ export function buildXlsx(observations: Observation[]): string {
     "Enhet",
     "Foton",
   ];
-  let polygonCounter = 0;
   const data = observations.map((obs) => {
-    if (obs.kind === "polygon") polygonCounter += 1;
-    const label = observationLabel(obs, polygonCounter);
-    const name = observationName(obs, polygonCounter);
     const rep = observationToRepresentativeWgs84(obs);
     const sweref = wgs84ToSweref99tm(rep.lon, rep.lat);
-    const photos = obs.photoUris
-      .map((_, index) => buildPhotoFileName(label, name, obs.dateISO, index, "jpg"))
-      .filter((name) => name.length > 0)
-      .join("|");
+    const d = new Date(obs.dateISO);
+    const date = `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+    const time = `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
     const quantity = (obs.kind === "point" && obs.quantity && obs.quantity !== 0) ? String(obs.quantity) : "";
     const unit = obs.kind === "point" ? obs.unit : "";
     const species = obs.kind === "point" ? obs.species : "";
     const redList = obs.kind === "point" ? getRedList(obs.species) : "";
-    const polygonName = obs.kind === "polygon" ? name : "";
     return [
       species,
-      polygonName,
-      obs.kind,
-      new Date(obs.dateISO).toISOString(),
-      formatNumberForExcel(rep.lat, 7),
-      formatNumberForExcel(rep.lon, 7),
+      date,
+      time,
       formatNumberForExcel(sweref.y, 2),
       formatNumberForExcel(sweref.x, 2),
       pointLocalName(obs),
@@ -221,7 +208,6 @@ export function buildXlsx(observations: Observation[]): string {
       obs.notes,
       quantity,
       unit,
-      photos,
     ];
   });
   const worksheet = XLSX.utils.aoa_to_sheet([fields, ...data]);
