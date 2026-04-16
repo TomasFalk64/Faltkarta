@@ -18,7 +18,16 @@ import { useFocusEffect } from "@react-navigation/native";
 import { RootStackParamList } from "../navigation/types";
 import { MapItem } from "../types/models";
 import { AppSettings } from "../types/models";
-import { loadMaps, loadObservationsByMapId, loadSettings, removeMap, saveObservationsByMapId, saveSettings, upsertMap } from "../storage/storage";
+import {
+  loadMaps,
+  loadObservationsByMapId,
+  loadSettings,
+  removeMap,
+  renameMapAndSyncPointLocalNames,
+  saveObservationsByMapId,
+  saveSettings,
+  upsertMap,
+} from "../storage/storage";
 import { useGpsContext } from "../contexts/GpsContext";
 import { deleteIfExists, ensureMapGeorefBounds, pickAndImportGeoTiff } from "../services/files";
 import { meters3857ToWgs84, sweref99tmToWgs84 } from "../services/coords";
@@ -121,7 +130,7 @@ export function MapListScreen({ navigation }: Props) {
       ...renameMap,
       name: trimmed,
     };
-    const next = await upsertMap(updated);
+    const next = await renameMapAndSyncPointLocalNames(updated, renameMap.name);
     setMaps(next);
     setRenameMap(null);
     setRenameValue("");
@@ -500,12 +509,13 @@ const toggleBackgroundGPS = async () => {
           <View style={[styles.modalCard, { marginTop: 60, maxHeight: '80%' }]}>
             <ScrollView keyboardShouldPersistTaps="handled">
               <Text style={styles.modalTitle}>Byt kartnamn</Text>
-              {showRenameHint && (
-                <Text style={styles.renameHint}>
-                  Kartans namn används som förslag till lokalnamn vid punktobservationer.
-                </Text>
-              )}
-              <TextInput value={renameValue} onChangeText={setRenameValue} style={styles.modalInput} />
+              <Text style={styles.renameHint}>
+                Kartans namn används som förslag till lokalnamn vid punktobservationer.
+              </Text>
+              <Text style={styles.renameHint}>
+                Namnbyte ändrar ev. punkter vars lokalnamn matchar det gamla kartnamnet.
+              </Text>
+              <TextInput value={renameValue} onChangeText={setRenameValue} style={styles.modalInput} placeholder="Skriv nytt kartnamn..." placeholderTextColor="#999"/>
               <View style={styles.modalActions}>
                 <Pressable
                   onPress={() => {

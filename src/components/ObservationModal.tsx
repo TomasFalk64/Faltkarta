@@ -72,6 +72,7 @@ export function ObservationModal({
   const [pendingNewSpecies, setPendingNewSpecies] = useState<string | null>(null);
   const isPolygon = kind === "polygon";
   const [showSpeciesInfo, setShowSpeciesInfo] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   useEffect(() => {
     if (sessionToken !== undefined) {
@@ -210,7 +211,23 @@ export function ObservationModal({
     setLocalName("");
     setAccuracyMeters("");
     setShowSpeciesInfo(false);
+    setShowDeleteConfirm(false);
     onClose();
+  }
+
+  function confirmDelete() {
+    if (!onDelete) {
+      void resetAndClose();
+      return;
+    }
+    setShowDeleteConfirm(true);
+  }
+
+  async function handleConfirmedDelete() {
+    if (!onDelete) return;
+    setShowDeleteConfirm(false);
+    await onDelete();
+    await resetAndClose();
   }
 
   async function submit() {
@@ -266,24 +283,20 @@ export function ObservationModal({
           <View style={styles.card}>
             <View style={styles.header}>
             <Pressable 
-              style={styles.iconBtn} onPress={async () => {
-                // 1. Radera om vi Ã¤r i redigeringslÃ¤ge
-                if (onDelete) {
-                  await onDelete();
-                }
-                // 2. StÃ¤da och stÃ¤ng
-                await resetAndClose();
-              }}
+              style={styles.iconBtn}
+              onPress={confirmDelete}
             >
               <Svg width={36} height={36} viewBox="0 0 24 24">
                 <Path
-                  d="M6 6l12 12M18 6L6 18"
+                  d="M9 4.5h6M10 4.5l.5-1h3L14 4.5M5.5 7.5h13M8.5 7.5v10a1 1 0 001 1h5a1 1 0 001-1v-10M10.5 10.5v5M13.5 10.5v5"
                   stroke="#aa191e"
-                  strokeWidth={3.5}
+                  strokeWidth={2.5}
                   strokeLinecap="round"
+                  strokeLinejoin="round"
+                  fill="none"
                 />
               </Svg>
-            </Pressable>
+                          </Pressable>
 
             <Text style={styles.title}>{title}</Text>
 
@@ -498,6 +511,34 @@ export function ObservationModal({
                   }}
                 >
                   <Text style={styles.speciesPromptBtnText}>Ja</Text>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </Modal>
+        <Modal
+          transparent
+          visible={showDeleteConfirm}
+          animationType="fade"
+          onRequestClose={() => setShowDeleteConfirm(false)}
+        >
+          <View style={[styles.modalBackdrop, { justifyContent: "flex-start" }]}>
+            <View style={[styles.modalCard, { marginTop: 60, maxHeight: "80%" }]}>
+              <Text style={styles.modalTitle}>
+                {isPolygon ? "Radera polygon permanent?" : "Radera punkt permanent?"}
+              </Text>
+              <View style={styles.modalActions}>
+                <Pressable
+                  onPress={() => setShowDeleteConfirm(false)}
+                  style={[styles.modalBtn, styles.cancelBtn, styles.modalBtnShort]}
+                >
+                  <Text style={styles.modalBtnText}>Avbryt</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => void handleConfirmedDelete()}
+                  style={[styles.modalBtn, styles.deleteConfirmBtn, styles.modalBtnWide]}
+                >
+                  <Text style={styles.modalBtnText}>Radera</Text>
                 </Pressable>
               </View>
             </View>
@@ -770,6 +811,39 @@ const styles = StyleSheet.create({
   speciesPromptBtnText: {
     color: "#fff",
     fontWeight: "700",
+  },
+  modalCard: {
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    padding: 12,
+  },
+  modalTitle: {
+    fontWeight: "700",
+    marginBottom: 8,
+    fontSize: 16,
+  },
+  modalActions: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 12,
+  },
+  modalBtn: {
+    paddingVertical: 11,
+    borderRadius: 8,
+  },
+  modalBtnShort: {
+    minWidth: 110,
+  },
+  modalBtnWide: {
+    paddingHorizontal: 18,
+  },
+  modalBtnText: {
+    color: "#fff",
+    textAlign: "center",
+    fontWeight: "700",
+  },
+  deleteConfirmBtn: {
+    backgroundColor: "#9b2226",
   },
 });
 

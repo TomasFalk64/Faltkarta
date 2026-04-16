@@ -30,6 +30,35 @@ export async function upsertMap(item: MapItem): Promise<MapItem[]> {
   return all;
 }
 
+export async function renameMapAndSyncPointLocalNames(
+  item: MapItem,
+  previousName: string
+): Promise<MapItem[]> {
+  const nextMaps = await upsertMap(item);
+  const byMap = await loadObservationsByMapId();
+  const list = byMap[item.id] ?? [];
+  let didChange = false;
+  const normalizedPreviousName = previousName.trim().toLowerCase();
+
+  byMap[item.id] = list.map((obs) => {
+    const normalizedLocalName = obs.kind === "point" ? obs.localName.trim().toLowerCase() : "";
+    if (obs.kind !== "point" || normalizedLocalName !== normalizedPreviousName) {
+      return obs;
+    }
+    didChange = true;
+    return normalizeObservation({
+      ...obs,
+      localName: item.name,
+    });
+  });
+
+  if (didChange) {
+    await saveObservationsByMapId(byMap);
+  }
+
+  return nextMaps;
+}
+
 export async function removeMap(mapId: string): Promise<MapItem[]> {
   const all = await loadMaps();
   const next = all.filter((m) => m.id !== mapId);
