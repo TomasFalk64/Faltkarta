@@ -23,7 +23,8 @@ type Props = {
   draftPolygon: LatLon[];
   showScaleBar: boolean;
   onPanGeoDelta: (deltaLat: number, deltaLon: number) => void;
-  onManualPan: () => void;
+  onPanDrag: () => void;
+  onZoom: () => void;
   onPressPoint?: (observationId: string) => void;
 };
 
@@ -49,7 +50,8 @@ export function MapCanvas({
   draftPolygon,
   showScaleBar,
   onPanGeoDelta,
-  onManualPan,
+  onPanDrag,
+  onZoom,
   onPressPoint,
 }: Props) {
   const pointMarkers = useMemo(() => observations.filter((o) => o.kind === "point"), [observations]);
@@ -254,17 +256,19 @@ export function MapCanvas({
                 startDistance: touchDistance(touches[0], touches[1]),
                 startScale: scaleRef.current,
               };
+              onZoom();
               return;
             }
             const d = touchDistance(touches[0], touches[1]);
             const ratio = d / Math.max(1, pinchRef.current.startDistance);
             setScale(clamp(pinchRef.current.startScale * ratio, minScaleRef.current, 8));
+            onZoom();
             return;
           }
           const currentScale = Math.max(0.01, scaleRef.current);
           setDrag({ x: gs.dx / currentScale, y: gs.dy / currentScale });
           if (!touchedPanRef.current) {
-            onManualPan();
+            onPanDrag();
             touchedPanRef.current = true;
           }
         },
@@ -298,7 +302,7 @@ export function MapCanvas({
           setDrag({ x: 0, y: 0 });
         },
       }),
-    [map, onManualPan, onPanGeoDelta]
+    [map, onPanDrag, onPanGeoDelta, onZoom]
   );
 
   useEffect(() => {
@@ -388,22 +392,6 @@ export function MapCanvas({
           })}
         </Svg>
 
-        {gpsPoint && (
-          <View
-            style={[
-              styles.gpsDot,
-              {
-                width: gpsDotSize,
-                height: gpsDotSize,
-                borderRadius: gpsDotSize / 2,
-                borderWidth: gpsBorderWidth,
-                left: gpsPoint.x - gpsDotSize / 2,
-                top: gpsPoint.y - gpsDotSize / 2,
-              },
-            ]}
-          />
-        )}
-
         {projectedPoints.map(({ obs, meters3857, sourceCrs }) => {
           if (obs.kind !== "point") return null;
           const pt = toLocalPoint({ meters3857, sourceCrs });
@@ -435,6 +423,22 @@ export function MapCanvas({
             </Pressable>
           );
         })}
+
+        {gpsPoint && (
+          <View
+            style={[
+              styles.gpsDot,
+              {
+                width: gpsDotSize,
+                height: gpsDotSize,
+                borderRadius: gpsDotSize / 2,
+                borderWidth: gpsBorderWidth,
+                left: gpsPoint.x - gpsDotSize / 2,
+                top: gpsPoint.y - gpsDotSize / 2,
+              },
+            ]}
+          />
+        )}
       </View>
       )}
 

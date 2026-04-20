@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
+import { Ionicons } from "@expo/vector-icons";
 import Svg, { Circle, Polygon } from "react-native-svg";
 import { RootStackParamList } from "../navigation/types";
 import { MapCanvas } from "../components/MapCanvas";
@@ -19,11 +20,14 @@ import { LatLon, MapItem, Observation, PolygonObservation, PointObservation } fr
 import { makeId } from "../utils/id";
 import { ensureMapGeorefBounds } from "../services/files";
 import { resolvePointPhotoUri } from "../services/photos";
+import { distanceMeters } from "../services/coords";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Map">;
 
 export function MapScreen({ route, navigation }: Props) {
   const { mapId } = route.params;
+  const [autoFollow, setAutoFollow] = useState(false);
+  const [isFollowing, setIsFollowing] = useState(false);
   const [map, setMap] = useState<MapItem | null>(null);
   const [observations, setObservations] = useState<Observation[]>([]);
   const [centerCoord, setCenterCoord] = useState<LatLon>({ lat: 62.0, lon: 16.0 });
@@ -62,6 +66,7 @@ export function MapScreen({ route, navigation }: Props) {
         await upsertMap(hydrated);
       }
       setObservations(obs);
+      setAutoFollow(settings.autoFollow ?? false);
       setGpsPingSeconds(settings.gpsPingSeconds);
       setShowQuantityField(settings.showQuantityField ?? false);
       setBackgroundGPS(settings.backgroundGPS ?? false);
@@ -86,6 +91,20 @@ export function MapScreen({ route, navigation }: Props) {
     })().catch((e) => Alert.alert("Fel", String(e)));
   }, [mapId]);
 
+  useEffect(() => {
+    if (autoFollow) return;
+    setIsFollowing(false);
+  }, [autoFollow]);
+
+  useEffect(() => {
+    if (!isFollowing || !gpsPos) return;
+    const nextTarget = clampToMapBounds(gpsPos);
+    if (distanceMeters(centerCoord, nextTarget) < 3) {
+      return;
+    }
+    setCenterCoord(nextTarget);
+  }, [centerCoord, gpsPos, isFollowing, map]);
+
   const crosshairPos = centerCoord;
   const pointList = useMemo(
     () =>
@@ -109,9 +128,16 @@ export function MapScreen({ route, navigation }: Props) {
   }
 
   function onCenterToGps() {
+    if (autoFollow && isFollowing) {
+      setIsFollowing(false);
+      return;
+    }
     if (!gpsPos) {
       showToast("Ingen GPS-position annu");
       return;
+    }
+    if (autoFollow) {
+      setIsFollowing(true);
     }
     setCenterCoord(clampToMapBounds(gpsPos));
   }
@@ -353,7 +379,8 @@ export function MapScreen({ route, navigation }: Props) {
         onPanGeoDelta={(dLat, dLon) =>
           setCenterCoord((prev) => clampToMapBounds({ lat: prev.lat + dLat, lon: prev.lon + dLon }))
         }
-        onManualPan={() => {}}
+        onPanDrag={() => setIsFollowing(false)}
+        onZoom={() => setIsFollowing(false)}
         onPressPoint={(id) => {
           const obs = observations.find((o) => o.id === id);
           if (obs && obs.kind === "point") {
@@ -399,8 +426,16 @@ export function MapScreen({ route, navigation }: Props) {
         <Pressable style={styles.mainBtn} onPress={() => setShowPointList((v) => !v)}>
           <Text style={styles.mainBtnIcon}>≡</Text>
         </Pressable>
-        <Pressable style={styles.mainBtn} onPress={onCenterToGps}>
-          <Text style={styles.mainBtnIcon}>↗</Text>
+        <Pressable
+          style={[styles.mainBtn, isFollowing ? styles.followOn : undefined]}
+          onPress={onCenterToGps}
+        >
+          <Ionicons
+            name="navigate"
+            size={22}
+            color="#fff"
+            style={{ transform: [{ translateX: -2 }, { rotate: "0deg" }] }}
+          />
         </Pressable>
         <Pressable
           style={styles.mainBtn}
@@ -717,6 +752,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  followOn: { backgroundColor: "#3a8fa1" },
   polyOn: { backgroundColor: "#ca6702" },
   mainBtnIcon: { color: "#fff", fontWeight: "700", fontSize: 20, lineHeight: 22 },
   secondaryControls: {
@@ -796,3 +832,4 @@ const styles = StyleSheet.create({
   pointListItemSpecies: { color: "#fff", fontWeight: "700" },
   pointListItemMeta: { color: "#d9d9d9", marginTop: 2, fontSize: 12 },
 });
+

@@ -140,6 +140,7 @@ export async function loadSettings(): Promise<AppSettings> {
       showQuantityField: false,
       maxImageSizeMB: 3,
       backgroundGPS: false,
+      autoFollow: false,
       coordinateSystem: "SWEREF99",
     };
   }
@@ -149,6 +150,7 @@ export async function loadSettings(): Promise<AppSettings> {
     showQuantityField: parsed.showQuantityField ?? false,
     maxImageSizeMB: parsed.maxImageSizeMB ?? 2,
     backgroundGPS: parsed.backgroundGPS ?? false,
+    autoFollow: parsed.autoFollow ?? false,
     coordinateSystem: parsed.coordinateSystem === "WGS84" ? "WGS84" : "SWEREF99",
   };
 }

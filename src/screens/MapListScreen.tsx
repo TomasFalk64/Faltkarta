@@ -43,6 +43,7 @@ type Props = NativeStackScreenProps<RootStackParamList, "MapList">;
 
 export function MapListScreen({ navigation }: Props) {
   const [maps, setMaps] = useState<MapItem[]>([]);
+  const [autoFollow, setAutoFollow] = useState(false);
   const [gpsPingSeconds, setGpsPingSeconds] = useState("3");
   const { gpsOptions, setGpsOptions } = useGpsContext();
   const [showQuantityField, setShowQuantityField] = useState(false);
@@ -78,6 +79,7 @@ export function MapListScreen({ navigation }: Props) {
   const refresh = useCallback(async () => {
     const [allMaps, settings] = await Promise.all([loadMaps(), loadSettings()]);
     setMaps(allMaps);
+    setAutoFollow(settings.autoFollow ?? false);
     setGpsPingSeconds(String(settings.gpsPingSeconds));
     setGpsOptions({ pingSeconds: settings.gpsPingSeconds, backgroundGPS: settings.backgroundGPS ?? false });
     setShowQuantityField(settings.showQuantityField ?? false);
@@ -169,6 +171,7 @@ export function MapListScreen({ navigation }: Props) {
         showQuantityField: showQuantityField,
         maxImageSizeMB: maxSizeValue,
         backgroundGPS: gpsOptions.backgroundGPS,
+        autoFollow: autoFollow,
         coordinateSystem: coordinateSystem,
       };
 
@@ -207,6 +210,7 @@ const toggleBackgroundGPS = async () => {
       backgroundGPS: nextState,
       showQuantityField: showQuantityField,
       maxImageSizeMB: Number.parseFloat(maxImageSizeMB.replace(",", ".")) || 3,
+      autoFollow: autoFollow,
       coordinateSystem: coordinateSystem,
     });
   } catch (error) {
@@ -614,18 +618,13 @@ const toggleBackgroundGPS = async () => {
 
             <Pressable
               style={[styles.settingsRow, { marginVertical: 6, alignItems: "center" }]}
-              onPress={() =>
-                setGpsOptions({
-                  pingSeconds: gpsOptions.pingSeconds,
-                  backgroundGPS: !gpsOptions.backgroundGPS,
-                })
-              }
+              onPress={() => setAutoFollow((prev) => !prev)}
             >
-              <Text style={styles.settingsTitle}>Begär GPS i bakgrund</Text>
+              <Text style={styles.settingsTitle}>Följ min position vid centrering</Text>
               <Ionicons
-                name={gpsOptions.backgroundGPS ? "checkbox" : "square-outline"}
+                name={autoFollow ? "checkbox" : "square-outline"}
                 size={24}
-                color={gpsOptions.backgroundGPS ? "#0a9396" : "#767577"}
+                color={autoFollow ? "#0a9396" : "#767577"}
               />
             </Pressable>
 
