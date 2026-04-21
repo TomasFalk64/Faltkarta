@@ -123,6 +123,7 @@ export function buildCsv(observations: Observation[]): string {
     "Art som substrat",
     "Substrat",
     "Substrat-beskrivning",
+    "Aktivitet",
     "Rödlistning",
   ];
   const data = pointsOnly.map((obs) => {
@@ -147,6 +148,7 @@ export function buildCsv(observations: Observation[]): string {
       date,
       time,
       notes,
+      "",
       "",
       "",
       "",
@@ -186,6 +188,7 @@ export function buildXlsx(observations: Observation[]): string {
     "Art som substrat",
     "Substrat",
     "Substrat-beskrivning",
+    "Aktivitet",
     "Rödlistning",
   ];
   const data = pointsOnly.map((obs) => {
@@ -210,6 +213,7 @@ export function buildXlsx(observations: Observation[]): string {
       date,
       time,
       notes,
+      "",
       "",
       "",
       "",
