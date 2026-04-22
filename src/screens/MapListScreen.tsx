@@ -3,6 +3,8 @@ import {
   Alert,
   FlatList,
   Image,
+  Keyboard,
+  KeyboardAvoidingView,
   Modal,
   Pressable,
   Platform,
@@ -10,6 +12,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  TouchableWithoutFeedback,
   View,
   Linking,
 } from "react-native";
@@ -600,97 +603,114 @@ const toggleBackgroundGPS = async () => {
       </Modal>
 
       <Modal transparent visible={showSettings} onRequestClose={() => setShowSettings(false)} animationType="fade">
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Inställningar</Text>
+        <KeyboardAvoidingView
+          style={styles.settingsModalWrap}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+        >
+          <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+            <View style={[styles.modalBackdrop, styles.settingsModalBackdrop]}>
+              <TouchableWithoutFeedback onPress={() => {}}>
+                <View style={[styles.modalCard, styles.settingsModalCard]}>
+                  <ScrollView keyboardShouldPersistTaps="handled">
+                    <Text style={styles.modalTitle}>Inställningar</Text>
 
-            {/* GPS-inställning */}
-            <View style={styles.settingsRow}>
-              <Text style={styles.settingsTitle}>GPS pingfrekvens (2-20s)</Text>
-              <TextInput
-                value={gpsPingSeconds}
-                onChangeText={setGpsPingSeconds}
-                onBlur={() => setGpsPingSeconds(clampPingInput(gpsPingSeconds))}
-                style={styles.pingInput}
-                keyboardType="number-pad"
-              />
+                    {/* GPS-inställning */}
+                    <View style={styles.settingsRow}>
+                      <Text style={styles.settingsTitle}>GPS pingfrekvens (2-20s)</Text>
+                      <TextInput
+                        value={gpsPingSeconds}
+                        onChangeText={setGpsPingSeconds}
+                        onBlur={() => setGpsPingSeconds(clampPingInput(gpsPingSeconds))}
+                        style={styles.pingInput}
+                        keyboardType="number-pad"
+                      />
+                    </View>
+
+                    <Pressable
+                      style={[styles.settingsRow, { marginVertical: 6, alignItems: "center" }]}
+                      onPress={() => setAutoFollow((prev) => !prev)}
+                    >
+                      <Text style={styles.settingsTitle}>Följ min position vid centrering</Text>
+                      <Ionicons
+                        name={autoFollow ? "checkbox" : "square-outline"}
+                        size={24}
+                        color={autoFollow ? "#0a9396" : "#767577"}
+                      />
+                    </Pressable>
+
+                    <View style={styles.settingsRow}>
+                      <Text style={styles.settingsTitle}>Max bildstorlek vid export (MB)</Text>
+                      <TextInput
+                        value={maxImageSizeMB}
+                        onChangeText={setMaxImageSizeMB}
+                        onBlur={() => setMaxImageSizeMB(clampMaxImageSize(maxImageSizeMB))}
+                        style={styles.pingInput}
+                        keyboardType="decimal-pad"
+                      />
+                    </View>
+
+                    {/* Ny rad: Visa antal och enhet */}
+                    <Pressable
+                      style={[styles.settingsRow, { marginVertical: 15, alignItems: "center" }]}
+                      onPress={() => setShowQuantityField(!showQuantityField)}
+                    >
+                      <Text style={styles.settingsTitle}>Visa antal och enhet vid inmatning</Text>
+                      <Ionicons
+                        name={showQuantityField ? "checkbox" : "square-outline"}
+                        size={24}
+                        color={showQuantityField ? "#0a9396" : "#767577"}
+                      />
+                    </Pressable>
+
+                    <View style={styles.settingsRow}>
+                      <Text style={styles.settingsInfoText}>
+                        SWEREF99 TM används vid export till Excel och Artportalen
+                      </Text>
+                    </View>
+
+                    <View style={styles.bottomBar}>
+                      <Pressable
+                        style={styles.saveBtn}
+                        onPress={async () => {
+                          Keyboard.dismiss();
+                          await onSaveSettings();
+                        }}
+                      >
+                        <Text style={styles.saveBtnText}>Spara</Text>
+                      </Pressable>
+
+                      <Pressable
+                        style={styles.guideBtn}
+                        onPress={() => {
+                          if (Platform.OS === "ios") {
+                            Alert.alert(
+                              "Kort guide",
+                              "Importera karta som GeoTIFF från Skogsmonitor. Du kan ha flera kartor.\n\nByt namn på kartan, namnet används som förslag på lokalnamn.\n\nÖppna kartan och registrera punkter eller polygoner.\n\nExportera direkt till Artportalen eller skicka med epost."
+                            );
+                            return;
+                          }
+                          setShowGuide(true);
+                        }}
+                      >
+                        <Text style={styles.guideBtnText}>Kort guide</Text>
+                      </Pressable>
+
+                      <Pressable
+                        style={styles.copyrightBtn}
+                        onPress={() => Alert.alert(
+                          "Licens",
+                          "Appen är öppen källkod och licensierad under MIT-licensen. Du hittar mer information på projektets hemsida."
+                        )}
+                      >
+                        <Text style={styles.copyrightText}>©</Text>
+                      </Pressable>
+                    </View>
+                  </ScrollView>
+                </View>
+              </TouchableWithoutFeedback>
             </View>
-
-            <Pressable
-              style={[styles.settingsRow, { marginVertical: 6, alignItems: "center" }]}
-              onPress={() => setAutoFollow((prev) => !prev)}
-            >
-              <Text style={styles.settingsTitle}>Följ min position vid centrering</Text>
-              <Ionicons
-                name={autoFollow ? "checkbox" : "square-outline"}
-                size={24}
-                color={autoFollow ? "#0a9396" : "#767577"}
-              />
-            </Pressable>
-
-            <View style={styles.settingsRow}>
-              <Text style={styles.settingsTitle}>Max bildstorlek vid export (MB)</Text>
-              <TextInput
-                value={maxImageSizeMB}
-                onChangeText={setMaxImageSizeMB}
-                onBlur={() => setMaxImageSizeMB(clampMaxImageSize(maxImageSizeMB))}
-                style={styles.pingInput}
-                keyboardType="decimal-pad"
-              />
-            </View>
-
-            {/* Ny rad: Visa antal och enhet */}
-            <Pressable 
-              style={[styles.settingsRow, { marginVertical: 15, alignItems: 'center' }]}
-              onPress={() => setShowQuantityField(!showQuantityField)}
-            >
-              <Text style={styles.settingsTitle}>Visa antal och enhet vid inmatning</Text>
-              <Ionicons 
-                name={showQuantityField ? "checkbox" : "square-outline"} 
-                size={24} 
-                color={showQuantityField ? "#0a9396" : "#767577"} 
-              />
-            </Pressable>
-
-            <View style={styles.settingsRow}>
-              <Text style={styles.settingsInfoText}>
-                SWEREF99 TM används vid export till Excel och Artportalen
-              </Text>
-            </View>
-
-            <View style={styles.bottomBar}>
-              {/* Spara-knapp till vänster */}
-              <Pressable 
-                style={styles.saveBtn}
-                onPress={async () => {
-                  await onSaveSettings();
-                  setShowSettings(false);
-                }}
-              >
-                <Text style={styles.saveBtnText}>Spara</Text>
-              </Pressable>
-
-              <Pressable
-                style={styles.guideBtn}
-                onPress={() => setShowGuide(true)}
-              >
-                <Text style={styles.guideBtnText}>Kort guide</Text>
-              </Pressable>
-
-              {/* Licens-knapp till höger */}
-              <Pressable 
-                style={styles.copyrightBtn} 
-                onPress={() => Alert.alert(
-                  "Licens", 
-                  "Appen är öppen källkod och licensierad under MIT-licensen. Du hittar mer information på projektets hemsida."
-                )}
-              >
-                <Text style={styles.copyrightText}>©</Text>
-              </Pressable>
-            </View>
-
-          </View>
-        </View>
+          </TouchableWithoutFeedback>
+        </KeyboardAvoidingView>
       </Modal>
 
       <Modal transparent visible={showGuide} onRequestClose={() => setShowGuide(false)} animationType="fade">
@@ -981,10 +1001,20 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     padding: 16,
   },
+  settingsModalWrap: {
+    flex: 1,
+  },
+  settingsModalBackdrop: {
+    justifyContent: "flex-start",
+    paddingTop: 110,
+  },
   modalCard: {
     backgroundColor: "#fff",
     borderRadius: 12,
     padding: 12,
+  },
+  settingsModalCard: {
+    maxHeight: "82%",
   },
   modalTitle: {
     fontWeight: "700",
