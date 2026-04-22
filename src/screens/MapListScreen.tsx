@@ -545,7 +545,7 @@ const toggleBackgroundGPS = async () => {
         </View>
       </Modal>
 
-      <Modal transparent visible={!!menuMap} onRequestClose={() => setMenuMap(null)} animationType="fade">
+      <Modal transparent visible={!!menuMap} onRequestClose={() => setMenuMap(null)} animationType="slide">
         <View style={styles.modalBackdrop}>
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setMenuMap(null)} />
           <View style={styles.menuModalCard}>
@@ -573,10 +573,11 @@ const toggleBackgroundGPS = async () => {
             </Pressable>
             <Pressable
               style={styles.menuActionBtn}
-              onPress={() => {
+              onPress={async () => {
                 if (!menuMap) return;
                 const selected = menuMap;
                 setMenuMap(null);
+                await new Promise((resolve) => setTimeout(resolve, 800));
                 setImportPolygonMap(selected);
               }}
             >
@@ -755,10 +756,11 @@ const toggleBackgroundGPS = async () => {
             <View style={styles.guideActions}>
               <Pressable
                 style={styles.okBtn}
-                onPress={() => {
+                onPress={async () => {
                   const selected = importPolygonMap;
                   setImportPolygonMap(null);
                   if (selected) {
+                    await new Promise((resolve) => setTimeout(resolve, 800));
                     void importPolygonAreas(selected);
                   }
                 }}
