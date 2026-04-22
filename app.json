@@ -16,6 +16,7 @@
     ],
     "ios": {
       "supportsTablet": true,
+      "usesIcloudStorage": true,
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Faltkarta behover GPS for att visa din position pa kartan.",
         "NSPhotoLibraryUsageDescription": "Faltkarta behover atkomst till bilder for att lagga till foton till observationer.",

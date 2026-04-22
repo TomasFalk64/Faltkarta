@@ -470,7 +470,7 @@ const toggleBackgroundGPS = async () => {
         <Text style={styles.exitFabText}>BakgrundsGPS</Text> 
       </Pressable>
 
-      <Modal transparent visible={showImportMenu} onRequestClose={() => setShowImportMenu(false)} animationType="fade">
+      <Modal transparent visible={showImportMenu} onRequestClose={() => setShowImportMenu(false)} animationType="slide">
         <View style={styles.modalBackdrop}>
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setShowImportMenu(false)} />
           <View style={styles.modalCard}>
@@ -491,8 +491,9 @@ const toggleBackgroundGPS = async () => {
             <Text style={styles.sectionTitle}>Redan nedladdad</Text>
             <Pressable
               style={styles.menuActionBtn}
-              onPress={() => {
+              onPress={async () => {
                 setShowImportMenu(false);
+                await new Promise((resolve) => setTimeout(resolve, 800));
                 void onImport();
               }}
             >
@@ -500,12 +501,6 @@ const toggleBackgroundGPS = async () => {
             </Pressable>
             <Text style={styles.helpText}>Välj en GeoTIFF-fil som redan finns på din telefon.</Text>
 
-            <Pressable
-              style={{ display: "none" }}
-              onPress={() => setShowImportMenu(false)}
-            >
-              <Text style={styles.menuActionText}>Stäng</Text>
-            </Pressable>
           </View>
         </View>
       </Modal>
