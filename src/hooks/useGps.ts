@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AppState } from "react-native";
+import { Alert, AppState, Platform } from "react-native";
 import * as Location from "expo-location";
 import * as TaskManager from "expo-task-manager";
 import { LatLon } from "../types/models";
@@ -61,6 +61,15 @@ export function useGps({ pingSeconds, backgroundGPS, onBackgroundDenied }: UseGp
   const lastSampleRef = useRef<GpsSample | null>(null);
   const stackRef = useRef<GpsSample[]>([]);
   const foregroundWatchRef = useRef<{ remove: () => void } | null>(null);
+  const foregroundJustGrantedRef = useRef(false);
+
+  const showIosBackgroundPermissionAlert = useCallback(() => {
+    if (Platform.OS !== "ios") return;
+    Alert.alert(
+      "Bakgrundsposition kräver 'Alltid'",
+      "För att spårning i fickan ska fungera på iPhone behöver du gå till Inställningar och välja platsbehörigheten 'Alltid' för appen."
+    );
+  }, []);
 
   const handleSample = useCallback((sample: GpsSample) => {
     if (DEBUG_GPS) {
@@ -177,7 +186,13 @@ export function useGps({ pingSeconds, backgroundGPS, onBackgroundDenied }: UseGp
     setBackgroundAllowed(false);
 
     (async () => {
-      const fg = await Location.requestForegroundPermissionsAsync();
+      let fg = await Location.getForegroundPermissionsAsync();
+      if (fg.status !== "granted") {
+        fg = await Location.requestForegroundPermissionsAsync();
+        foregroundJustGrantedRef.current = Platform.OS === "ios" && fg.status === "granted";
+      } else {
+        foregroundJustGrantedRef.current = false;
+      }
       if (fg.status !== "granted") {
         if (!cancelled) {
           setError("Platsbehorighet nekad.");
@@ -186,17 +201,7 @@ export function useGps({ pingSeconds, backgroundGPS, onBackgroundDenied }: UseGp
         return;
       }
 
-      let backgroundGranted = false;
-      if (backgroundGPS) {
-        const bg = await Location.requestBackgroundPermissionsAsync();
-        backgroundGranted = bg.status === "granted";
-        if (!backgroundGranted) {
-          onBackgroundDenied?.();
-        }
-      }
-
       if (!cancelled) {
-        setBackgroundAllowed(backgroundGranted);
         setPermissionGranted(true);
       }
     })().catch((e) => {
@@ -209,7 +214,7 @@ export function useGps({ pingSeconds, backgroundGPS, onBackgroundDenied }: UseGp
     return () => {
       cancelled = true;
     };
-  }, [backgroundGPS]);
+  }, [backgroundGPS, showIosBackgroundPermissionAlert]);
 
   useEffect(() => {
     const unsubscribe = subscribeGpsSamples(handleSample);
@@ -259,12 +264,36 @@ export function useGps({ pingSeconds, backgroundGPS, onBackgroundDenied }: UseGp
 
     const startBackgroundUpdates = async () => {
       try {
+        if (Platform.OS === "ios" && foregroundJustGrantedRef.current) {
+          foregroundJustGrantedRef.current = false;
+          showIosBackgroundPermissionAlert();
+          onBackgroundDenied?.();
+          return;
+        }
+
+        let bg = await Location.getBackgroundPermissionsAsync();
+        if (bg.status !== "granted") {
+          bg = await Location.requestBackgroundPermissionsAsync();
+        }
+        const backgroundGranted = bg.status === "granted";
+        setBackgroundAllowed(backgroundGranted);
+        if (!backgroundGranted) {
+          if (Platform.OS === "ios") {
+            showIosBackgroundPermissionAlert();
+          }
+          onBackgroundDenied?.();
+          return;
+        }
+
         const started = await Location.hasStartedLocationUpdatesAsync(GPS_BACK_TASK);
         if (!started) {
           await Location.startLocationUpdatesAsync(GPS_BACK_TASK, {
             accuracy: Location.Accuracy.BestForNavigation,
             timeInterval: Math.max(1, pingSeconds) * 1000,
             distanceInterval: 1,
+            activityType: Location.ActivityType.OtherNavigation,
+            showsBackgroundLocationIndicator: true,
+            pausesUpdatesAutomatically: false,
             foregroundService: {
               notificationTitle: "Fältkarta",
               notificationBody: "Positionering aktiv i bakgrunden",
@@ -273,17 +302,23 @@ export function useGps({ pingSeconds, backgroundGPS, onBackgroundDenied }: UseGp
           });
         }
       } catch (e) {
+        setBackgroundAllowed(false);
+        if (Platform.OS === "ios") {
+          showIosBackgroundPermissionAlert();
+        }
+        onBackgroundDenied?.();
         console.log("[GPS_BACK_TASK] start rejected", String(e));
       }
     };
 
     (async () => {
       if (!backgroundGPS) {
+        setBackgroundAllowed(false);
         await stopBackgroundUpdates();
       }
 
       // Starta bakgrundstjänsten tidigt så den redan är igång när appen går i bakgrunden.
-      if (backgroundGPS && backgroundAllowed) {
+      if (backgroundGPS) {
         await startBackgroundUpdates();
       }
 
@@ -304,7 +339,7 @@ export function useGps({ pingSeconds, backgroundGPS, onBackgroundDenied }: UseGp
       foregroundWatchRef.current?.remove();
       foregroundWatchRef.current = null;
     };
-  }, [appState, backgroundAllowed, backgroundGPS, handleSample, permissionGranted, pingSeconds]);
+  }, [appState, backgroundAllowed, backgroundGPS, handleSample, permissionGranted, pingSeconds, showIosBackgroundPermissionAlert]);
 
   return { gpsPos, rawAccuracyMeters, displayAccuracyMeters, error, stopAllGps };
 }

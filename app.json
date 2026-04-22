@@ -59,7 +59,8 @@
         "expo-location",
         {
           "locationAlwaysAndWhenInUsePermission": "Faltkarta behover GPS for att visa din position och logga spar i bakgrunden.",
-          "isAndroidBackgroundLocationEnabled": true
+          "isAndroidBackgroundLocationEnabled": true,
+          "isIosBackgroundLocationEnabled": true
         }
       ],
       "expo-media-library"
