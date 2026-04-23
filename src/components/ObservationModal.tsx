@@ -203,7 +203,6 @@ export function ObservationModal({
   }
 
   async function resetAndClose() {
-    //  if (onDelete) {await onDelete();}
     setSpecies("");
     setNotes("");
     setPhotoUris([]);
@@ -278,8 +277,8 @@ export function ObservationModal({
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={() => void resetAndClose()}>
-      <View style={styles.backdrop}>
-        <SafeAreaView style={styles.safeArea} edges={["top", "bottom"]}>
+      <View style={[styles.backdrop, Platform.OS === "android" ? styles.backdropAndroid : undefined]}>
+        <SafeAreaView style={[styles.safeArea, Platform.OS === "android" ? styles.safeAreaAndroid : undefined]} edges={["bottom"]}>
           <View style={styles.card}>
             <View style={styles.header}>
             <Pressable 
@@ -315,7 +314,7 @@ export function ObservationModal({
             </View>
             <KeyboardAvoidingView
               behavior={Platform.OS === "ios" ? "padding" : undefined}
-              keyboardVerticalOffset={0}
+              keyboardVerticalOffset={Platform.OS === "ios" ? 40 : 0}
               style={styles.keyboardAvoid}
             >
               <ScrollView
@@ -328,7 +327,7 @@ export function ObservationModal({
               <TextInput
                 value={species}
                 onChangeText={(text) => {
-                  setSpecies(text); // Uppdatera texten
+                  setSpecies(text);
                   setIsShowingSuggestions(true);
                   if (showSpeciesInfo) {
                     setShowSpeciesInfo(false);
@@ -340,6 +339,7 @@ export function ObservationModal({
                 }}
                 onBlur={() => setTimeout(() => setIsShowingSuggestions(false), 120)}
                 placeholder={speciesPlaceholder}
+                placeholderTextColor="#77838c"
                 style={[styles.input, styles.speciesInput]}
               />
               <Pressable
@@ -377,7 +377,7 @@ export function ObservationModal({
                     onPress={() => {
                       setSpecies(item);
                       setShowSpeciesInfo(false);
-                      setIsShowingSuggestions(false); // StÃ¤ng menyn vid val
+                      setIsShowingSuggestions(false);
                     }} 
                     style={styles.suggestionItem}
                   >
@@ -399,6 +399,7 @@ export function ObservationModal({
               onFocus={() => setIsShowingSuggestions(false)}
               style={[styles.input, styles.notes]}
               placeholder="Beskrivning"
+              placeholderTextColor="#77838c"
               multiline
             />
             <View style={styles.dividerContainer}>
@@ -431,7 +432,7 @@ export function ObservationModal({
                     value={localName}
                     onChangeText={setLocalName}
                     style={[styles.input, styles.metaInput]}
-                    placeholder="Ange lokalnamn"
+                    placeholder="Lokalnamn"
                     placeholderTextColor="#77838c"
                   />
                 </View>
@@ -554,28 +555,28 @@ const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.35)",
-    justifyContent: "flex-start",
+    justifyContent: "flex-end",
     alignItems: "stretch",
     padding: 16,
-    paddingTop: 16,
     paddingBottom: 0,
   },
   safeArea: {
     flex: 1,
+    justifyContent: "flex-end",
+  },
+  backdropAndroid: {
+    justifyContent: "flex-start",
+  },
+  safeAreaAndroid: {
     justifyContent: "flex-start",
   },
   card: {
     backgroundColor: "#fff",
     borderRadius: 12,
     flex: 1,
-    minHeight: 0,
     maxHeight: "85%",
     alignSelf: "stretch",
     overflow: "hidden",
-    //minHeight: "100%",
-    //maxHeight: "80%",
-    //maxHeight: "80%",
-    //height: 500,
     marginBottom: 5,
     padding: 14,
   },
@@ -743,8 +744,8 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "700",
     color: "#172121",
-    flex: 1,           // Gör att titeln tar ledigt utrymme i mitten
-    textAlign: "center", // Centrerar texten mellan ikonerna
+    flex: 1,    
+    textAlign: "center", 
   },
   iconBtn: {
     padding: 4,
