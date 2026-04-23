@@ -1,5 +1,5 @@
 ﻿import React, { useEffect, useState } from "react";
-import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { RootStackParamList } from "../navigation/types";
 import { loadMaps, loadObservationsForMap, loadSettings } from "../storage/storage";
@@ -84,6 +84,13 @@ export function ExportScreen({ route }: Props) {
       return;
     }
     const xlsx = buildXlsx(observations);
+    if (Platform.OS === "ios") {
+      const result = await saveXlsxAndShare(mapName, xlsx);
+      if (!result.shared) {
+        Alert.alert("Export", `Delning ar inte tillganglig.\nFil sparades:\n${result.xlsxPath}`);
+      }
+      return;
+    }
     const result = await saveXlsxGeoJsonAndMapAndComposeEmail(mapName, observations, xlsx, mapFileUri);
     if (!result.opened) {
       Alert.alert("E-post", `E-post ar inte tillgangligt pa enheten.\nFiler sparades:\n${result.paths.join("\n")}`);
@@ -92,6 +99,10 @@ export function ExportScreen({ route }: Props) {
   }
 
   function onExportCsv() {
+    if (Platform.OS === "ios") {
+      void onSaveCsv();
+      return;
+    }
     setShowExcelModal(true);
   }
 
@@ -141,8 +152,9 @@ export function ExportScreen({ route }: Props) {
             <Text style={styles.modalTitle}>Exportera Excelfil</Text>
             <Pressable
               style={[styles.modalActionBtn, styles.modalShareBtn]}
-              onPress={() => {
+              onPress={async () => {
                 setShowExcelModal(false);
+                await new Promise((resolve) => setTimeout(resolve, 600));
                 void onSaveCsv();
               }}
             >
@@ -150,8 +162,9 @@ export function ExportScreen({ route }: Props) {
             </Pressable>
             <Pressable
               style={[styles.modalActionBtn, styles.modalMailBtn]}
-              onPress={() => {
+              onPress={async () => {
                 setShowExcelModal(false);
+                await new Promise((resolve) => setTimeout(resolve, 600));
                 void onEmailCsv();
               }}
             >

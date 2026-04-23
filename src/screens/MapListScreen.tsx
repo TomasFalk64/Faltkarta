@@ -91,7 +91,7 @@ export function MapListScreen({ navigation }: Props) {
   }, []);
 
   useFocusEffect(
-    useCallback(() => {
+    useCallback(() => {      
       refresh();
     }, [refresh])
   );
