@@ -46,7 +46,7 @@ type Props = NativeStackScreenProps<RootStackParamList, "MapList">;
 
 export function MapListScreen({ navigation }: Props) {
   const [maps, setMaps] = useState<MapItem[]>([]);
-  const [autoFollow, setAutoFollow] = useState(false);
+  const [autoFollow, setAutoFollow] = useState(true);
   const [gpsPingSeconds, setGpsPingSeconds] = useState("3");
   const { gpsOptions, setGpsOptions } = useGpsContext();
   const [showQuantityField, setShowQuantityField] = useState(false);

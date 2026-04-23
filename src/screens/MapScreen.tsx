@@ -46,7 +46,7 @@ export function MapScreen({ route, navigation }: Props) {
   const [gpsPingSeconds, setGpsPingSeconds] = useState(3);
   const [showQuantityField, setShowQuantityField] = useState(false);
   const [backgroundGPS, setBackgroundGPS] = useState(false);
-  const [showScaleBar, setShowScaleBar] = useState(false);
+  const [showScaleBar, setShowScaleBar] = useState(true);
   const [showAccuracyHelp, setShowAccuracyHelp] = useState(false);
 
   const { gpsPos, displayAccuracyMeters, rawAccuracyMeters, error: gpsError } = useGpsContext();
