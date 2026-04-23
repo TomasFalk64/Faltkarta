@@ -1,6 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useGps } from "../hooks/useGps";
-import { loadSettings } from "../storage/storage";
+import { loadSettings, saveSettings } from "../storage/storage";
 
 type GpsOptions = {
   pingSeconds: number;
@@ -43,9 +43,21 @@ export function GpsProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  const handleBackgroundDenied = useCallback(() => {
-    setGpsOptionsState((prev) => ({ ...prev, backgroundGPS: false }));
-  }, []);
+  const handleBackgroundDenied = useCallback(async () => {
+  setGpsOptionsState((prev) => ({ ...prev, backgroundGPS: false }));
+  try {
+    const currentSettings = await loadSettings();
+    const updatedSettings = {
+      ...currentSettings,
+      backgroundGPS: false,
+    };
+    await saveSettings(updatedSettings);
+    
+    console.log("Bakgrunds-GPS har stängts av permanent i inställningarna.");
+  } catch (err) {
+    console.error("Kunde inte spara ner nekad bakgrunds-GPS:", err);
+  }
+}, []);
 
   const { gpsPos, rawAccuracyMeters, displayAccuracyMeters, error, stopAllGps } = useGps({
     pingSeconds: gpsOptions.pingSeconds,
