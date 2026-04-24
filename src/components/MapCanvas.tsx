@@ -37,6 +37,10 @@ const VIRTUAL_MAX_SIDE = 800;
 const TARGET_DOT_SCREEN_SIZE = 22;
 const MIN_DOT_SCREEN_SIZE = 18;
 const MAX_DOT_SCREEN_SIZE = 40;
+const SIZE_DIFF = 4;
+const GPS_TARGET_DOT_SCREEN_SIZE = TARGET_DOT_SCREEN_SIZE - SIZE_DIFF;
+const GPS_MIN_DOT_SCREEN_SIZE = MIN_DOT_SCREEN_SIZE - SIZE_DIFF;
+const GPS_MAX_DOT_SCREEN_SIZE = MAX_DOT_SCREEN_SIZE - SIZE_DIFF;
 const TARGET_TOUCH_SCREEN_SIZE = 28;
 const MIN_TOUCH_SCREEN_SIZE = 24;
 const MAX_TOUCH_SCREEN_SIZE = 36;
@@ -190,9 +194,9 @@ export function MapCanvas({
   const gpsPoint = gpsPosProjected ? toLocalPoint(gpsPosProjected) : null;
   const safeScale = Math.max(0.01, scale);
   const gpsDotSize = clamp(
-    TARGET_DOT_SCREEN_SIZE / safeScale,
-    MIN_DOT_SCREEN_SIZE / safeScale,
-    MAX_DOT_SCREEN_SIZE / safeScale
+    GPS_TARGET_DOT_SCREEN_SIZE / safeScale,
+    GPS_MIN_DOT_SCREEN_SIZE / safeScale,
+    GPS_MAX_DOT_SCREEN_SIZE / safeScale
   );
   const pointDotSize = clamp(
     TARGET_DOT_SCREEN_SIZE / safeScale,
