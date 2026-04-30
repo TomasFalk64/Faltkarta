@@ -99,7 +99,7 @@ export function MapScreen({ route, navigation }: Props) {
   useEffect(() => {
     if (!isFollowing || !gpsPos) return;
     const nextTarget = clampToMapBounds(gpsPos);
-    if (distanceMeters(centerCoord, nextTarget) < 3) {
+    if (distanceMeters(centerCoord, nextTarget) < 2) {
       return;
     }
     setCenterCoord(nextTarget);
