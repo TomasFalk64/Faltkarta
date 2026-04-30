@@ -278,7 +278,7 @@ export function ObservationModal({
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={() => void resetAndClose()}>
       <View style={[styles.backdrop, Platform.OS === "android" ? styles.backdropAndroid : undefined]}>
-        <SafeAreaView style={[styles.safeArea, Platform.OS === "android" ? styles.safeAreaAndroid : undefined]} edges={["bottom"]}>
+        <SafeAreaView style={[styles.safeArea, Platform.OS === "android" ? styles.safeAreaAndroid : undefined]} edges={["top", "bottom"]}>
           <View style={styles.card}>
             <View style={styles.header}>
             <Pressable 
