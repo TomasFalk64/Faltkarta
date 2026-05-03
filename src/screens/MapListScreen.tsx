@@ -62,6 +62,7 @@ export function MapListScreen({ navigation }: Props) {
   const [deleteMap, setDeleteMap] = useState<MapItem | null>(null);
   const [showImportMenu, setShowImportMenu] = useState(false);
   const [importPolygonMap, setImportPolygonMap] = useState<MapItem | null>(null);
+  const [showBackgroundDisclosure, setShowBackgroundDisclosure] = useState(false);
 
   const SKOGSMONITOR_URL = "https://karta.skogsmonitor.se/?background=Lantm%C3%A4terietTopowebb&lat=60.55728&layers=17-26-21-14&lng=16.88599&zoom=7";
 
@@ -194,32 +195,58 @@ export function MapListScreen({ navigation }: Props) {
   };
 
 
-const toggleBackgroundGPS = async () => {
-  const nextState = !gpsOptions.backgroundGPS;
+  const setBackgroundGpsState = async (nextState: boolean) => {
+    const pingValue = Number.parseInt(clampPingInput(gpsPingSeconds), 10) || 3;
 
-  // Gör om pingen till ett nummer och klampa till 3–20
-  const pingValue = Number.parseInt(clampPingInput(gpsPingSeconds), 10) || 3;
-
-  // HÄR ÄR FIXEN: Skicka objektet direkt istället för att använda prev
-  setGpsOptions({
-    pingSeconds: pingValue,
-    backgroundGPS: nextState
-  });
-
-  // Spara även till AsyncStorage
-  try {
-    await saveSettings({
-      gpsPingSeconds: pingValue,
+    setGpsOptions({
+      pingSeconds: pingValue,
       backgroundGPS: nextState,
-      showQuantityField: showQuantityField,
-      maxImageSizeMB: Number.parseFloat(maxImageSizeMB.replace(",", ".")) || 3,
-      autoFollow: autoFollow,
-      coordinateSystem: coordinateSystem,
     });
-  } catch (error) {
-    console.error("Kunde inte spara inställningar:", error);
-  }
-};
+
+    try {
+      await saveSettings({
+        gpsPingSeconds: pingValue,
+        backgroundGPS: nextState,
+        showQuantityField: showQuantityField,
+        maxImageSizeMB: Number.parseFloat(maxImageSizeMB.replace(",", ".")) || 3,
+        autoFollow: autoFollow,
+        coordinateSystem: coordinateSystem,
+      });
+    } catch (error) {
+      console.error("Kunde inte spara inställningar:", error);
+    }
+  };
+
+  const toggleBackgroundGPS = async () => {
+    if (gpsOptions.backgroundGPS) {
+      await setBackgroundGpsState(false);
+      return;
+    }
+
+    try {
+      const bg = await Location.getBackgroundPermissionsAsync();
+      if (bg.status === "granted") {
+        await setBackgroundGpsState(true);
+        return;
+      }
+      setShowBackgroundDisclosure(true);
+    } catch (error) {
+      console.error("Kunde inte kontrollera platsbehörighet:", error);
+      setShowBackgroundDisclosure(true);
+    }
+  };
+
+  const onApproveBackgroundDisclosure = async () => {
+    setShowBackgroundDisclosure(false);
+    try {
+      const bg = await Location.requestBackgroundPermissionsAsync();
+      if (bg.status === "granted") {
+        await setBackgroundGpsState(true);
+      }
+    } catch (error) {
+      console.error("Kunde inte begära bakgrundsbehörighet:", error);
+    }
+  };
 
   function onOpenMap(item: MapItem) {
     navigation.navigate("Map", { mapId: item.id });
@@ -469,6 +496,44 @@ const toggleBackgroundGPS = async () => {
       >
         <Text style={styles.exitFabText}>BakgrundsGPS</Text> 
       </Pressable>
+
+      <Modal
+        transparent
+        visible={showBackgroundDisclosure}
+        onRequestClose={() => setShowBackgroundDisclosure(false)}
+        animationType="fade"
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Information om platsdata</Text>
+            <Text style={styles.disclosureText}>
+              Fältkarta använder platsdata även när appen är stängd eller inte används. 
+            </Text>
+            <Text style={styles.disclosureText}>
+              Detta görs för att funktionen BakgrundsGPS ska kunna behålla kontakten med satelliterna när din skärm är avstängd.
+            </Text>
+            <Text style={styles.disclosureText}>
+              Om systemets dialogruta inte visas: Gå till inställningar, välj 'Behörigheter' -&gt; 'Plats' och markera 'Tillåt alltid' för att aktivera funktionen.
+            </Text>
+            <View style={styles.modalActions}>
+              <Pressable
+                onPress={() => setShowBackgroundDisclosure(false)}
+                style={[styles.modalBtn, styles.cancelBtn, styles.modalBtnLong]}
+              >
+                <Text style={styles.modalBtnText}>Avbryt</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  void onApproveBackgroundDisclosure();
+                }}
+                style={[styles.modalBtn, styles.okBtn, styles.modalBtnLong]}
+              >
+                <Text style={styles.modalBtnText}>OK, jag förstår</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <Modal transparent visible={showImportMenu} onRequestClose={() => setShowImportMenu(false)} animationType="slide">
         <View style={styles.modalBackdrop}>
@@ -1034,6 +1099,11 @@ const styles = StyleSheet.create({
     color: "#44515b",
     marginBottom: 8,
     lineHeight: 18,
+  },
+  disclosureText: {
+    color: "#22323b",
+    lineHeight: 20,
+    marginBottom: 8,
   },
   modalActions: {
     flexDirection: "row",
