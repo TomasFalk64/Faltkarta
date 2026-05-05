@@ -566,7 +566,7 @@ export function MapListScreen({ navigation }: Props) {
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Information om platsdata</Text>
             <Text style={styles.disclosureText}>
-              Fältkarta använder platsdata även när appen är stängd eller inte används. 
+              Fältkarta kan, om du tillåter, använda platsdata även när appen är stängd eller inte används. 
             </Text>
             <Text style={styles.disclosureText}>
               Detta görs för att funktionen BakgrundsGPS ska kunna behålla kontakten med satelliterna när din skärm är avstängd.
