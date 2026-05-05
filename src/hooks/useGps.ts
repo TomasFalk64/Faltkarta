@@ -17,6 +17,9 @@ type UseGpsOptions = {
 type UseGpsResult = {
   gpsPos: LatLon | null;
   gpsHeading: number | null;
+  foregroundPermissionKnown: boolean;
+  foregroundPermissionGranted: boolean;
+  requestForegroundPermission: () => Promise<boolean>;
   rawAccuracyMeters: number | null;
   displayAccuracyMeters: number | null;
   error: string | null;
@@ -65,6 +68,7 @@ export function useGps({ pingSeconds, backgroundGPS, headingEnabled, headingSusp
   const [displayAccuracyMeters, setDisplayAccuracyMeters] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [appState, setAppState] = useState(AppState.currentState);
+  const [foregroundPermissionKnown, setForegroundPermissionKnown] = useState(false);
   const [permissionGranted, setPermissionGranted] = useState(false);
   const [backgroundAllowed, setBackgroundAllowed] = useState(false);
 
@@ -83,6 +87,26 @@ export function useGps({ pingSeconds, backgroundGPS, headingEnabled, headingSusp
       "Bakgrundsposition kräver 'Alltid'",
       "För att spårning i fickan ska fungera på iPhone behöver du gå till Inställningar och välja platsbehörigheten 'Alltid' för appen."
     );
+  }, []);
+
+  const requestForegroundPermission = useCallback(async (): Promise<boolean> => {
+    try {
+      const fg = await Location.requestForegroundPermissionsAsync();
+      const granted = fg.status === "granted";
+      setForegroundPermissionKnown(true);
+      setPermissionGranted(granted);
+      if (!granted) {
+        setError("Platsbehorighet nekad.");
+      } else {
+        setError(null);
+      }
+      return granted;
+    } catch (e) {
+      setForegroundPermissionKnown(true);
+      setPermissionGranted(false);
+      setError(String(e));
+      return false;
+    }
   }, []);
 
   const handleSample = useCallback((sample: GpsSample) => {
@@ -202,30 +226,31 @@ export function useGps({ pingSeconds, backgroundGPS, headingEnabled, headingSusp
 
   useEffect(() => {
     let cancelled = false;
+    setForegroundPermissionKnown(false);
     setPermissionGranted(false);
     setBackgroundAllowed(false);
 
     (async () => {
-      let fg = await Location.getForegroundPermissionsAsync();
-      if (fg.status !== "granted") {
-        fg = await Location.requestForegroundPermissionsAsync();
-        foregroundJustGrantedRef.current = Platform.OS === "ios" && fg.status === "granted";
-      } else {
-        foregroundJustGrantedRef.current = false;
-      }
-      if (fg.status !== "granted") {
+      foregroundJustGrantedRef.current = false;
+      const fg = await Location.getForegroundPermissionsAsync();
+      const granted = fg.status === "granted";
+      if (!granted) {
         if (!cancelled) {
           setError("Platsbehorighet nekad.");
+          setForegroundPermissionKnown(true);
           setPermissionGranted(false);
         }
         return;
       }
 
       if (!cancelled) {
+        setForegroundPermissionKnown(true);
         setPermissionGranted(true);
+        setError(null);
       }
     })().catch((e) => {
       if (!cancelled) {
+        setForegroundPermissionKnown(true);
         setError(String(e));
         setPermissionGranted(false);
       }
@@ -234,7 +259,7 @@ export function useGps({ pingSeconds, backgroundGPS, headingEnabled, headingSusp
     return () => {
       cancelled = true;
     };
-  }, [backgroundGPS, showIosBackgroundPermissionAlert]);
+  }, [backgroundGPS]);
 
   useEffect(() => {
     const unsubscribe = subscribeGpsSamples(handleSample);
@@ -295,10 +320,7 @@ export function useGps({ pingSeconds, backgroundGPS, headingEnabled, headingSusp
           return;
         }
 
-        let bg = await Location.getBackgroundPermissionsAsync();
-        if (bg.status !== "granted") {
-          bg = await Location.requestBackgroundPermissionsAsync();
-        }
+        const bg = await Location.getBackgroundPermissionsAsync();
         const backgroundGranted = bg.status === "granted";
         setBackgroundAllowed(backgroundGranted);
         if (!backgroundGranted) {
@@ -420,7 +442,17 @@ export function useGps({ pingSeconds, backgroundGPS, headingEnabled, headingSusp
     };
   }, [appState, headingEnabled, headingSuspended, permissionGranted]);
 
-  return { gpsPos, gpsHeading, rawAccuracyMeters, displayAccuracyMeters, error, stopAllGps };
+  return {
+    gpsPos,
+    gpsHeading,
+    foregroundPermissionKnown,
+    foregroundPermissionGranted: permissionGranted,
+    requestForegroundPermission,
+    rawAccuracyMeters,
+    displayAccuracyMeters,
+    error,
+    stopAllGps,
+  };
 }
 
 function normalizeHeading(value: number): number {
@@ -428,7 +460,7 @@ function normalizeHeading(value: number): number {
   return heading < 0 ? heading + 360 : heading;
 }
 
-function smoothHeadingCircular(raw: number, previous: number | null, alpha: number = 0.3): number {
+function smoothHeadingCircular(raw: number, previous: number | null, alpha: number = 0.15): number {
   if (previous === null) return raw;
   
   // Beräkna kortaste väg på cirkel (0-360)

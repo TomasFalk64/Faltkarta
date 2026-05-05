@@ -1,4 +1,4 @@
-﻿import React, { useCallback, useState } from "react";
+﻿import React, { useCallback, useEffect, useState } from "react";
 import {
   Alert,
   FlatList,
@@ -48,7 +48,7 @@ export function MapListScreen({ navigation }: Props) {
   const [maps, setMaps] = useState<MapItem[]>([]);
   const [autoFollow, setAutoFollow] = useState(true);
   const [gpsPingSeconds, setGpsPingSeconds] = useState("3");
-  const { gpsOptions, setGpsOptions } = useGpsContext();
+  const { gpsOptions, setGpsOptions, foregroundPermissionKnown, foregroundPermissionGranted, requestForegroundPermission } = useGpsContext();
   const [showQuantityField, setShowQuantityField] = useState(false);
   const [maxImageSizeMB, setMaxImageSizeMB] = useState("3");
   const [coordinateSystem, setCoordinateSystem] = useState<"SWEREF99" | "WGS84">("SWEREF99");
@@ -63,6 +63,8 @@ export function MapListScreen({ navigation }: Props) {
   const [showImportMenu, setShowImportMenu] = useState(false);
   const [importPolygonMap, setImportPolygonMap] = useState<MapItem | null>(null);
   const [showBackgroundDisclosure, setShowBackgroundDisclosure] = useState(false);
+  const [showStartDisclosure, setShowStartDisclosure] = useState(false);
+  const [startDisclosureDismissed, setStartDisclosureDismissed] = useState(false);
 
   const SKOGSMONITOR_URL = "https://karta.skogsmonitor.se/?background=Lantm%C3%A4terietTopowebb&lat=60.55728&layers=17-26-21-14&lng=16.88599&zoom=7";
 
@@ -96,6 +98,13 @@ export function MapListScreen({ navigation }: Props) {
       refresh();
     }, [refresh])
   );
+
+  useEffect(() => {
+    if (!foregroundPermissionKnown) return;
+    if (!foregroundPermissionGranted && !startDisclosureDismissed) {
+      setShowStartDisclosure(true);
+    }
+  }, [foregroundPermissionGranted, foregroundPermissionKnown, startDisclosureDismissed]);
 
   async function onImport() {
     try {
@@ -246,6 +255,16 @@ export function MapListScreen({ navigation }: Props) {
     } catch (error) {
       console.error("Kunde inte begära bakgrundsbehörighet:", error);
     }
+  };
+
+  const onDeclineDisclosure = async (which: "start" | "background") => {
+    if (which === "start") {
+      setShowStartDisclosure(false);
+      setStartDisclosureDismissed(true);
+    } else {
+      setShowBackgroundDisclosure(false);
+    }
+    await setBackgroundGpsState(false);
   };
 
   function onOpenMap(item: MapItem) {
@@ -499,8 +518,48 @@ export function MapListScreen({ navigation }: Props) {
 
       <Modal
         transparent
+        visible={showStartDisclosure}
+        onRequestClose={() => {
+          void onDeclineDisclosure("start");
+        }}
+        animationType="fade"
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Fältkarta vill använda din position</Text>
+            <Text style={styles.disclosureText}>
+              Fältkarta samlar in platsdata för att visa din position på kartan och för att du ska kunna registrera artobservationer. Denna data används även för att logga din rutt i bakgrunden om du väljer att aktivera den funktionen.
+            </Text>
+            <View style={styles.modalActions}>
+              <Pressable
+                style={[styles.modalBtn, styles.cancelBtn, styles.modalBtnLong]}
+                onPress={() => {
+                  void onDeclineDisclosure("start");
+                }}
+              >
+                <Text style={styles.modalBtnText}>Avbryt</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.modalBtn, styles.okBtn, styles.modalBtnLong]}
+                onPress={() => {
+                  setShowStartDisclosure(false);
+                  setStartDisclosureDismissed(true);
+                  void requestForegroundPermission();
+                }}
+              >
+                <Text style={styles.modalBtnText}>OK</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        transparent
         visible={showBackgroundDisclosure}
-        onRequestClose={() => setShowBackgroundDisclosure(false)}
+        onRequestClose={() => {
+          void onDeclineDisclosure("background");
+        }}
         animationType="fade"
       >
         <View style={styles.modalBackdrop}>
@@ -517,7 +576,9 @@ export function MapListScreen({ navigation }: Props) {
             </Text>
             <View style={styles.modalActions}>
               <Pressable
-                onPress={() => setShowBackgroundDisclosure(false)}
+                onPress={() => {
+                  void onDeclineDisclosure("background");
+                }}
                 style={[styles.modalBtn, styles.cancelBtn, styles.modalBtnLong]}
               >
                 <Text style={styles.modalBtnText}>Avbryt</Text>
@@ -1174,3 +1235,5 @@ copyrightText: {
   color: '#888',
 },
 });
+
+

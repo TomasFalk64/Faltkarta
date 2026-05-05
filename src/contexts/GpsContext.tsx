@@ -10,6 +10,9 @@ type GpsOptions = {
 type GpsContextValue = {
   gpsPos: { lat: number; lon: number } | null;
   gpsHeading: number | null;
+  foregroundPermissionKnown: boolean;
+  foregroundPermissionGranted: boolean;
+  requestForegroundPermission: () => Promise<boolean>;
   headingEnabled: boolean;
   setHeadingEnabled: (enabled: boolean) => void;
   setHeadingSuspended: (suspended: boolean) => void;
@@ -65,7 +68,17 @@ export function GpsProvider({ children }: { children: React.ReactNode }) {
   }
 }, []);
 
-  const { gpsPos, gpsHeading, rawAccuracyMeters, displayAccuracyMeters, error, stopAllGps } = useGps({
+  const {
+    gpsPos,
+    gpsHeading,
+    foregroundPermissionKnown,
+    foregroundPermissionGranted,
+    requestForegroundPermission,
+    rawAccuracyMeters,
+    displayAccuracyMeters,
+    error,
+    stopAllGps,
+  } = useGps({
     pingSeconds: gpsOptions.pingSeconds,
     backgroundGPS: gpsOptions.backgroundGPS,
     headingEnabled,
@@ -81,6 +94,9 @@ export function GpsProvider({ children }: { children: React.ReactNode }) {
     () => ({
       gpsPos,
       gpsHeading,
+      foregroundPermissionKnown,
+      foregroundPermissionGranted,
+      requestForegroundPermission,
       headingEnabled,
       setHeadingEnabled,
       setHeadingSuspended,
@@ -91,7 +107,20 @@ export function GpsProvider({ children }: { children: React.ReactNode }) {
       setGpsOptions,
       stopAllGps,
     }),
-    [displayAccuracyMeters, error, gpsHeading, gpsOptions, gpsPos, headingEnabled, rawAccuracyMeters, setGpsOptions, stopAllGps]
+    [
+      displayAccuracyMeters,
+      error,
+      foregroundPermissionGranted,
+      foregroundPermissionKnown,
+      gpsHeading,
+      gpsOptions,
+      gpsPos,
+      headingEnabled,
+      rawAccuracyMeters,
+      requestForegroundPermission,
+      setGpsOptions,
+      stopAllGps,
+    ]
   );
 
   return <GpsContext.Provider value={value}>{children}</GpsContext.Provider>;
