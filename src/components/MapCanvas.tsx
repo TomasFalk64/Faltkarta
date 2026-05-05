@@ -19,11 +19,14 @@ type Props = {
   imageUri?: string;
   centerCoord: LatLon;
   gpsPos: LatLon | null;
+  gpsHeading: number | null;
+  showHeadingIndicator: boolean;
   observations: Observation[];
   draftPolygon: LatLon[];
   showScaleBar: boolean;
   onPanGeoDelta: (deltaLat: number, deltaLon: number) => void;
   onPanDrag: () => void;
+  onPanStateChange?: (isPanning: boolean) => void;
   onZoom: () => void;
   onPressPoint?: (observationId: string) => void;
 };
@@ -37,7 +40,7 @@ const VIRTUAL_MAX_SIDE = 800;
 const TARGET_DOT_SCREEN_SIZE = 22;
 const MIN_DOT_SCREEN_SIZE = 18;
 const MAX_DOT_SCREEN_SIZE = 40;
-const SIZE_DIFF = 4;
+const SIZE_DIFF = 2;
 const GPS_TARGET_DOT_SCREEN_SIZE = TARGET_DOT_SCREEN_SIZE - SIZE_DIFF;
 const GPS_MIN_DOT_SCREEN_SIZE = MIN_DOT_SCREEN_SIZE - SIZE_DIFF;
 const GPS_MAX_DOT_SCREEN_SIZE = MAX_DOT_SCREEN_SIZE - SIZE_DIFF;
@@ -50,11 +53,14 @@ export function MapCanvas({
   imageUri,
   centerCoord,
   gpsPos,
+  gpsHeading,
+  showHeadingIndicator,
   observations,
   draftPolygon,
   showScaleBar,
   onPanGeoDelta,
   onPanDrag,
+  onPanStateChange,
   onZoom,
   onPressPoint,
 }: Props) {
@@ -209,6 +215,11 @@ export function MapCanvas({
     MAX_TOUCH_SCREEN_SIZE / safeScale
   );
   const gpsBorderWidth = clamp(1.5 / safeScale, 0.8 / safeScale, 2.0 / safeScale);
+  const headingNeedleHalfWidth = clamp(9 / safeScale, 5 / safeScale, 15 / safeScale);
+  const headingNeedleHeight = clamp(24 / safeScale, 14 / safeScale, 36 / safeScale);
+  const headingNeedleOffsetY = clamp(15 / safeScale, 9 / safeScale, 25 / safeScale);
+  const headingInnerHalfWidth = headingNeedleHalfWidth * 0.78;
+  const headingInnerHeight = headingNeedleHeight * 0.78;
   const scaleBar = useMemo(() => {
     if (!showScaleBar) return null;
     const bounds = displayBounds3857;
@@ -249,6 +260,7 @@ export function MapCanvas({
             };
           } else {
             modeRef.current = "pan";
+            onPanStateChange?.(true);
           }
         },
         onPanResponderMove: (evt, gs) => {
@@ -277,6 +289,7 @@ export function MapCanvas({
           }
         },
         onPanResponderRelease: (_, gs) => {
+          onPanStateChange?.(false);
           if (modeRef.current === "pan") {
             const dx = gs.dx;
             const dy = gs.dy;
@@ -301,12 +314,13 @@ export function MapCanvas({
           touchedPanRef.current = false;
         },
         onPanResponderTerminate: () => {
+          onPanStateChange?.(false);
           modeRef.current = "none";
           touchedPanRef.current = false;
           setDrag({ x: 0, y: 0 });
         },
       }),
-    [map, onPanDrag, onPanGeoDelta, onZoom]
+    [map, onPanDrag, onPanGeoDelta, onPanStateChange, onZoom]
   );
 
   useEffect(() => {
@@ -428,8 +442,54 @@ export function MapCanvas({
           );
         })}
 
+        {gpsPoint && showHeadingIndicator && (
+          <View
+            pointerEvents="none"
+            style={[
+              styles.gpsHeadingOverlay,
+              {
+                width: gpsDotSize,
+                height: gpsDotSize,
+                left: gpsPoint.x - gpsDotSize / 2,
+                top: gpsPoint.y - gpsDotSize / 2,
+              },
+            ]}
+          >
+            <View
+              style={[
+                styles.gpsHeadingWrap,
+                { transform: [{ rotate: `${gpsHeading ?? 0}deg` }] },
+              ]}
+            >
+              <View
+                style={[
+                  styles.gpsHeadingNeedleOutline,
+                  {
+                    borderLeftWidth: headingNeedleHalfWidth,
+                    borderRightWidth: headingNeedleHalfWidth,
+                    borderBottomWidth: headingNeedleHeight,
+                    marginTop: -headingNeedleOffsetY,
+                  },
+                ]}
+              />
+              <View
+                style={[
+                  styles.gpsHeadingNeedleFill,
+                  {
+                    borderLeftWidth: headingInnerHalfWidth,
+                    borderRightWidth: headingInnerHalfWidth,
+                    borderBottomWidth: headingInnerHeight,
+                    marginTop: -headingNeedleOffsetY + headingNeedleHeight * 0.1,
+                  },
+                ]}
+              />
+            </View>
+          </View>
+        )}
+
         {gpsPoint && (
           <View
+            pointerEvents="none"
             style={[
               styles.gpsDot,
               {
@@ -606,6 +666,38 @@ const styles = StyleSheet.create({
     backgroundColor: "#3a86ff",
     borderWidth: 0,
     borderColor: "#e6f0ff",
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "visible",
+    zIndex: 30,
+  },
+  gpsHeadingOverlay: {
+    position: "absolute",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 20,
+  },
+  gpsHeadingWrap: {
+    width: "100%",
+    height: "100%",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  gpsHeadingNeedleOutline: {
+    width: 0,
+    height: 0,
+    borderLeftColor: "transparent",
+    borderRightColor: "transparent",
+    borderBottomColor: "#ffffff",
+    position: "absolute",
+  },
+  gpsHeadingNeedleFill: {
+    width: 0,
+    height: 0,
+    borderLeftColor: "transparent",
+    borderRightColor: "transparent",
+    borderBottomColor: "#3a86ff",
+    position: "absolute",
   },
   pointDot: {
     backgroundColor: "#d62828",
@@ -616,5 +708,6 @@ const styles = StyleSheet.create({
     position: "absolute",
     alignItems: "center",
     justifyContent: "center",
+    zIndex: 10,
   },
 });

@@ -9,6 +9,10 @@ type GpsOptions = {
 
 type GpsContextValue = {
   gpsPos: { lat: number; lon: number } | null;
+  gpsHeading: number | null;
+  headingEnabled: boolean;
+  setHeadingEnabled: (enabled: boolean) => void;
+  setHeadingSuspended: (suspended: boolean) => void;
   rawAccuracyMeters: number | null;
   displayAccuracyMeters: number | null;
   error: string | null;
@@ -24,6 +28,8 @@ export function GpsProvider({ children }: { children: React.ReactNode }) {
     pingSeconds: 3,
     backgroundGPS: false,
   });
+  const [headingEnabled, setHeadingEnabled] = useState(true);
+  const [headingSuspended, setHeadingSuspended] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -59,9 +65,11 @@ export function GpsProvider({ children }: { children: React.ReactNode }) {
   }
 }, []);
 
-  const { gpsPos, rawAccuracyMeters, displayAccuracyMeters, error, stopAllGps } = useGps({
+  const { gpsPos, gpsHeading, rawAccuracyMeters, displayAccuracyMeters, error, stopAllGps } = useGps({
     pingSeconds: gpsOptions.pingSeconds,
     backgroundGPS: gpsOptions.backgroundGPS,
+    headingEnabled,
+    headingSuspended,
     onBackgroundDenied: handleBackgroundDenied,
   });
 
@@ -72,6 +80,10 @@ export function GpsProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo(
     () => ({
       gpsPos,
+      gpsHeading,
+      headingEnabled,
+      setHeadingEnabled,
+      setHeadingSuspended,
       rawAccuracyMeters,
       displayAccuracyMeters,
       error,
@@ -79,7 +91,7 @@ export function GpsProvider({ children }: { children: React.ReactNode }) {
       setGpsOptions,
       stopAllGps,
     }),
-    [displayAccuracyMeters, error, gpsOptions, gpsPos, rawAccuracyMeters, setGpsOptions, stopAllGps]
+    [displayAccuracyMeters, error, gpsHeading, gpsOptions, gpsPos, headingEnabled, rawAccuracyMeters, setGpsOptions, stopAllGps]
   );
 
   return <GpsContext.Provider value={value}>{children}</GpsContext.Provider>;

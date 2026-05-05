@@ -9,11 +9,14 @@ import { emitGpsSample, GpsSample, subscribeGpsSamples } from "../services/gpsEv
 type UseGpsOptions = {
   pingSeconds: number;
   backgroundGPS: boolean;
+  headingEnabled: boolean;
+  headingSuspended: boolean;
   onBackgroundDenied?: () => void;
 };
 
 type UseGpsResult = {
   gpsPos: LatLon | null;
+  gpsHeading: number | null;
   rawAccuracyMeters: number | null;
   displayAccuracyMeters: number | null;
   error: string | null;
@@ -27,6 +30,8 @@ const MEMORY_DEPTH = 2;
 const MAX_SPEED_MPS = 50;
 const MAX_GOOD_ACCURACY = 100;
 const DEBUG_GPS = false;
+const HEADING_MIN_INTERVAL_MS = 50;
+const HEADING_MIN_DELTA_DEG = 0.8;
 
 if (!TaskManager.isTaskDefined(GPS_BACK_TASK)) {
   TaskManager.defineTask<{ locations?: Location.LocationObject[] }>(GPS_BACK_TASK, async ({ data, error }) => {
@@ -44,13 +49,18 @@ if (!TaskManager.isTaskDefined(GPS_BACK_TASK)) {
         lon: loc.coords.longitude,
         rawAccuracy: Math.max(1, Math.round(accuracy)),
         timestamp: typeof loc.timestamp === "number" ? loc.timestamp : Date.now(),
+        heading:
+          typeof loc.coords.heading === "number" && Number.isFinite(loc.coords.heading)
+            ? normalizeHeading(loc.coords.heading)
+            : null,
       });
     });
   });
 }
 
-export function useGps({ pingSeconds, backgroundGPS, onBackgroundDenied }: UseGpsOptions): UseGpsResult {
+export function useGps({ pingSeconds, backgroundGPS, headingEnabled, headingSuspended, onBackgroundDenied }: UseGpsOptions): UseGpsResult {
   const [gpsPos, setGpsPos] = useState<LatLon | null>(null);
+  const [gpsHeading, setGpsHeading] = useState<number | null>(null);
   const [rawAccuracyMeters, setRawAccuracyMeters] = useState<number | null>(null);
   const [displayAccuracyMeters, setDisplayAccuracyMeters] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -61,7 +71,11 @@ export function useGps({ pingSeconds, backgroundGPS, onBackgroundDenied }: UseGp
   const lastSampleRef = useRef<GpsSample | null>(null);
   const stackRef = useRef<GpsSample[]>([]);
   const foregroundWatchRef = useRef<{ remove: () => void } | null>(null);
+  const headingWatchRef = useRef<{ remove: () => void } | null>(null);
   const foregroundJustGrantedRef = useRef(false);
+  const smoothedHeadingRef = useRef<number | null>(null);
+  const lastHeadingEmitAtRef = useRef(0);
+  const lastHeadingRenderedRef = useRef<number | null>(null);
 
   const showIosBackgroundPermissionAlert = useCallback(() => {
     if (Platform.OS !== "ios") return;
@@ -162,6 +176,12 @@ export function useGps({ pingSeconds, backgroundGPS, onBackgroundDenied }: UseGp
     } catch (e) {
       console.log("[GPS_FOREGROUND] stop rejected", String(e));
     }
+    try {
+      headingWatchRef.current?.remove();
+      headingWatchRef.current = null;
+    } catch (e) {
+      console.log("[GPS_HEADING] stop rejected", String(e));
+    }
 
     try {
       const started = await Location.hasStartedLocationUpdatesAsync(GPS_BACK_TASK);
@@ -256,6 +276,10 @@ export function useGps({ pingSeconds, backgroundGPS, onBackgroundDenied }: UseGp
             lon: loc.coords.longitude,
             rawAccuracy: Math.max(1, Math.round(accuracy)),
             timestamp: typeof loc.timestamp === "number" ? loc.timestamp : Date.now(),
+            heading:
+              typeof loc.coords.heading === "number" && Number.isFinite(loc.coords.heading)
+                ? normalizeHeading(loc.coords.heading)
+                : null,
           });
         }
       );
@@ -341,5 +365,83 @@ export function useGps({ pingSeconds, backgroundGPS, onBackgroundDenied }: UseGp
     };
   }, [appState, backgroundAllowed, backgroundGPS, handleSample, permissionGranted, pingSeconds, showIosBackgroundPermissionAlert]);
 
-  return { gpsPos, rawAccuracyMeters, displayAccuracyMeters, error, stopAllGps };
+  useEffect(() => {
+    if (!headingEnabled || headingSuspended || !permissionGranted || appState !== "active") {
+      smoothedHeadingRef.current = null;
+      lastHeadingEmitAtRef.current = 0;
+      lastHeadingRenderedRef.current = null;
+      setGpsHeading(null);
+      headingWatchRef.current?.remove();
+      headingWatchRef.current = null;
+      return;
+    }
+    let cancelled = false;
+
+    (async () => {
+      try {
+        headingWatchRef.current?.remove();
+        const subscription = await Location.watchHeadingAsync((heading) => {
+          if (cancelled) return;
+          const now = Date.now();
+          if (now - lastHeadingEmitAtRef.current < HEADING_MIN_INTERVAL_MS) return;
+          const raw = Number.isFinite(heading.trueHeading) && heading.trueHeading >= 0
+            ? heading.trueHeading
+            : heading.magHeading;
+          if (!Number.isFinite(raw)) return;
+          
+          const smoothed = smoothHeadingCircular(raw, smoothedHeadingRef.current);
+          const prev = lastHeadingRenderedRef.current;
+          if (typeof prev === "number") {
+            const delta = circularDeltaDegrees(smoothed, prev);
+            if (delta < HEADING_MIN_DELTA_DEG) return;
+          }
+          smoothedHeadingRef.current = smoothed;
+          lastHeadingEmitAtRef.current = now;
+          lastHeadingRenderedRef.current = smoothed;
+          setGpsHeading(smoothed);
+        });
+        if (cancelled) {
+          subscription.remove();
+          return;
+        }
+        headingWatchRef.current = subscription;
+      } catch (e) {
+        console.log("[GPS_HEADING] watch rejected", String(e));
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      smoothedHeadingRef.current = null;
+      lastHeadingEmitAtRef.current = 0;
+      lastHeadingRenderedRef.current = null;
+      headingWatchRef.current?.remove();
+      headingWatchRef.current = null;
+    };
+  }, [appState, headingEnabled, headingSuspended, permissionGranted]);
+
+  return { gpsPos, gpsHeading, rawAccuracyMeters, displayAccuracyMeters, error, stopAllGps };
+}
+
+function normalizeHeading(value: number): number {
+  const heading = value % 360;
+  return heading < 0 ? heading + 360 : heading;
+}
+
+function smoothHeadingCircular(raw: number, previous: number | null, alpha: number = 0.3): number {
+  if (previous === null) return raw;
+  
+  // Beräkna kortaste väg på cirkel (0-360)
+  let delta = raw - previous;
+  if (delta > 180) delta -= 360;
+  else if (delta < -180) delta += 360;
+  
+  const smoothed = previous + delta * alpha;
+  return normalizeHeading(smoothed);
+}
+
+function circularDeltaDegrees(a: number, b: number): number {
+  let d = Math.abs(normalizeHeading(a) - normalizeHeading(b));
+  if (d > 180) d = 360 - d;
+  return d;
 }
