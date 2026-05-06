@@ -162,6 +162,7 @@ export const speciesInfo: Record<string, { redList: string, speciesInfo: string 
   "Puderspindling": { redList: "NT", speciesInfo: "" },
   "Purpurmylia": { redList: "LC", speciesInfo: "" },
   "Raggtaggsvamp": { redList: "EN", speciesInfo: "" },
+  "Reliktbock": { redList: "NT", speciesInfo: "Solsidan av äldre tall, ofta syns kådarester. Larvgång 3 mm, ovala kläckhål 5mm " },
   "Revlummer": { redList: "LC", speciesInfo: "" },
   "Rosenticka": { redList: "NT", speciesInfo: "rosa porer, rosa kött" },
   "Rosetticka": { redList: "VU", speciesInfo: "" },

@@ -3,6 +3,7 @@ export type GpsSample = {
   lon: number;
   rawAccuracy: number;
   timestamp: number;
+  heading: number | null;
 };
 
 type GpsListener = (sample: GpsSample) => void;

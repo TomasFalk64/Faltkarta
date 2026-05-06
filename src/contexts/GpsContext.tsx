@@ -1,6 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useGps } from "../hooks/useGps";
-import { loadSettings } from "../storage/storage";
+import { loadSettings, saveSettings } from "../storage/storage";
 
 type GpsOptions = {
   pingSeconds: number;
@@ -9,6 +9,13 @@ type GpsOptions = {
 
 type GpsContextValue = {
   gpsPos: { lat: number; lon: number } | null;
+  gpsHeading: number | null;
+  foregroundPermissionKnown: boolean;
+  foregroundPermissionGranted: boolean;
+  requestForegroundPermission: () => Promise<boolean>;
+  headingEnabled: boolean;
+  setHeadingEnabled: (enabled: boolean) => void;
+  setHeadingSuspended: (suspended: boolean) => void;
   rawAccuracyMeters: number | null;
   displayAccuracyMeters: number | null;
   error: string | null;
@@ -24,6 +31,8 @@ export function GpsProvider({ children }: { children: React.ReactNode }) {
     pingSeconds: 3,
     backgroundGPS: false,
   });
+  const [headingEnabled, setHeadingEnabled] = useState(true);
+  const [headingSuspended, setHeadingSuspended] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -43,13 +52,37 @@ export function GpsProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  const handleBackgroundDenied = useCallback(() => {
-    setGpsOptionsState((prev) => ({ ...prev, backgroundGPS: false }));
-  }, []);
+  const handleBackgroundDenied = useCallback(async () => {
+  setGpsOptionsState((prev) => ({ ...prev, backgroundGPS: false }));
+  try {
+    const currentSettings = await loadSettings();
+    const updatedSettings = {
+      ...currentSettings,
+      backgroundGPS: false,
+    };
+    await saveSettings(updatedSettings);
+    
+    console.log("Bakgrunds-GPS har stängts av permanent i inställningarna.");
+  } catch (err) {
+    console.error("Kunde inte spara ner nekad bakgrunds-GPS:", err);
+  }
+}, []);
 
-  const { gpsPos, rawAccuracyMeters, displayAccuracyMeters, error, stopAllGps } = useGps({
+  const {
+    gpsPos,
+    gpsHeading,
+    foregroundPermissionKnown,
+    foregroundPermissionGranted,
+    requestForegroundPermission,
+    rawAccuracyMeters,
+    displayAccuracyMeters,
+    error,
+    stopAllGps,
+  } = useGps({
     pingSeconds: gpsOptions.pingSeconds,
     backgroundGPS: gpsOptions.backgroundGPS,
+    headingEnabled,
+    headingSuspended,
     onBackgroundDenied: handleBackgroundDenied,
   });
 
@@ -60,6 +93,13 @@ export function GpsProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo(
     () => ({
       gpsPos,
+      gpsHeading,
+      foregroundPermissionKnown,
+      foregroundPermissionGranted,
+      requestForegroundPermission,
+      headingEnabled,
+      setHeadingEnabled,
+      setHeadingSuspended,
       rawAccuracyMeters,
       displayAccuracyMeters,
       error,
@@ -67,7 +107,20 @@ export function GpsProvider({ children }: { children: React.ReactNode }) {
       setGpsOptions,
       stopAllGps,
     }),
-    [displayAccuracyMeters, error, gpsOptions, gpsPos, rawAccuracyMeters, setGpsOptions, stopAllGps]
+    [
+      displayAccuracyMeters,
+      error,
+      foregroundPermissionGranted,
+      foregroundPermissionKnown,
+      gpsHeading,
+      gpsOptions,
+      gpsPos,
+      headingEnabled,
+      rawAccuracyMeters,
+      requestForegroundPermission,
+      setGpsOptions,
+      stopAllGps,
+    ]
   );
 
   return <GpsContext.Provider value={value}>{children}</GpsContext.Provider>;

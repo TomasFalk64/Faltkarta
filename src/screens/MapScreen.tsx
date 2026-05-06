@@ -46,10 +46,19 @@ export function MapScreen({ route, navigation }: Props) {
   const [gpsPingSeconds, setGpsPingSeconds] = useState(3);
   const [showQuantityField, setShowQuantityField] = useState(false);
   const [backgroundGPS, setBackgroundGPS] = useState(false);
-  const [showScaleBar, setShowScaleBar] = useState(false);
+  const [showScaleBar, setShowScaleBar] = useState(true);
   const [showAccuracyHelp, setShowAccuracyHelp] = useState(false);
 
-  const { gpsPos, displayAccuracyMeters, rawAccuracyMeters, error: gpsError } = useGpsContext();
+  const {
+    gpsPos,
+    gpsHeading,
+    headingEnabled,
+    setHeadingEnabled,
+    setHeadingSuspended,
+    displayAccuracyMeters,
+    rawAccuracyMeters,
+    error: gpsError,
+  } = useGpsContext();
   const editingPhotoLookupRef = useRef<Record<string, { ref: string; assetId?: string }>>({});
   const editingMissingPhotosRef = useRef<Array<{ ref: string; assetId?: string }>>([]);
 
@@ -97,9 +106,15 @@ export function MapScreen({ route, navigation }: Props) {
   }, [autoFollow]);
 
   useEffect(() => {
+    return () => {
+      setHeadingSuspended(false);
+    };
+  }, [setHeadingSuspended]);
+
+  useEffect(() => {
     if (!isFollowing || !gpsPos) return;
     const nextTarget = clampToMapBounds(gpsPos);
-    if (distanceMeters(centerCoord, nextTarget) < 3) {
+    if (distanceMeters(centerCoord, nextTarget) < 2) {
       return;
     }
     setCenterCoord(nextTarget);
@@ -373,6 +388,8 @@ export function MapScreen({ route, navigation }: Props) {
         imageUri={map.thumbnailUri}
         centerCoord={centerCoord}
         gpsPos={gpsPos}
+        gpsHeading={gpsHeading}
+        showHeadingIndicator={headingEnabled}
         observations={observations}
         draftPolygon={draftPolygon}
         showScaleBar={showScaleBar}
@@ -380,6 +397,7 @@ export function MapScreen({ route, navigation }: Props) {
           setCenterCoord((prev) => clampToMapBounds({ lat: prev.lat + dLat, lon: prev.lon + dLon }))
         }
         onPanDrag={() => setIsFollowing(false)}
+        onPanStateChange={(isPanning) => setHeadingSuspended(isPanning)}
         onZoom={() => setIsFollowing(false)}
         onPressPoint={(id) => {
           const obs = observations.find((o) => o.id === id);
@@ -392,7 +410,7 @@ export function MapScreen({ route, navigation }: Props) {
       <View style={styles.northWrap}>
         <Pressable
           style={styles.northBtn}
-          onPress={() => setShowScaleBar((v) => !v)}
+          onPress={() => setHeadingEnabled(!headingEnabled)}
         >
           <View style={styles.compassIcon}>
             <View style={styles.compassNeedleUp} />
