@@ -38,15 +38,9 @@ type ProjectedPoint3857 = {
 
 const VIRTUAL_MAX_SIDE = 800;
 const TARGET_DOT_SCREEN_SIZE = 22;
-const MIN_DOT_SCREEN_SIZE = 18;
-const MAX_DOT_SCREEN_SIZE = 40;
 const SIZE_DIFF = 2;
 const GPS_TARGET_DOT_SCREEN_SIZE = TARGET_DOT_SCREEN_SIZE - SIZE_DIFF;
-const GPS_MIN_DOT_SCREEN_SIZE = MIN_DOT_SCREEN_SIZE - SIZE_DIFF;
-const GPS_MAX_DOT_SCREEN_SIZE = MAX_DOT_SCREEN_SIZE - SIZE_DIFF;
 const TARGET_TOUCH_SCREEN_SIZE = 28;
-const MIN_TOUCH_SCREEN_SIZE = 24;
-const MAX_TOUCH_SCREEN_SIZE = 36;
 
 export function MapCanvas({
   map,
@@ -198,28 +192,25 @@ export function MapCanvas({
   }, [draftPolygon, map]);
 
   const gpsPoint = gpsPosProjected ? toLocalPoint(gpsPosProjected) : null;
-  const safeScale = Math.max(0.01, scale);
-  const gpsDotSize = clamp(
-    GPS_TARGET_DOT_SCREEN_SIZE / safeScale,
-    GPS_MIN_DOT_SCREEN_SIZE / safeScale,
-    GPS_MAX_DOT_SCREEN_SIZE / safeScale
-  );
-  const pointDotSize = clamp(
-    TARGET_DOT_SCREEN_SIZE / safeScale,
-    MIN_DOT_SCREEN_SIZE / safeScale,
-    MAX_DOT_SCREEN_SIZE / safeScale
-  );
-  const pointTouchSize = clamp(
-    TARGET_TOUCH_SCREEN_SIZE / safeScale,
-    MIN_TOUCH_SCREEN_SIZE / safeScale,
-    MAX_TOUCH_SCREEN_SIZE / safeScale
-  );
-  const gpsBorderWidth = clamp(1.5 / safeScale, 0.8 / safeScale, 2.0 / safeScale);
-  const headingNeedleHalfWidth = clamp(9 / safeScale, 5 / safeScale, 15 / safeScale);
-  const headingNeedleHeight = clamp(24 / safeScale, 14 / safeScale, 36 / safeScale);
-  const headingNeedleOffsetY = clamp(15 / safeScale, 9 / safeScale, 25 / safeScale);
+  const gpsDotSize = GPS_TARGET_DOT_SCREEN_SIZE;
+  const pointDotSize = TARGET_DOT_SCREEN_SIZE;
+  const pointTouchSize = TARGET_TOUCH_SCREEN_SIZE;
+  const gpsBorderWidth = 1.5;
+  const headingNeedleHalfWidth = 9;
+  const headingNeedleHeight = 24;
+  const headingNeedleOffsetY = 15;
   const headingInnerHalfWidth = headingNeedleHalfWidth * 0.78;
   const headingInnerHeight = headingNeedleHeight * 0.78;
+
+  const toOverlayPoint = (p: { x: number; y: number }) => {
+    const viewCenterX = viewSize.width / 2;
+    const viewCenterY = viewSize.height / 2;
+    const relX = p.x - virtualSize.width / 2;
+    const relY = p.y - virtualSize.height / 2;
+    const screenX = viewCenterX + (relX + committedShiftX + drag.x) * scale;
+    const screenY = viewCenterY + (relY + committedShiftY + drag.y) * scale;
+    return { x: screenX, y: screenY };
+  };
   const scaleBar = useMemo(() => {
     if (!showScaleBar) return null;
     const bounds = displayBounds3857;
@@ -410,100 +401,112 @@ export function MapCanvas({
           })}
         </Svg>
 
-        {projectedPoints.map(({ obs, meters3857, sourceCrs }) => {
-          if (obs.kind !== "point") return null;
-          const pt = toLocalPoint({ meters3857, sourceCrs });
-          return (
-            <Pressable
-              key={obs.id}
-              onPress={() => onPressPoint?.(obs.id)}
-              style={[
-                styles.pointTouch,
-                {
-                  width: pointTouchSize,
-                  height: pointTouchSize,
-                  left: pt.x - pointTouchSize / 2,
-                  top: pt.y - pointTouchSize / 2,
-                },
-              ]}
-            >
-              <View
-                style={[
-                  styles.pointDot,
-                  {
-                    width: pointDotSize,
-                    height: pointDotSize,
-                    borderRadius: pointDotSize / 2,
-                    borderWidth: gpsBorderWidth,
-                  },
-                ]}
-              />
-            </Pressable>
-          );
-        })}
-
-        {gpsPoint && showHeadingIndicator && (
-          <View
-            pointerEvents="none"
-            style={[
-              styles.gpsHeadingOverlay,
-              {
-                width: gpsDotSize,
-                height: gpsDotSize,
-                left: gpsPoint.x - gpsDotSize / 2,
-                top: gpsPoint.y - gpsDotSize / 2,
-              },
-            ]}
-          >
-            <View
-              style={[
-                styles.gpsHeadingWrap,
-                { transform: [{ rotate: `${gpsHeading ?? 0}deg` }] },
-              ]}
-            >
-              <View
-                style={[
-                  styles.gpsHeadingNeedleOutline,
-                  {
-                    borderLeftWidth: headingNeedleHalfWidth,
-                    borderRightWidth: headingNeedleHalfWidth,
-                    borderBottomWidth: headingNeedleHeight,
-                    marginTop: -headingNeedleOffsetY,
-                  },
-                ]}
-              />
-              <View
-                style={[
-                  styles.gpsHeadingNeedleFill,
-                  {
-                    borderLeftWidth: headingInnerHalfWidth,
-                    borderRightWidth: headingInnerHalfWidth,
-                    borderBottomWidth: headingInnerHeight,
-                    marginTop: -headingNeedleOffsetY + headingNeedleHeight * 0.1,
-                  },
-                ]}
-              />
-            </View>
-          </View>
-        )}
-
-        {gpsPoint && (
-          <View
-            pointerEvents="none"
-            style={[
-              styles.gpsDot,
-              {
-                width: gpsDotSize,
-                height: gpsDotSize,
-                borderRadius: gpsDotSize / 2,
-                borderWidth: gpsBorderWidth,
-                left: gpsPoint.x - gpsDotSize / 2,
-                top: gpsPoint.y - gpsDotSize / 2,
-              },
-            ]}
-          />
-        )}
       </View>
+      )}
+
+      {!displayBounds3857 ? null : (
+        <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
+          {projectedPoints.map(({ obs, meters3857, sourceCrs }) => {
+            if (obs.kind !== "point") return null;
+            const virtualPoint = toLocalPoint({ meters3857, sourceCrs });
+            const pt = toOverlayPoint(virtualPoint);
+            return (
+              <Pressable
+                key={obs.id}
+                onPress={() => onPressPoint?.(obs.id)}
+                style={[
+                  styles.pointTouch,
+                  {
+                    width: pointTouchSize,
+                    height: pointTouchSize,
+                    left: pt.x - pointTouchSize / 2,
+                    top: pt.y - pointTouchSize / 2,
+                  },
+                ]}
+              >
+                <View
+                  style={[
+                    styles.pointDot,
+                    {
+                      width: pointDotSize,
+                      height: pointDotSize,
+                      borderRadius: pointDotSize / 2,
+                      borderWidth: gpsBorderWidth,
+                    },
+                  ]}
+                />
+              </Pressable>
+            );
+          })}
+
+          {gpsPoint && showHeadingIndicator && (() => {
+            const pt = toOverlayPoint(gpsPoint);
+            return (
+              <View
+                pointerEvents="none"
+                style={[
+                  styles.gpsHeadingOverlay,
+                  {
+                    width: gpsDotSize,
+                    height: gpsDotSize,
+                    left: pt.x - gpsDotSize / 2,
+                    top: pt.y - gpsDotSize / 2,
+                  },
+                ]}
+              >
+                <View
+                  style={[
+                    styles.gpsHeadingWrap,
+                    { transform: [{ rotate: `${gpsHeading ?? 0}deg` }] },
+                  ]}
+                >
+                  <View
+                    style={[
+                      styles.gpsHeadingNeedleOutline,
+                      {
+                        borderLeftWidth: headingNeedleHalfWidth,
+                        borderRightWidth: headingNeedleHalfWidth,
+                        borderBottomWidth: headingNeedleHeight,
+                        marginTop: -headingNeedleOffsetY,
+                      },
+                    ]}
+                  />
+                  <View
+                    style={[
+                      styles.gpsHeadingNeedleFill,
+                      {
+                        borderLeftWidth: headingInnerHalfWidth,
+                        borderRightWidth: headingInnerHalfWidth,
+                        borderBottomWidth: headingInnerHeight,
+                        marginTop: -headingNeedleOffsetY + headingNeedleHeight * 0.1,
+                      },
+                    ]}
+                  />
+                </View>
+              </View>
+            );
+          })()}
+
+          {gpsPoint && (() => {
+            const pt = toOverlayPoint(gpsPoint);
+            return (
+              <View
+                pointerEvents="none"
+                style={[
+                  styles.gpsDot,
+                  {
+                    width: gpsDotSize,
+                    height: gpsDotSize,
+                    borderRadius: gpsDotSize / 2,
+                    borderWidth: gpsBorderWidth,
+                    left: pt.x - gpsDotSize / 2,
+                    top: pt.y - gpsDotSize / 2,
+                  },
+                ]}
+              />
+            );
+          })()}
+        </View>
       )}
 
       {!displayBounds3857 ? null : (
