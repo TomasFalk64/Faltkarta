@@ -16,6 +16,7 @@
     ],
     "ios": {
       "bundleIdentifier": "com.tf64.faltkarta",
+      "buildNumber": "2",
       "supportsTablet": true,
       "usesIcloudStorage": true,
       "infoPlist": {
