@@ -23,6 +23,7 @@ export function ExportScreen({ route }: Props) {
   const [maxImageSizeMB, setMaxImageSizeMB] = useState(2);
   const [preview, setPreview] = useState("");
   const [showExcelModal, setShowExcelModal] = useState(false);
+  const [showArtportalenModal, setShowArtportalenModal] = useState(false);
   const [isCreatingZip, setIsCreatingZip] = useState(false);
 
   useEffect(() => {
@@ -59,9 +60,14 @@ export function ExportScreen({ route }: Props) {
       Alert.alert("Export", "Inga observationer att exportera.");
       return;
     }
+    setShowArtportalenModal(true);
+  }
+
+  async function onConfirmCopyArtportalen() {
     const tsv = buildArtportalenTsv(observations);
+    console.log("TSV for Artportalen:\n", tsv);
     await copyTsvAndOpenArtportalen(tsv);
-    Alert.alert("Klart", "TSV kopierad till urklipp. Artportalen öppnad.");
+    console.log("TSV efter Artportalen:\n", tsv);
   }
 
   async function onSaveCsv() {
@@ -177,6 +183,40 @@ export function ExportScreen({ route }: Props) {
         </View>
       </Modal>
 
+      <Modal
+        transparent
+        visible={showArtportalenModal}
+        animationType="fade"
+        onRequestClose={() => setShowArtportalenModal(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalBody}>Observationer kopierade till urklipp.</Text>
+            <Text style={styles.modalBody}>Öppnar Artportalen.</Text>
+            <Text style={styles.modalBody}> </Text>
+            <Text style={styles.modalBody}>Logga in i Artportalen och exportera observationerna genom att först klicka i inmatningsrutan och sedan hålla fingret i inmatningsfönstret och välja klistra in (paste).</Text>
+            <Text style={styles.modalBody}> </Text>
+            <View style={styles.modalButtonRow}>
+              <Pressable
+                style={[styles.modalActionBtn, styles.modalHalfBtn, styles.modalArtportalenOkBtn]}
+                onPress={async () => {
+                  setShowArtportalenModal(false);
+                  await onConfirmCopyArtportalen();
+                }}
+              >
+                <Text style={styles.modalActionText}>OK</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.modalActionBtn, styles.modalHalfBtn, styles.modalCancelBtn]}
+                onPress={() => setShowArtportalenModal(false)}
+              >
+                <Text style={styles.modalActionText}>Avbryt</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       <Modal transparent visible={isCreatingZip} animationType="fade">
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
@@ -278,5 +318,15 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontWeight: "700",
     textAlign: "center",
+  },
+  modalButtonRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  modalHalfBtn: {
+    flex: 1,
+  },
+  modalArtportalenOkBtn: {
+    backgroundColor: "#005f73",
   },
 });

@@ -9,7 +9,7 @@ import JSZip from "jszip";
 import * as XLSX from "xlsx";
 import Papa from "papaparse";
 import piexif from "piexifjs";
-import { Image } from "react-native";
+import { Alert, Image, Linking, Platform } from "react-native";
 import { Observation, PointObservation } from "../types/models";
 import { averageLatLon, wgs84ToSweref99tm } from "./coords";
 import { exportDir } from "./files";
@@ -102,8 +102,26 @@ export function buildArtportalenTsv(observations: Observation[]): string {
 }
 
 export async function copyTsvAndOpenArtportalen(tsv: string) {
+  const url = "https://www.artportalen.se/ImportSighting";
   await Clipboard.setStringAsync(tsv);
-  await WebBrowser.openBrowserAsync("https://www.artportalen.se/ImportSighting");
+  if (Platform.OS === "ios") {
+    // iOS kan ibland tappa clipboard vid omedelbar app-vaxling, sa skriv igen efter kort delay.
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    await Clipboard.setStringAsync(tsv);
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  try {
+    if (Platform.OS === "ios") {
+      const supported = await Linking.canOpenURL(url);
+      if (supported) {
+        await Linking.openURL(url);
+        return;
+      }
+    }
+    await WebBrowser.openBrowserAsync(url);
+  } catch (error) {
+    Alert.alert("Kunde inte öppna Artportalen", String(error));
+  }
 }
 
 export function buildCsv(observations: Observation[]): string {
