@@ -65,9 +65,7 @@ export function ExportScreen({ route }: Props) {
 
   async function onConfirmCopyArtportalen() {
     const tsv = buildArtportalenTsv(observations);
-    console.log("TSV for Artportalen:\n", tsv);
     await copyTsvAndOpenArtportalen(tsv);
-    console.log("TSV efter Artportalen:\n", tsv);
   }
 
   async function onSaveCsv() {
