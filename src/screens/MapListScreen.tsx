@@ -87,11 +87,30 @@ export function MapListScreen({ navigation }: Props) {
     setMaps(allMaps);
     setAutoFollow(settings.autoFollow ?? false);
     setGpsPingSeconds(String(settings.gpsPingSeconds));
-    setGpsOptions({ pingSeconds: settings.gpsPingSeconds, backgroundGPS: settings.backgroundGPS ?? false });
+    setGpsOptions({ pingSeconds: settings.gpsPingSeconds, backgroundGPS: false });
     setShowQuantityField(settings.showQuantityField ?? false);
     setMaxImageSizeMB(String(settings.maxImageSizeMB ?? 2));
     setCoordinateSystem(settings.coordinateSystem ?? "SWEREF99");
   }, []);
+
+  useEffect(() => {
+    const resetBackgroundGpsOnAppOpen = async () => {
+      try {
+        const settings = await loadSettings();
+        const pingSeconds = settings.gpsPingSeconds ?? 3;
+        setGpsOptions({ pingSeconds, backgroundGPS: false });
+        if (settings.backgroundGPS) {
+          await saveSettings({
+            ...settings,
+            backgroundGPS: false,
+          });
+        }
+      } catch (error) {
+        console.error("Kunde inte nollställa bakgrunds-GPS vid appstart:", error);
+      }
+    };
+    void resetBackgroundGpsOnAppOpen();
+  }, [setGpsOptions]);
 
   useFocusEffect(
     useCallback(() => {      
