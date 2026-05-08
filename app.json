@@ -2,7 +2,7 @@
   "expo": {
     "name": "Fältkarta",
     "slug": "faltkarta",
-    "version": "2.5",
+    "version": "2.6",
     "icon": "./assets/icon.png",
     "splash": {
       "image": "./assets/splash.png",
@@ -16,19 +16,18 @@
     ],
     "ios": {
       "bundleIdentifier": "com.tf64.faltkarta",
-      "buildNumber": "2",
+      "buildNumber": "3",
       "supportsTablet": true,
       "usesIcloudStorage": true,
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "Faltkarta behover GPS for att visa din position pa kartan.",
-        "NSPhotoLibraryUsageDescription": "Faltkarta behover atkomst till bilder for att lagga till foton till observationer.",
-        "NSPhotoLibraryAddUsageDescription": "Faltkarta behover spara kopior av observationsbilder i ditt galleri.",
+        "NSLocationWhenInUseUsageDescription": "Fältkarta behöver GPS för att visa din position på kartan och så att du kan registrera artobservationer med koordinater.",
+        "NSPhotoLibraryUsageDescription": "Fältkarta behover åtkomst till bilder för att bifoga foton till observationerna.",
+        "NSPhotoLibraryAddUsageDescription": "Fältkarta behöver spara kopior av observationsbilder i ditt galleri så att du kan spara dom och dela med andra.",
         "UIBackgroundModes": [
-          "location",
           "location"
         ],
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "Faltkarta behover din position i bakgrunden for att logga spar och mata avstand aven nar skarmen ar avstangd.",
-        "NSLocationAlwaysUsageDescription": "Faltkarta behover din position i bakgrunden for att fungera optimalt under faltarbete.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Fältkarta behöver din position i bakgrunden för att logga spår och ha kvar kontakt med satelliter även när skärmen är avstängd under fältarbete.",
+        "NSLocationAlwaysUsageDescription": "Din position används i bakgrunden så du slipper att vänta på att kontakt med satelliter uppdateras efter att skärmen varit avstängd.",
         "ITSAppUsesNonExemptEncryption": false
       }
     },
@@ -55,7 +54,7 @@
         "backgroundColor": "#ffffff"
       },
       "package": "com.tf64.faltkarta",
-      "versionCode": 13,
+      "versionCode": 14,
       "softwareKeyboardLayoutMode": "resize"
     },
     "web": {
@@ -66,7 +65,7 @@
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "Faltkarta behover GPS for att visa din position och logga spar i bakgrunden.",
+          "locationAlwaysAndWhenInUsePermission": "Fältkarta behöver GPS för att visa din position och logga spår i bakgrunden så du slipper att vänta på att kontakt med satelliter uppdateras efter att skärmen varit avstängd.",
           "isAndroidBackgroundLocationEnabled": true,
           "isIosBackgroundLocationEnabled": true
         }

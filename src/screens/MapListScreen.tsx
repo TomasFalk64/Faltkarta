@@ -539,8 +539,10 @@ export function MapListScreen({ navigation }: Props) {
         transparent
         visible={showStartDisclosure}
         onRequestClose={() => {
-          void onDeclineDisclosure("start");
-        }}
+            setShowStartDisclosure(false);
+            setStartDisclosureDismissed(true);
+            void requestForegroundPermission();
+          }}
         animationType="fade"
       >
         <View style={styles.modalBackdrop}>
@@ -550,14 +552,7 @@ export function MapListScreen({ navigation }: Props) {
               Fältkarta samlar in platsdata för att visa din position på kartan och för att du ska kunna registrera artobservationer. Denna data används även för att logga din rutt i bakgrunden om du väljer att aktivera den funktionen.
             </Text>
             <View style={styles.modalActions}>
-              <Pressable
-                style={[styles.modalBtn, styles.cancelBtn, styles.modalBtnLong]}
-                onPress={() => {
-                  void onDeclineDisclosure("start");
-                }}
-              >
-                <Text style={styles.modalBtnText}>Avbryt</Text>
-              </Pressable>
+             
               <Pressable
                 style={[styles.modalBtn, styles.okBtn, styles.modalBtnLong]}
                 onPress={() => {
@@ -577,8 +572,8 @@ export function MapListScreen({ navigation }: Props) {
         transparent
         visible={showBackgroundDisclosure}
         onRequestClose={() => {
-          void onDeclineDisclosure("background");
-        }}
+          void onApproveBackgroundDisclosure();
+        }}       
         animationType="fade"
       >
         <View style={styles.modalBackdrop}>
@@ -591,17 +586,10 @@ export function MapListScreen({ navigation }: Props) {
               Detta görs för att funktionen BakgrundsGPS ska kunna behålla kontakten med satelliterna när din skärm är avstängd.
             </Text>
             <Text style={styles.disclosureText}>
-              Om systemets dialogruta inte visas: Gå till inställningar, välj 'Behörigheter' -&gt; 'Plats' och markera 'Tillåt alltid' för att aktivera funktionen.
+              Om systemets dialogruta inte visas: Gå till Inställningar &gt; Appar &gt; Fältkarta &gt; Plats för att aktivera funktionen.
             </Text>
             <View style={styles.modalActions}>
-              <Pressable
-                onPress={() => {
-                  void onDeclineDisclosure("background");
-                }}
-                style={[styles.modalBtn, styles.cancelBtn, styles.modalBtnLong]}
-              >
-                <Text style={styles.modalBtnText}>Avbryt</Text>
-              </Pressable>
+              
               <Pressable
                 onPress={() => {
                   void onApproveBackgroundDisclosure();
