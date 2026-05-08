@@ -12,6 +12,7 @@ import {
   saveXlsxAndShare,
   saveZipBundleAndShare,
 } from "../services/export";
+import { getSafeUri } from "../services/mapPaths";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Export">;
 
@@ -31,8 +32,8 @@ export function ExportScreen({ route }: Props) {
       const [maps, obs, settings] = await Promise.all([loadMaps(), loadObservationsForMap(mapId), loadSettings()]);
       const m = maps.find((item) => item.id === mapId);
       if (m) {
-        setMapName(m.name);
-        setMapFileUri(m.fileUri);
+        setMapName(m.title);
+        setMapFileUri(getSafeUri(m.fileName, "map"));
       }
       setObservations(obs);
       setMaxImageSizeMB(settings.maxImageSizeMB ?? 2);

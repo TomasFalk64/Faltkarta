@@ -7,6 +7,7 @@ import UPNG from "upng-js";
 import proj4 from "proj4";
 import { MapItem } from "../types/models";
 import { makeId } from "../utils/id";
+import { getSafeUri, toStoredMapPath } from "./mapPaths";
 
 const MAPS_DIR = `${FileSystem.documentDirectory}maps`;
 const PREVIEWS_DIR = `${FileSystem.documentDirectory}previews`;
@@ -60,10 +61,10 @@ export async function pickAndImportGeoTiff(): Promise<MapItem | null> {
 
   return {
     id,
-    name: asset.name.replace(/\.(tif|tiff)$/i, ""),
+    title: asset.name.replace(/\.(tif|tiff)$/i, ""),
     importName: asset.name.replace(/\.(tif|tiff)$/i, ""),
-    fileUri: targetUri,
-    thumbnailUri: thumbnailUri ?? undefined,
+    fileName: toStoredMapPath(targetUri),
+    previewFileName: thumbnailUri ? toStoredMapPath(thumbnailUri) : undefined,
     createdAt: new Date().toISOString(),
     bbox: metadata?.bbox ?? undefined,
     georef: metadata?.georef ?? undefined,
@@ -87,10 +88,10 @@ export async function downloadAndImportGeoTiffFromUrl(url: string): Promise<MapI
   const thumbnailUri = await generatePreviewFromGeoTiff(targetUri, id);
   return {
     id,
-    name: info.baseName,
+    title: info.baseName,
     importName: info.baseName,
-    fileUri: targetUri,
-    thumbnailUri: thumbnailUri ?? undefined,
+    fileName: toStoredMapPath(targetUri),
+    previewFileName: thumbnailUri ? toStoredMapPath(thumbnailUri) : undefined,
     createdAt: new Date().toISOString(),
     bbox: metadata?.bbox ?? undefined,
     georef: metadata?.georef ?? undefined,
@@ -98,21 +99,21 @@ export async function downloadAndImportGeoTiffFromUrl(url: string): Promise<MapI
 }
 
 export async function ensureGeoTiffPreview(map: MapItem): Promise<MapItem> {
-  if (map.thumbnailUri) {
+  if (map.previewFileName) {
     return map;
   }
-  const preview = await generatePreviewFromGeoTiff(map.fileUri, map.id);
+  const preview = await generatePreviewFromGeoTiff(getSafeUri(map.fileName, "map"), map.id);
   if (!preview) {
     return map;
   }
-  return { ...map, thumbnailUri: preview };
+  return { ...map, previewFileName: toStoredMapPath(preview) };
 }
 
 export async function ensureMapGeorefBounds(map: MapItem): Promise<MapItem> {
   if (hasNonLegacyBbox(map) && map.georef) {
     return map;
   }
-  const metadata = await extractGeoTiffMetadata(map.fileUri);
+  const metadata = await extractGeoTiffMetadata(getSafeUri(map.fileName, "map"));
   if (!metadata) {
     return map;
   }
@@ -133,7 +134,7 @@ export async function pickPreviewImageForMap(mapId: string): Promise<string | nu
   const safeName = sanitizeFileName(asset.name);
   const targetUri = `${PREVIEWS_DIR}/${mapId}_${safeName}`;
   await FileSystem.copyAsync({ from: asset.uri, to: targetUri });
-  return targetUri;
+  return toStoredMapPath(targetUri);
 }
 
 export async function deleteIfExists(uri: string) {

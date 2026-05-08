@@ -41,6 +41,7 @@ import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system/legacy";
 import { makeId } from "../utils/id";
 import { PolygonObservation } from "../types/models";
+import { getSafeUri } from "../services/mapPaths";
 
 type Props = NativeStackScreenProps<RootStackParamList, "MapList">;
 
@@ -132,7 +133,7 @@ export function MapListScreen({ navigation }: Props) {
       const next = await upsertMap(item);
       setMaps(next);
       setRenameMap(item);
-      setRenameValue(item.name.toLowerCase().includes("skogsmonitor") ? "" : item.name);
+      setRenameValue(item.title.toLowerCase().includes("skogsmonitor") ? "" : item.title);
       setRenameMode("import");
       setShowRenameHint(true);
     } catch (error) {
@@ -148,7 +149,7 @@ export function MapListScreen({ navigation }: Props) {
 
   function openRename(item: MapItem) {
     setRenameMap(item);
-    setRenameValue(item.name);
+    setRenameValue(item.title);
     setRenameMode("edit");
     setShowRenameHint(false);
   }
@@ -162,9 +163,9 @@ export function MapListScreen({ navigation }: Props) {
     }
     const updated: MapItem = {
       ...renameMap,
-      name: trimmed,
+      title: trimmed,
     };
-    const next = await renameMapAndSyncPointLocalNames(updated, renameMap.name);
+    const next = await renameMapAndSyncPointLocalNames(updated, renameMap.title);
     setMaps(next);
     setRenameMap(null);
     setRenameValue("");
@@ -181,9 +182,9 @@ export function MapListScreen({ navigation }: Props) {
     setRenameMode(null);
 
     if (mode === "import" && current) {
-      await deleteIfExists(current.fileUri);
-      if (current.thumbnailUri) {
-        await deleteIfExists(current.thumbnailUri);
+      await deleteIfExists(getSafeUri(current.fileName, "map"));
+      if (current.previewFileName) {
+        await deleteIfExists(getSafeUri(current.previewFileName, "preview"));
       }
       const next = await removeMap(current.id);
       setMaps(next);
@@ -497,8 +498,8 @@ export function MapListScreen({ navigation }: Props) {
         }
         renderItem={({ item }) => (
           <Pressable style={styles.mapRow} onPress={() => onOpenMap(item)}>
-            {item.thumbnailUri ? (
-              <Image source={{ uri: item.thumbnailUri }} style={styles.thumb} />
+            {item.previewFileName ? (
+              <Image source={{ uri: getSafeUri(item.previewFileName, "preview") }} style={styles.thumb} />
             ) : (
               <View style={[styles.thumb, styles.thumbPlaceholder]}>
                 <Text style={styles.thumbText}>TIFF</Text>
@@ -506,7 +507,7 @@ export function MapListScreen({ navigation }: Props) {
             )}
             <View style={styles.mapMeta}>
               <Text style={styles.mapName} numberOfLines={1}>
-                {item.name}
+                {item.title}
               </Text>
               <Text style={styles.mapDate}>{new Date(item.createdAt).toLocaleDateString()}</Text>
             </View>
@@ -682,7 +683,7 @@ export function MapListScreen({ navigation }: Props) {
         <View style={styles.modalBackdrop}>
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setMenuMap(null)} />
           <View style={styles.menuModalCard}>
-            <Text style={styles.modalTitle}>{menuMap?.name ?? "Karta"}</Text>
+            <Text style={styles.modalTitle}>{menuMap?.title ?? "Karta"}</Text>
             <Pressable
               style={styles.menuActionBtn}
               onPress={() => {
@@ -924,8 +925,8 @@ export function MapListScreen({ navigation }: Props) {
                   const selected = deleteMap;
                   setDeleteMap(null);
                   await cleanupAllPendingPhotoCopies();
-                  await deleteIfExists(selected.fileUri);
-                  if (selected.thumbnailUri) await deleteIfExists(selected.thumbnailUri);
+                  await deleteIfExists(getSafeUri(selected.fileName, "map"));
+                  if (selected.previewFileName) await deleteIfExists(getSafeUri(selected.previewFileName, "preview"));
                   const next = await removeMap(selected.id);
                   setMaps(next);
                 }}

@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { AppSettings, MapItem, Observation } from "../types/models";
+import { getSafeUri, toStoredMapPath } from "../services/mapPaths";
 
 const MAPS_KEY = "maps:v1";
 const OBS_KEY = "observations:v1";
@@ -11,20 +12,22 @@ export async function loadMaps(): Promise<MapItem[]> {
   if (!raw) {
     return [];
   }
-  return JSON.parse(raw) as MapItem[];
+  const parsed = JSON.parse(raw) as MapItem[];
+  return parsed.map(normalizeMapForUse);
 }
 
 export async function saveMaps(maps: MapItem[]) {
-  await AsyncStorage.setItem(MAPS_KEY, JSON.stringify(maps));
+  await AsyncStorage.setItem(MAPS_KEY, JSON.stringify(maps.map(normalizeMapForStorage)));
 }
 
 export async function upsertMap(item: MapItem): Promise<MapItem[]> {
   const all = await loadMaps();
+  const normalizedItem = normalizeMapForUse(item);
   const idx = all.findIndex((m) => m.id === item.id);
   if (idx >= 0) {
-    all[idx] = item;
+    all[idx] = normalizedItem;
   } else {
-    all.unshift(item);
+    all.unshift(normalizedItem);
   }
   await saveMaps(all);
   return all;
@@ -48,7 +51,7 @@ export async function renameMapAndSyncPointLocalNames(
     didChange = true;
     return normalizeObservation({
       ...obs,
-      localName: item.name,
+      localName: item.title,
     });
   });
 
@@ -152,6 +155,45 @@ export async function loadSettings(): Promise<AppSettings> {
     backgroundGPS: parsed.backgroundGPS ?? false,
     autoFollow: parsed.autoFollow ?? false,
     coordinateSystem: parsed.coordinateSystem === "WGS84" ? "WGS84" : "SWEREF99",
+  };
+}
+
+function normalizeMapForStorage(item: MapItem): MapItem {
+  const title = String(item.title ?? item.name ?? "").trim();
+  const fileName = toStoredMapPath(item.fileName ?? item.fileUri ?? "");
+  const previewFileName = item.previewFileName
+    ? toStoredMapPath(item.previewFileName)
+    : item.thumbnailUri
+      ? toStoredMapPath(item.thumbnailUri)
+      : undefined;
+  return {
+    ...item,
+    title,
+    fileName,
+    previewFileName,
+    name: undefined,
+    fileUri: undefined,
+    thumbnailUri: undefined,
+  };
+}
+
+function normalizeMapForUse(item: MapItem): MapItem {
+  const title = String(item.title ?? item.name ?? "").trim();
+  const fileName = toStoredMapPath(item.fileName ?? item.fileUri ?? "");
+  const previewFileName = item.previewFileName
+    ? toStoredMapPath(item.previewFileName)
+    : item.thumbnailUri
+      ? toStoredMapPath(item.thumbnailUri)
+      : undefined;
+  return {
+    ...item,
+    title,
+    fileName,
+    previewFileName,
+    // Keep resolved legacy aliases in-memory for old callsites.
+    name: title,
+    fileUri: getSafeUri(fileName, "map"),
+    thumbnailUri: previewFileName ? getSafeUri(previewFileName, "preview") : undefined,
   };
 }
 

@@ -5,9 +5,14 @@ export type LatLon = {
 
 export type MapItem = {
   id: string;
-  name: string;
+  title: string;
+  // Legacy field kept for backwards compatibility with older stored payloads.
+  name?: string;
   importName?: string;
-  fileUri: string;
+  fileName: string;
+  previewFileName?: string;
+  // Legacy fields kept for backwards compatibility with older stored payloads.
+  fileUri?: string;
   thumbnailUri?: string;
   createdAt: string;
   georef?: {

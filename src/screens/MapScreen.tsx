@@ -21,6 +21,7 @@ import { makeId } from "../utils/id";
 import { ensureMapGeorefBounds } from "../services/files";
 import { resolvePointPhotoUri } from "../services/photos";
 import { distanceMeters } from "../services/coords";
+import { getSafeUri } from "../services/mapPaths";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Map">;
 
@@ -88,7 +89,7 @@ export function MapScreen({ route, navigation }: Props) {
       setMap(hydrated);
       if (hydrated) {
         navigation.setOptions({
-          title: hydrated.name,
+          title: hydrated.title,
           headerStyle: {
           backgroundColor: '#f4f0e7', 
           },
@@ -223,7 +224,7 @@ export function MapScreen({ route, navigation }: Props) {
             photoUris,
             photoAssetIds: hasAnyAssetId ? photoAssetIds : undefined,
             pointNumber,
-            localName: payload.localName?.trim() || map.name,
+            localName: payload.localName?.trim() || map.title,
             accuracyMeters: clampAccuracy(payload.accuracyMeters),
             quantity: payload.quantity ?? editingPoint.quantity ?? 0,
             unit: payload.unit ?? "",
@@ -238,7 +239,7 @@ export function MapScreen({ route, navigation }: Props) {
             photoUris,
             photoAssetIds: hasAnyAssetId ? photoAssetIds : undefined,
             pointNumber,
-            localName: payload.localName?.trim() || map.name,
+            localName: payload.localName?.trim() || map.title,
             accuracyMeters: clampAccuracy(
               payload.accuracyMeters ?? (displayAccuracyMeters ?? rawAccuracyMeters ?? null)
             ),
@@ -385,7 +386,7 @@ export function MapScreen({ route, navigation }: Props) {
     <View style={styles.container}>
       <MapCanvas
         map={map}
-        imageUri={map.thumbnailUri}
+        imageUri={getSafeUri(map.previewFileName, "preview")}
         centerCoord={centerCoord}
         gpsPos={gpsPos}
         gpsHeading={gpsHeading}
@@ -606,7 +607,7 @@ export function MapScreen({ route, navigation }: Props) {
                 notes: "",
                 photoUris: [],
                 photoAssetIds: [],
-                localName: map.name,
+                localName: map.title,
                 accuracyMeters: displayAccuracyMeters ?? rawAccuracyMeters ?? null,
               }
         }
