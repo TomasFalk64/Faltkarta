@@ -335,7 +335,7 @@ export function ObservationModal({
               style={styles.keyboardAvoid}
             >
               <ScrollView
-                keyboardShouldPersistTaps="always"
+                keyboardShouldPersistTaps="handled"
                 keyboardDismissMode="on-drag"
                 style={styles.scroll}
                 contentContainerStyle={styles.scrollContent}
@@ -343,6 +343,8 @@ export function ObservationModal({
             <View style={styles.speciesRow}>
               <TextInput
                 value={species}
+                autoCorrect={false}
+                spellCheck={false}
                 onChangeText={(text) => {
                   setSpecies(text);
                   setIsShowingSuggestions(true);
