@@ -1,4 +1,4 @@
-﻿import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useState } from "react";
 import {
   Alert,
   FlatList,
@@ -19,8 +19,7 @@ import {
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useFocusEffect } from "@react-navigation/native";
 import { RootStackParamList } from "../navigation/types";
-import { MapItem } from "../types/models";
-import { AppSettings } from "../types/models";
+import { AppSettings, LatLon, MapItem } from "../types/models";
 import {
   loadMaps,
   loadObservationsByMapId,
@@ -33,7 +32,7 @@ import {
 } from "../storage/storage";
 import { useGpsContext } from "../contexts/GpsContext";
 import { createBlankGeoTiffMap, deleteIfExists, ensureMapGeorefBounds, pickAndImportGeoTiff } from "../services/files";
-import { meters3857ToWgs84, sweref99tmToWgs84 } from "../services/coords";
+import { distanceMeters, meters3857ToWgs84, sweref99tmToWgs84 } from "../services/coords";
 import { cleanupAllPendingPhotoCopies } from "../services/photos";
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from "expo-location";
@@ -66,8 +65,51 @@ export function MapListScreen({ navigation }: Props) {
   const [showBackgroundDisclosure, setShowBackgroundDisclosure] = useState(false);
   const [showStartDisclosure, setShowStartDisclosure] = useState(false);
   const [startDisclosureDismissed, setStartDisclosureDismissed] = useState(false);
+  const [mapSortMode, setMapSortMode] = useState<"LATEST" | "ALPHA" | "NEAREST">("ALPHA");
+  const [mapSortAnchor, setMapSortAnchor] = useState<LatLon | undefined>(undefined);
 
   const SKOGSMONITOR_URL = "https://karta.skogsmonitor.se/?background=Lantm%C3%A4terietTopowebb&lat=60.55728&layers=17-26-21-14&lng=16.88599&zoom=7";
+  const sortLabel = mapSortMode === "NEAREST" ? "Närmast" : mapSortMode === "ALPHA" ? "A - Ö" : "Senast";
+  const nextSortMode = mapSortMode === "LATEST" ? "ALPHA" : mapSortMode === "ALPHA" ? "NEAREST" : "LATEST";
+
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      title: "Fältkarta",
+      headerTitleAlign: "center",
+      headerRight: () => (
+        <Text style={styles.headerSortBtnText} onPress={() => { void onChooseSort(nextSortMode); }}>
+          {sortLabel}
+        </Text>
+      ),
+    });
+  }, [navigation, nextSortMode, sortLabel]);
+
+  function mapCenter(map: MapItem): LatLon | null {
+    if (!map.bbox) return null;
+    const { minLat, maxLat, minLon, maxLon } = map.bbox;
+    if (![minLat, maxLat, minLon, maxLon].every(Number.isFinite)) return null;
+    return { lat: (minLat + maxLat) / 2, lon: (minLon + maxLon) / 2 };
+  }
+
+  function sortMaps(items: MapItem[], mode: "LATEST" | "ALPHA" | "NEAREST", anchor?: LatLon): MapItem[] {
+    const copy = [...items];
+    if (mode === "ALPHA") {
+      copy.sort((a, b) => a.title.localeCompare(b.title, "sv"));
+      return copy;
+    }
+    if (mode === "NEAREST" && anchor) {
+      copy.sort((a, b) => {
+        const ac = mapCenter(a);
+        const bc = mapCenter(b);
+        const ad = ac ? distanceMeters(anchor, ac) : Number.POSITIVE_INFINITY;
+        const bd = bc ? distanceMeters(anchor, bc) : Number.POSITIVE_INFINITY;
+        return ad - bd;
+      });
+      return copy;
+    }
+    copy.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    return copy;
+  }
 
   function clampPingInput(value: string): string {
     const parsed = Number.parseInt(value, 10);
@@ -85,7 +127,10 @@ export function MapListScreen({ navigation }: Props) {
 
   const refresh = useCallback(async () => {
     const [allMaps, settings] = await Promise.all([loadMaps(), loadSettings()]);
-    setMaps(allMaps);
+    const mode = settings.mapSortMode ?? "LATEST";
+    setMapSortMode(mode);
+    setMapSortAnchor(settings.mapSortAnchor);
+    setMaps(sortMaps(allMaps, mode, settings.mapSortAnchor));
     setAutoFollow(settings.autoFollow ?? false);
     setGpsPingSeconds(String(settings.gpsPingSeconds));
     setGpsOptions({ pingSeconds: settings.gpsPingSeconds, backgroundGPS: gpsOptions.backgroundGPS });
@@ -131,7 +176,7 @@ export function MapListScreen({ navigation }: Props) {
       const item = await pickAndImportGeoTiff();
       if (!item) return;
       const next = await upsertMap(item);
-      setMaps(next);
+      setMaps(sortMaps(next, mapSortMode, mapSortAnchor));
       setRenameMap(item);
       setRenameValue(item.title.toLowerCase().includes("skogsmonitor") ? "" : item.title);
       setRenameMode("import");
@@ -162,7 +207,7 @@ export function MapListScreen({ navigation }: Props) {
 
       const item = await createBlankGeoTiffMap(center);
       const next = await upsertMap(item);
-      setMaps(next);
+      setMaps(sortMaps(next, mapSortMode, mapSortAnchor));
       setRenameMap(item);
       setRenameValue("");
       setRenameMode("import");
@@ -172,6 +217,36 @@ export function MapListScreen({ navigation }: Props) {
     }
   }
 
+  async function onChooseSort(mode: "LATEST" | "ALPHA" | "NEAREST") {
+    let anchor = mapSortAnchor;
+    if (mode === "NEAREST") {
+      let center = gpsPos;
+      try {
+        const current = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        center = { lat: current.coords.latitude, lon: current.coords.longitude };
+      } catch {
+        // fallback to current gpsPos
+      }
+      if (!center) {
+        Alert.alert("Ingen GPS-position", "Kunde inte hämta position för sortering på närmast.");
+        return;
+      }
+      anchor = center;
+    } else {
+      anchor = undefined;
+    }
+
+    setMapSortMode(mode);
+    setMapSortAnchor(anchor);
+    setMaps((prev) => sortMaps(prev, mode, anchor));
+
+    const settings = await loadSettings();
+    await saveSettings({
+      ...settings,
+      mapSortMode: mode,
+      mapSortAnchor: anchor,
+    });
+  }
 
 
   function onOpenMenu(item: MapItem) {
@@ -197,7 +272,7 @@ export function MapListScreen({ navigation }: Props) {
       title: trimmed,
     };
     const next = await renameMapAndSyncPointLocalNames(updated, renameMap.title);
-    setMaps(next);
+    setMaps(sortMaps(next, mapSortMode, mapSortAnchor));
     setRenameMap(null);
     setRenameValue("");
     setShowRenameHint(false);
@@ -218,7 +293,7 @@ export function MapListScreen({ navigation }: Props) {
         await deleteIfExists(getSafeUri(current.previewFileName, "preview"));
       }
       const next = await removeMap(current.id);
-      setMaps(next);
+      setMaps(sortMaps(next, mapSortMode, mapSortAnchor));
     }
   }
   const onSaveSettings = async () => {
@@ -237,6 +312,8 @@ export function MapListScreen({ navigation }: Props) {
         backgroundGPS: gpsOptions.backgroundGPS,
         autoFollow: autoFollow,
         coordinateSystem: coordinateSystem,
+        mapSortMode: mapSortMode,
+        mapSortAnchor: mapSortAnchor,
       };
 
       // Spara allt på en gång
@@ -271,6 +348,8 @@ export function MapListScreen({ navigation }: Props) {
         maxImageSizeMB: Number.parseFloat(maxImageSizeMB.replace(",", ".")) || 3,
         autoFollow: autoFollow,
         coordinateSystem: coordinateSystem,
+        mapSortMode: mapSortMode,
+        mapSortAnchor: mapSortAnchor,
       });
     } catch (error) {
       console.error("Kunde inte spara inställningar:", error);
@@ -970,7 +1049,7 @@ export function MapListScreen({ navigation }: Props) {
                   await deleteIfExists(getSafeUri(selected.fileName, "map"));
                   if (selected.previewFileName) await deleteIfExists(getSafeUri(selected.previewFileName, "preview"));
                   const next = await removeMap(selected.id);
-                  setMaps(next);
+                  setMaps(sortMaps(next, mapSortMode, mapSortAnchor));
                 }}
                 style={[styles.modalBtn, styles.menuDangerBtn, styles.modalBtnLong]}
               >
@@ -1058,6 +1137,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "flex-end",
     marginTop: 12,
+  },
+  headerSortBtnText: {
+    color: "#3a2d0f",
+    fontWeight: "700",
+    fontSize: 13,
+    paddingHorizontal: 6,
+    paddingVertical: 0,
   },
   listContent: {
     paddingHorizontal: 12,
@@ -1287,5 +1373,23 @@ copyrightText: {
   color: '#888',
 },
 });
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 

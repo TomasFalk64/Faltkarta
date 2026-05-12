@@ -72,4 +72,6 @@ export type AppSettings = {
   backgroundGPS: boolean;
   autoFollow: boolean;
   coordinateSystem: "SWEREF99" | "WGS84";
+  mapSortMode: "LATEST" | "ALPHA" | "NEAREST";
+  mapSortAnchor?: LatLon;
 };

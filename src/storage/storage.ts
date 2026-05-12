@@ -145,6 +145,8 @@ export async function loadSettings(): Promise<AppSettings> {
       backgroundGPS: false,
       autoFollow: false,
       coordinateSystem: "SWEREF99",
+      mapSortMode: "ALPHA",
+      mapSortAnchor: undefined,
     };
   }
   const parsed = JSON.parse(raw) as Partial<AppSettings>;
@@ -155,6 +157,14 @@ export async function loadSettings(): Promise<AppSettings> {
     backgroundGPS: parsed.backgroundGPS ?? false,
     autoFollow: parsed.autoFollow ?? false,
     coordinateSystem: parsed.coordinateSystem === "WGS84" ? "WGS84" : "SWEREF99",
+    mapSortMode:
+      parsed.mapSortMode === "ALPHA" || parsed.mapSortMode === "NEAREST" ? parsed.mapSortMode : "ALPHA",
+    mapSortAnchor:
+      parsed.mapSortAnchor &&
+      Number.isFinite(parsed.mapSortAnchor.lat) &&
+      Number.isFinite(parsed.mapSortAnchor.lon)
+        ? parsed.mapSortAnchor
+        : undefined,
   };
 }
 
