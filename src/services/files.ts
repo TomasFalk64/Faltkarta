@@ -194,7 +194,7 @@ async function generatePreviewFromGeoTiff(geoTiffUri: string, mapId: string): Pr
       return null;
     }
 
-    const { w: dstW, h: dstH } = fitSize(srcW, srcH, 1400);
+    const { w: dstW, h: dstH } = fitSize(srcW, srcH, 2000);
     const scaled = resizeRgbaNearest(rgba, srcW, srcH, dstW, dstH);
     const pngArrayBuffer = UPNG.encode([toArrayBuffer(scaled)], dstW, dstH, 0);
     const pngBytes = new Uint8Array(pngArrayBuffer);
