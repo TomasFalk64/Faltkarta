@@ -1198,8 +1198,8 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontWeight: "700",
-    marginTop: 6,
-    marginBottom: 6,
+    marginTop: 10,
+    marginBottom: 0,
     fontSize: 15,
   },
   modalInput: {
