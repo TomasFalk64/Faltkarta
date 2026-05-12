@@ -196,9 +196,9 @@ export function MapCanvas({
   const pointDotSize = TARGET_DOT_SCREEN_SIZE;
   const pointTouchSize = TARGET_TOUCH_SCREEN_SIZE;
   const gpsBorderWidth = 1.5;
-  const headingNeedleHalfWidth = 9;
-  const headingNeedleHeight = 24;
-  const headingNeedleOffsetY = 15;
+  const headingNeedleHalfWidth = 10;
+  const headingNeedleHeight = 26;
+  const headingNeedleOffsetY = 20;
   const headingInnerHalfWidth = headingNeedleHalfWidth * 0.78;
   const headingInnerHeight = headingNeedleHeight * 0.78;
 
@@ -268,7 +268,7 @@ export function MapCanvas({
             }
             const d = touchDistance(touches[0], touches[1]);
             const ratio = d / Math.max(1, pinchRef.current.startDistance);
-            setScale(clamp(pinchRef.current.startScale * ratio, minScaleRef.current, 8));
+            setScale(clamp(pinchRef.current.startScale * ratio, minScaleRef.current, 12));
             onZoom();
             return;
           }
