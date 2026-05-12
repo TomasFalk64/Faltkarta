@@ -12,7 +12,7 @@ import {
   Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import Svg, { Path } from "react-native-svg";
+import Svg, { Circle, Path } from "react-native-svg";
 import * as ImagePicker from "expo-image-picker";
 import { speciesInfo } from "../data/species_info";
 import { addUserSpecies, loadUserSpecies, removeUserSpecies } from "../storage/storage";
@@ -365,10 +365,18 @@ export function ObservationModal({
                   onPress={() => void removeFromUserSpecies()}
                 >
                   <Svg width={28} height={28} viewBox="0 0 24 24">
-                    <Path
-                      d="M6 12h12"
+                    <Circle
+                      cx={12}
+                      cy={12}
+                      r={8}
                       stroke="#c1121f"
-                      strokeWidth={3.5}
+                      strokeWidth={2.2}
+                      fill="none"
+                    />
+                    <Path
+                      d="M8 12h8"
+                      stroke="#c1121f"
+                      strokeWidth={2.6}
                       strokeLinecap="round"
                       fill="none"
                     />
