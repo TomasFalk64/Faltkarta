@@ -15,7 +15,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
 import * as ImagePicker from "expo-image-picker";
 import { speciesInfo } from "../data/species_info";
-import { addUserSpecies, loadUserSpecies } from "../storage/storage";
+import { addUserSpecies, loadUserSpecies, removeUserSpecies } from "../storage/storage";
 
 type ModalPayload = {
   species?: string;
@@ -214,6 +214,23 @@ export function ObservationModal({
     onClose();
   }
 
+  function isUserSpeciesOnly(): boolean {
+    if (!species.trim()) return false;
+    const trimmed = species.trim();
+    const inUserSpecies = userSpecies.some(
+      (s) => s.toLowerCase() === trimmed.toLowerCase()
+    );
+    const inStandardSpecies = speciesInfo[trimmed] !== undefined;
+    return inUserSpecies && !inStandardSpecies;
+  }
+
+  async function removeFromUserSpecies() {
+    const trimmed = species.trim();
+    const updated = await removeUserSpecies(trimmed);
+    setUserSpecies(updated);
+    setSpecies("");
+  }
+
   function confirmDelete() {
     if (!onDelete) {
       void resetAndClose();
@@ -342,6 +359,22 @@ export function ObservationModal({
                 placeholderTextColor="#77838c"
                 style={[styles.input, styles.speciesInput]}
               />
+              {isUserSpeciesOnly() && (
+                <Pressable
+                  style={styles.removeSpeciesBtn}
+                  onPress={() => void removeFromUserSpecies()}
+                >
+                  <Svg width={28} height={28} viewBox="0 0 24 24">
+                    <Path
+                      d="M6 12h12"
+                      stroke="#c1121f"
+                      strokeWidth={3.5}
+                      strokeLinecap="round"
+                      fill="none"
+                    />
+                  </Svg>
+                </Pressable>
+              )}
               <Pressable
                 onPress={() => setShowSpeciesInfo((v) => !v)}
                 style={[
@@ -611,6 +644,14 @@ const styles = StyleSheet.create({
   redListBadgeText: {
     fontWeight: "800",
     fontSize: 14,
+  },
+  removeSpeciesBtn: {
+    width: 28,
+    height: 46,
+    borderRadius: 8,
+    backgroundColor: "transparent",
+    justifyContent: "center",
+    alignItems: "center",
   },
   infoCard: {
     backgroundColor: "#f5f7f9",

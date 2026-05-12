@@ -218,3 +218,12 @@ export async function addUserSpecies(value: string): Promise<string[]> {
   await AsyncStorage.setItem(USER_SPECIES_KEY, JSON.stringify(next));
   return next;
 }
+
+export async function removeUserSpecies(value: string): Promise<string[]> {
+  const name = String(value ?? "").trim();
+  if (!name) return await loadUserSpecies();
+  const list = await loadUserSpecies();
+  const next = list.filter((item) => item.toLowerCase() !== name.toLowerCase());
+  await AsyncStorage.setItem(USER_SPECIES_KEY, JSON.stringify(next));
+  return next;
+}
