@@ -41,7 +41,7 @@ export function GpsProvider({ children }: { children: React.ReactNode }) {
         if (cancelled) return;
         setGpsOptionsState({
           pingSeconds: settings.gpsPingSeconds,
-          backgroundGPS: settings.backgroundGPS ?? false,
+          backgroundGPS: false,
         });
       })
       .catch(() => {

@@ -88,11 +88,11 @@ export function MapListScreen({ navigation }: Props) {
     setMaps(allMaps);
     setAutoFollow(settings.autoFollow ?? false);
     setGpsPingSeconds(String(settings.gpsPingSeconds));
-    setGpsOptions({ pingSeconds: settings.gpsPingSeconds, backgroundGPS: false });
+    setGpsOptions((prev) => ({ ...prev, pingSeconds: settings.gpsPingSeconds }));
     setShowQuantityField(settings.showQuantityField ?? false);
     setMaxImageSizeMB(String(settings.maxImageSizeMB ?? 2));
     setCoordinateSystem(settings.coordinateSystem ?? "SWEREF99");
-  }, []);
+  }, [setGpsOptions]);
 
   useEffect(() => {
     const resetBackgroundGpsOnAppOpen = async () => {
