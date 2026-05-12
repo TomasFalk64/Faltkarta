@@ -32,7 +32,7 @@ import {
   upsertMap,
 } from "../storage/storage";
 import { useGpsContext } from "../contexts/GpsContext";
-import { deleteIfExists, ensureMapGeorefBounds, pickAndImportGeoTiff } from "../services/files";
+import { createBlankGeoTiffMap, deleteIfExists, ensureMapGeorefBounds, pickAndImportGeoTiff } from "../services/files";
 import { meters3857ToWgs84, sweref99tmToWgs84 } from "../services/coords";
 import { cleanupAllPendingPhotoCopies } from "../services/photos";
 import { Ionicons } from '@expo/vector-icons';
@@ -49,7 +49,7 @@ export function MapListScreen({ navigation }: Props) {
   const [maps, setMaps] = useState<MapItem[]>([]);
   const [autoFollow, setAutoFollow] = useState(true);
   const [gpsPingSeconds, setGpsPingSeconds] = useState("3");
-  const { gpsOptions, setGpsOptions, foregroundPermissionKnown, foregroundPermissionGranted, requestForegroundPermission } = useGpsContext();
+  const { gpsPos, gpsOptions, setGpsOptions, foregroundPermissionKnown, foregroundPermissionGranted, requestForegroundPermission } = useGpsContext();
   const [showQuantityField, setShowQuantityField] = useState(false);
   const [maxImageSizeMB, setMaxImageSizeMB] = useState("3");
   const [coordinateSystem, setCoordinateSystem] = useState<"SWEREF99" | "WGS84">("SWEREF99");
@@ -88,11 +88,11 @@ export function MapListScreen({ navigation }: Props) {
     setMaps(allMaps);
     setAutoFollow(settings.autoFollow ?? false);
     setGpsPingSeconds(String(settings.gpsPingSeconds));
-    setGpsOptions((prev) => ({ ...prev, pingSeconds: settings.gpsPingSeconds }));
+    setGpsOptions({ pingSeconds: settings.gpsPingSeconds, backgroundGPS: gpsOptions.backgroundGPS });
     setShowQuantityField(settings.showQuantityField ?? false);
     setMaxImageSizeMB(String(settings.maxImageSizeMB ?? 2));
     setCoordinateSystem(settings.coordinateSystem ?? "SWEREF99");
-  }, [setGpsOptions]);
+  }, [gpsOptions.backgroundGPS, setGpsOptions]);
 
   useEffect(() => {
     const resetBackgroundGpsOnAppOpen = async () => {
@@ -138,6 +138,37 @@ export function MapListScreen({ navigation }: Props) {
       setShowRenameHint(true);
     } catch (error) {
       Alert.alert("Importfel", String(error));
+    }
+  }
+
+  async function onGenerateBlankMap() {
+    try {
+      setShowImportMenu(false);
+
+      let center = gpsPos;
+      try {
+        const current = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+        center = { lat: current.coords.latitude, lon: current.coords.longitude };
+      } catch {
+        // Fall back to latest known GPS from context.
+      }
+
+      if (!center) {
+        Alert.alert("Ingen GPS-position", "Kunde inte hämta din aktuella position. Prova igen när GPS har hittat position.");
+        return;
+      }
+
+      const item = await createBlankGeoTiffMap(center);
+      const next = await upsertMap(item);
+      setMaps(next);
+      setRenameMap(item);
+      setRenameValue("");
+      setRenameMode("import");
+      setShowRenameHint(true);
+    } catch (error) {
+      Alert.alert("Kunde inte skapa tom karta", String(error));
     }
   }
 
@@ -635,6 +666,17 @@ export function MapListScreen({ navigation }: Props) {
             </Pressable>
             <Text style={styles.helpText}>Välj en GeoTIFF-fil som redan finns på din telefon.</Text>
 
+            <Text style={styles.sectionTitle}>Skapa en tom karta</Text>
+            <Pressable
+              style={styles.menuActionBtn}
+              onPress={() => {
+                void onGenerateBlankMap();
+              }}
+            >
+              <Text style={styles.menuActionText}>Generera tom karta</Text>
+            </Pressable>
+            <Text style={styles.helpText}>Öppnar en ny tom karta, som kan användas som nödkarta.</Text>
+
           </View>
         </View>
       </Modal>
@@ -1039,6 +1081,8 @@ const styles = StyleSheet.create({
     height: 64,
     borderRadius: 8,
     backgroundColor: "#dde5eb",
+    borderWidth: 1,
+    borderColor: "#d6dadd",
   },
   thumbPlaceholder: {
     justifyContent: "center",

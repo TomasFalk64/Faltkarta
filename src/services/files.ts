@@ -5,7 +5,7 @@ import { fromByteArray, toByteArray } from "base64-js";
 import * as UTIF from "utif";
 import UPNG from "upng-js";
 import proj4 from "proj4";
-import { MapItem } from "../types/models";
+import { LatLon, MapItem } from "../types/models";
 import { makeId } from "../utils/id";
 import { getSafeUri, toStoredMapPath } from "./mapPaths";
 
@@ -69,6 +69,81 @@ export async function pickAndImportGeoTiff(): Promise<MapItem | null> {
     bbox: metadata?.bbox ?? undefined,
     georef: metadata?.georef ?? undefined,
   };
+}
+
+export async function createBlankGeoTiffMap(center: LatLon): Promise<MapItem> {
+  await ensureDataDirs();
+  ensureUtifGeoTagTypes();
+  const id = makeId("map");
+  const width = 200;
+  const height = 200;
+  const halfSideMeters = 1000;
+  const [centerX, centerY] = proj4("EPSG:4326", "EPSG:3857", [center.lon, center.lat]);
+  if (!Number.isFinite(centerX) || !Number.isFinite(centerY)) {
+    throw new Error("Kunde inte projicera GPS-position till kartkoordinater.");
+  }
+
+  const minX = centerX - halfSideMeters;
+  const maxX = centerX + halfSideMeters;
+  const minY = centerY - halfSideMeters;
+  const maxY = centerY + halfSideMeters;
+  const pixelScaleX = (maxX - minX) / width;
+  const pixelScaleY = (maxY - minY) / height;
+
+  const metadata: Record<string, unknown> = {
+    t33550: [pixelScaleX, pixelScaleY, 0],
+    t33922: [0, 0, 0, minX, maxY, 0],
+    // GeoKeyDirectoryTag: GTModelTypeGeoKey, GTRasterTypeGeoKey, ProjectedCSTypeGeoKey, ProjLinearUnitsGeoKey
+    t34735: [
+      1, 1, 0, 4,
+      1024, 0, 1, 1,
+      1025, 0, 1, 1,
+      3072, 0, 1, 3857,
+      3076, 0, 1, 9001,
+    ],
+    t34737: "WGS 84 / Pseudo-Mercator|WGS 84|",
+  };
+
+  const rgba = new Uint8Array(width * height * 4);
+  for (let i = 0; i < rgba.length; i += 4) {
+    rgba[i] = 255;
+    rgba[i + 1] = 255;
+    rgba[i + 2] = 255;
+    rgba[i + 3] = 255;
+  }
+
+  const encoded = UTIF.encodeImage(toArrayBuffer(rgba), width, height, metadata);
+  const tiffBytes = new Uint8Array(encoded);
+  const tiffBase64 = fromByteArray(tiffBytes);
+  const fileName = `${id}_tom_karta.tif`;
+  const targetUri = `${MAPS_DIR}/${fileName}`;
+  await FileSystem.writeAsStringAsync(targetUri, tiffBase64, {
+    encoding: FileSystem.EncodingType.Base64,
+  });
+
+  const metadataFromFile = await extractGeoTiffMetadata(targetUri);
+  const previewUri = await generatePreviewFromGeoTiff(targetUri, id);
+
+  return {
+    id,
+    title: "Tom karta",
+    importName: "Tom karta",
+    fileName: toStoredMapPath(targetUri),
+    previewFileName: previewUri ? toStoredMapPath(previewUri) : undefined,
+    createdAt: new Date().toISOString(),
+    bbox: metadataFromFile?.bbox,
+    georef: metadataFromFile?.georef,
+  };
+}
+
+function ensureUtifGeoTagTypes() {
+  const typeMap = UTIF as unknown as { ttypes?: Record<number, number> };
+  if (!typeMap.ttypes) return;
+  // GeoTIFF tags missing in UTIF default type map.
+  if (!typeMap.ttypes[33550]) typeMap.ttypes[33550] = 12; // ModelPixelScaleTag: DOUBLE
+  if (!typeMap.ttypes[33922]) typeMap.ttypes[33922] = 12; // ModelTiepointTag: DOUBLE
+  if (!typeMap.ttypes[34735]) typeMap.ttypes[34735] = 3;  // GeoKeyDirectoryTag: SHORT
+  if (!typeMap.ttypes[34737]) typeMap.ttypes[34737] = 2;  // GeoAsciiParamsTag: ASCII
 }
 
 
