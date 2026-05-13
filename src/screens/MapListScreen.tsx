@@ -21,11 +21,13 @@ import { useFocusEffect } from "@react-navigation/native";
 import { RootStackParamList } from "../navigation/types";
 import { AppSettings, LatLon, MapItem } from "../types/models";
 import {
+  getMaxSideSetting,
   loadMaps,
   loadObservationsByMapId,
   loadSettings,
   removeMap,
   renameMapAndSyncPointLocalNames,
+  saveMaxSideSetting,
   saveObservationsByMapId,
   saveSettings,
   upsertMap,
@@ -51,6 +53,7 @@ export function MapListScreen({ navigation }: Props) {
   const { gpsPos, gpsOptions, setGpsOptions, foregroundPermissionKnown, foregroundPermissionGranted, requestForegroundPermission } = useGpsContext();
   const [showQuantityField, setShowQuantityField] = useState(false);
   const [maxImageSizeMB, setMaxImageSizeMB] = useState("3");
+  const [maxSide, setMaxSide] = useState("1400");
   const [coordinateSystem, setCoordinateSystem] = useState<"SWEREF99" | "WGS84">("SWEREF99");
   const [renameMap, setRenameMap] = useState<MapItem | null>(null);
   const [renameValue, setRenameValue] = useState("");
@@ -125,8 +128,20 @@ export function MapListScreen({ navigation }: Props) {
     return String(clamped);
   }
 
+  function clampMaxSideInput(value: string): string {
+    const digitsOnly = value.replace(/\D/g, "");
+    const parsed = Number.parseInt(digitsOnly, 10);
+    if (!Number.isFinite(parsed)) return "1400";
+    const clamped = Math.min(4000, Math.max(1000, parsed));
+    return String(clamped);
+  }
+
   const refresh = useCallback(async () => {
-    const [allMaps, settings] = await Promise.all([loadMaps(), loadSettings()]);
+    const [allMaps, settings, savedMaxSide] = await Promise.all([
+      loadMaps(),
+      loadSettings(),
+      getMaxSideSetting(),
+    ]);
     const mode = settings.mapSortMode ?? "LATEST";
     setMapSortMode(mode);
     setMapSortAnchor(settings.mapSortAnchor);
@@ -136,6 +151,7 @@ export function MapListScreen({ navigation }: Props) {
     setGpsOptions({ pingSeconds: settings.gpsPingSeconds, backgroundGPS: gpsOptions.backgroundGPS });
     setShowQuantityField(settings.showQuantityField ?? false);
     setMaxImageSizeMB(String(settings.maxImageSizeMB ?? 2));
+    setMaxSide(String(savedMaxSide));
     setCoordinateSystem(settings.coordinateSystem ?? "SWEREF99");
   }, [gpsOptions.backgroundGPS, setGpsOptions]);
 
@@ -303,6 +319,7 @@ export function MapListScreen({ navigation }: Props) {
       const pingValue = Math.min(20, Math.max(2, rawPing));
       const parsedMaxSize = Number.parseFloat(maxImageSizeMB.replace(",", "."));
       const maxSizeValue = Number.isFinite(parsedMaxSize) && parsedMaxSize > 0 ? parsedMaxSize : 2;
+      const maxSideValue = Number.parseInt(clampMaxSideInput(maxSide), 10);
 
       // Skapa det fullständiga objektet som ska sparas
       const newSettings: AppSettings = {
@@ -318,11 +335,13 @@ export function MapListScreen({ navigation }: Props) {
 
       // Spara allt på en gång
       await saveSettings(newSettings);
+      await saveMaxSideSetting(maxSideValue);
       setGpsOptions({ pingSeconds: pingValue, backgroundGPS: gpsOptions.backgroundGPS });
       
       // Uppdatera UI
       setGpsPingSeconds(String(pingValue));
       setMaxImageSizeMB(String(maxSizeValue));
+      setMaxSide(String(maxSideValue));
       //Alert.alert("Sparat", "Inställningar uppdaterade.");
       setShowSettings(false);
     } catch (error) {
@@ -900,6 +919,29 @@ export function MapListScreen({ navigation }: Props) {
                       />
                     </View>
 
+                    <View style={styles.settingsRow}>
+                      <Text style={styles.settingsTitle}>Maxstorlek på kartan</Text>
+                      <Pressable
+                        style={styles.infoIconBtn}
+                        onPress={() =>
+                          Alert.alert(
+                            "Maxstorlek på kartan",
+                            "1000 - 4000px \nHögre värde ger skarpare kartor vid inzoomning men kräver mer minne och batteri. Det kan också göra att appen blir seg och hackar beroende på vilken mobil som används. \nGäller endast för kartor som importeras efter att inställningen ändrats."
+                          )
+                        }
+                      >
+                        <Text style={styles.infoIconText}>i</Text>
+                      </Pressable>
+                      <TextInput
+                        value={maxSide}
+                        onChangeText={(value) => setMaxSide(value.replace(/\D/g, "").slice(0, 4))}
+                        onBlur={() => setMaxSide(clampMaxSideInput(maxSide))}
+                        style={styles.maxSideInput}
+                        keyboardType="number-pad"
+                        maxLength={4}
+                      />
+                    </View>
+
                     {/* Ny rad: Visa antal och enhet */}
                     <Pressable
                       style={[styles.settingsRow, { marginVertical: 15, alignItems: "center" }]}
@@ -1112,6 +1154,32 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     minWidth: 54,
     textAlign: "center",
+  },
+  maxSideInput: {
+    backgroundColor: "#fff",
+    borderColor: "#b9c1c8",
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    width: 72,
+    textAlign: "center",
+  },
+  infoIconBtn: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#8b949e",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 2,
+  },
+  infoIconText: {
+    color: "#4a5560",
+    fontWeight: "700",
+    fontSize: 13,
+    lineHeight: 14,
   },
   saveBtn: {
     backgroundColor: "#005f73",

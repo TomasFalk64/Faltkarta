@@ -6,6 +6,8 @@ const MAPS_KEY = "maps:v1";
 const OBS_KEY = "observations:v1";
 const SETTINGS_KEY = "settings:v1";
 const USER_SPECIES_KEY = "userSpecies.json";
+const MAX_SIDE_SETTING_KEY = "maxSideSetting:v1";
+const DEFAULT_MAX_SIDE = 1400;
 
 export async function loadMaps(): Promise<MapItem[]> {
   const raw = await AsyncStorage.getItem(MAPS_KEY);
@@ -236,4 +238,21 @@ export async function removeUserSpecies(value: string): Promise<string[]> {
   const next = list.filter((item) => item.toLowerCase() !== name.toLowerCase());
   await AsyncStorage.setItem(USER_SPECIES_KEY, JSON.stringify(next));
   return next;
+}
+
+function clampMaxSideSetting(value: number): number {
+  if (!Number.isFinite(value)) return DEFAULT_MAX_SIDE;
+  return Math.min(4000, Math.max(1000, Math.round(value)));
+}
+
+export async function saveMaxSideSetting(value: number) {
+  const clamped = clampMaxSideSetting(value);
+  await AsyncStorage.setItem(MAX_SIDE_SETTING_KEY, String(clamped));
+}
+
+export async function getMaxSideSetting(): Promise<number> {
+  const raw = await AsyncStorage.getItem(MAX_SIDE_SETTING_KEY);
+  if (!raw) return DEFAULT_MAX_SIDE;
+  const parsed = Number.parseInt(raw, 10);
+  return clampMaxSideSetting(parsed);
 }

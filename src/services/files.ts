@@ -8,6 +8,7 @@ import proj4 from "proj4";
 import { LatLon, MapItem } from "../types/models";
 import { makeId } from "../utils/id";
 import { getSafeUri, toStoredMapPath } from "./mapPaths";
+import { getMaxSideSetting } from "../storage/storage";
 
 const MAPS_DIR = `${FileSystem.documentDirectory}maps`;
 const PREVIEWS_DIR = `${FileSystem.documentDirectory}previews`;
@@ -269,7 +270,8 @@ async function generatePreviewFromGeoTiff(geoTiffUri: string, mapId: string): Pr
       return null;
     }
 
-    const { w: dstW, h: dstH } = fitSize(srcW, srcH, 2000);
+    const maxSide = await getMaxSideSetting();
+    const { w: dstW, h: dstH } = fitSize(srcW, srcH, maxSide);
     const scaled = resizeRgbaNearest(rgba, srcW, srcH, dstW, dstH);
     const pngArrayBuffer = UPNG.encode([toArrayBuffer(scaled)], dstW, dstH, 0);
     const pngBytes = new Uint8Array(pngArrayBuffer);
