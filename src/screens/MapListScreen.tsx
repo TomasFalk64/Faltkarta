@@ -64,6 +64,7 @@ export function MapListScreen({ navigation }: Props) {
   const [menuMap, setMenuMap] = useState<MapItem | null>(null);
   const [deleteMap, setDeleteMap] = useState<MapItem | null>(null);
   const [showImportMenu, setShowImportMenu] = useState(false);
+  const [showMapBuildLoading, setShowMapBuildLoading] = useState(false);
   const [importPolygonMap, setImportPolygonMap] = useState<MapItem | null>(null);
   const [showBackgroundDisclosure, setShowBackgroundDisclosure] = useState(false);
   const [showStartDisclosure, setShowStartDisclosure] = useState(false);
@@ -189,7 +190,7 @@ export function MapListScreen({ navigation }: Props) {
 
   async function onImport() {
     try {
-      const item = await pickAndImportGeoTiff();
+      const item = await pickAndImportGeoTiff(setShowMapBuildLoading);
       if (!item) return;
       const next = await upsertMap(item);
       setMaps(sortMaps(next, mapSortMode, mapSortAnchor));
@@ -200,6 +201,10 @@ export function MapListScreen({ navigation }: Props) {
     } catch (error) {
       Alert.alert("Importfel", String(error));
     }
+  }
+
+  function hideMapBuildLoading() {
+    setShowMapBuildLoading(false);
   }
 
   async function onGenerateBlankMap() {
@@ -1006,6 +1011,19 @@ export function MapListScreen({ navigation }: Props) {
         </KeyboardAvoidingView>
       </Modal>
 
+      <Modal
+        transparent
+        visible={showMapBuildLoading}
+        onRequestClose={hideMapBuildLoading}
+        animationType="fade"
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.loadingCard}>
+            <Text style={styles.modalTitle}>Bygger karta ...</Text>
+          </View>
+        </View>
+      </Modal>
+
       <Modal transparent visible={showGuide} onRequestClose={() => setShowGuide(false)} animationType="fade">
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
@@ -1341,6 +1359,21 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     borderRadius: 12,
     padding: 12,
+  },
+  loadingCard: {
+    backgroundColor: "#e7e0d9",
+    borderRadius: 20,
+    paddingVertical: 32,
+    paddingHorizontal: 40,
+    alignSelf: "center",
+    minWidth: 200,
+    // Skugga för iOS
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    // Skugga för Android
+    elevation: 20,
   },
   settingsModalCard: {
     maxHeight: "82%",

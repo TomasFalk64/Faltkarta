@@ -37,7 +37,9 @@ async function ensureDir(uri: string) {
   }
 }
 
-export async function pickAndImportGeoTiff(): Promise<MapItem | null> {
+export async function pickAndImportGeoTiff(
+  onLoadingStatusChange?: (status: boolean) => void
+): Promise<MapItem | null> {
   await ensureDataDirs();
   const result = await DocumentPicker.getDocumentAsync({
     type: "*/*",
@@ -47,29 +49,35 @@ export async function pickAndImportGeoTiff(): Promise<MapItem | null> {
   if (result.canceled || !result.assets?.[0]) {
     return null;
   }
-  const asset = result.assets[0];
-  const ext = asset.name.toLowerCase();
-  if (!ext.endsWith(".tif") && !ext.endsWith(".tiff")) {
-    Alert.alert("Fel filtyp", "Välj en .tif eller .tiff-fil.");
-    return null;
-  }
-  const id = makeId("map");
-  const safeName = sanitizeFileName(asset.name);
-  const targetUri = `${MAPS_DIR}/${id}_${safeName}`;
-  await FileSystem.copyAsync({ from: asset.uri, to: targetUri });
-  const metadata = await extractGeoTiffMetadata(targetUri);
-  const thumbnailUri = await generatePreviewFromGeoTiff(targetUri, id);
 
-  return {
-    id,
-    title: asset.name.replace(/\.(tif|tiff)$/i, ""),
-    importName: asset.name.replace(/\.(tif|tiff)$/i, ""),
-    fileName: toStoredMapPath(targetUri),
-    previewFileName: thumbnailUri ? toStoredMapPath(thumbnailUri) : undefined,
-    createdAt: new Date().toISOString(),
-    bbox: metadata?.bbox ?? undefined,
-    georef: metadata?.georef ?? undefined,
-  };
+  onLoadingStatusChange?.(true);
+  try {
+    const asset = result.assets[0];
+    const ext = asset.name.toLowerCase();
+    if (!ext.endsWith(".tif") && !ext.endsWith(".tiff")) {
+      Alert.alert("Fel filtyp", "Välj en .tif eller .tiff-fil.");
+      return null;
+    }
+    const id = makeId("map");
+    const safeName = sanitizeFileName(asset.name);
+    const targetUri = `${MAPS_DIR}/${id}_${safeName}`;
+    await FileSystem.copyAsync({ from: asset.uri, to: targetUri });
+    const metadata = await extractGeoTiffMetadata(targetUri);
+    const thumbnailUri = await generatePreviewFromGeoTiff(targetUri, id);
+
+    return {
+      id,
+      title: asset.name.replace(/\.(tif|tiff)$/i, ""),
+      importName: asset.name.replace(/\.(tif|tiff)$/i, ""),
+      fileName: toStoredMapPath(targetUri),
+      previewFileName: thumbnailUri ? toStoredMapPath(thumbnailUri) : undefined,
+      createdAt: new Date().toISOString(),
+      bbox: metadata?.bbox ?? undefined,
+      georef: metadata?.georef ?? undefined,
+    };
+  } finally {
+    onLoadingStatusChange?.(false);
+  }
 }
 
 export async function createBlankGeoTiffMap(center: LatLon): Promise<MapItem> {
@@ -521,3 +529,4 @@ function resizeRgbaNearest(
   }
   return dst;
 }
+
