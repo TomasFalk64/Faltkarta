@@ -183,17 +183,22 @@ export function ObservationModal({
   }, [combinedSpecies, species]);
 
   async function addPhoto() {
+    const remaining = Math.max(0, 3 - photoUris.length);
+    if (remaining <= 0) return;
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) return;
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ["images"],
       quality: 0.7,
       allowsEditing: false,
-      selectionLimit: 1,
+      allowsMultipleSelection: true,
+      selectionLimit: remaining,
     });
-    if (!result.canceled && result.assets[0]?.uri) {
-      setPhotoUris((prev) => [...prev, result.assets[0].uri]);
-      setPhotoAssetIds((prev) => [...prev, String(result.assets[0].assetId ?? "")]);
+    if (!result.canceled && result.assets.length > 0) {
+      const selected = result.assets.filter((asset) => !!asset?.uri).slice(0, remaining);
+      if (selected.length === 0) return;
+      setPhotoUris((prev) => [...prev, ...selected.map((asset) => asset.uri)]);
+      setPhotoAssetIds((prev) => [...prev, ...selected.map((asset) => String(asset.assetId ?? ""))]);
     }
   }
 
@@ -498,7 +503,7 @@ export function ObservationModal({
               </Pressable>
             ) : (
               <View style={[styles.photoBtn, { backgroundColor: '#ccc' }]}>
-                <Text style={styles.photoBtnText}>Max 3 bilder nÃ¥dd</Text>
+                <Text style={styles.photoBtnText}>Max 3 bilder (3/3)</Text>
               </View>
             )}
             <View style={styles.photoRow}>

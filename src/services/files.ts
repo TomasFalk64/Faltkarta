@@ -121,6 +121,7 @@ export async function createBlankGeoTiffMap(center: LatLon): Promise<MapItem> {
     rgba[i + 3] = 255;
   }
 
+  // @ts-ignore UTIF typings saknar encodeImage trots att funktionen finns vid runtime.
   const encoded = UTIF.encodeImage(toArrayBuffer(rgba), width, height, metadata);
   const tiffBytes = new Uint8Array(encoded);
   const tiffBase64 = fromByteArray(tiffBytes);
