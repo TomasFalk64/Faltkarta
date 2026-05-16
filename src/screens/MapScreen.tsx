@@ -49,6 +49,8 @@ export function MapScreen({ route, navigation }: Props) {
   const [backgroundGPS, setBackgroundGPS] = useState(false);
   const [showScaleBar, setShowScaleBar] = useState(true);
   const [showAccuracyHelp, setShowAccuracyHelp] = useState(false);
+  const [frozenPointCoord, setFrozenPointCoord] = useState<LatLon | null>(null);
+  const [frozenAccuracyMeters, setFrozenAccuracyMeters] = useState<number | null>(null);
 
   const {
     gpsPos,
@@ -193,6 +195,7 @@ export function MapScreen({ route, navigation }: Props) {
     accuracyMeters?: number | null;
     quantity?: number; 
     unit?: string;
+    accuracyMetersWasModified?: boolean;
   }): Promise<boolean> {
     if (!map) return false;
     try {
@@ -225,7 +228,9 @@ export function MapScreen({ route, navigation }: Props) {
             photoAssetIds: hasAnyAssetId ? photoAssetIds : undefined,
             pointNumber,
             localName: payload.localName?.trim() || map.title,
-            accuracyMeters: clampAccuracy(payload.accuracyMeters),
+            accuracyMeters: payload.accuracyMetersWasModified
+              ? clampAccuracy(payload.accuracyMeters)
+              : editingPoint.accuracyMeters,
             quantity: payload.quantity ?? editingPoint.quantity ?? 0,
             unit: payload.unit ?? "",
           }
@@ -241,12 +246,12 @@ export function MapScreen({ route, navigation }: Props) {
             pointNumber,
             localName: payload.localName?.trim() || map.title,
             accuracyMeters: clampAccuracy(
-              payload.accuracyMeters ?? (displayAccuracyMeters ?? rawAccuracyMeters ?? null)
+              payload.accuracyMeters ?? frozenAccuracyMeters
             ),
             quantity: payload.quantity ?? 0,
             unit: payload.unit ?? "",
             dateISO,
-            wgs84: crosshairPos,
+            wgs84: frozenPointCoord || crosshairPos,
           };
 
       const next = editingPoint ? await updateObservation(obs) : await addObservation(obs);
@@ -364,6 +369,8 @@ export function MapScreen({ route, navigation }: Props) {
     setEditingPointPhotoPreviewUris(previewUris);
     setEditingPointPhotoPreviewAssetIds(previewAssetIds);
     setEditingPoint(obs);
+    setFrozenPointCoord(obs.wgs84);
+    setFrozenAccuracyMeters(obs.accuracyMeters);
     setPointModalSession((v) => v + 1);
     setShowPointModal(true);
   }
@@ -464,6 +471,8 @@ export function MapScreen({ route, navigation }: Props) {
             setEditingPointPhotoPreviewAssetIds([]);
             editingPhotoLookupRef.current = {};
             editingMissingPhotosRef.current = [];
+            setFrozenPointCoord(crosshairPos);
+            setFrozenAccuracyMeters(displayAccuracyMeters ?? rawAccuracyMeters ?? null);
             setPointModalSession((v) => v + 1);
             setShowPointModal(true);
           }}
@@ -587,6 +596,8 @@ export function MapScreen({ route, navigation }: Props) {
           setEditingPointPhotoPreviewAssetIds([]);
           editingPhotoLookupRef.current = {};
           editingMissingPhotosRef.current = [];
+          setFrozenPointCoord(null);
+          setFrozenAccuracyMeters(null);
         }}
         onSave={onAddPoint}
         onDelete={editingPoint ? onDeletePoint : undefined}

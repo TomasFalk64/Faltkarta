@@ -27,6 +27,7 @@ type ModalPayload = {
   quantity?: number;
   unit?: string;
   accuracyMeters?: number | null;
+  accuracyMetersWasModified?: boolean;
 };
 
 type Props = {
@@ -64,6 +65,7 @@ export function ObservationModal({
   const [quantity, setQuantity] = useState("");
   const [unit, setUnit] = useState("");
   const [accuracyMeters, setAccuracyMeters] = useState("");
+  const [accuracyMetersWasModified, setAccuracyMetersWasModified] = useState(false);
   const wasVisibleRef = useRef(false);
   const lastSessionTokenRef = useRef<number | undefined>(undefined);
   const [isShowingSuggestions, setIsShowingSuggestions] = useState(false);
@@ -91,6 +93,7 @@ export function ObservationModal({
             ? ""
             : String(initialValues.accuracyMeters)
         );
+        setAccuracyMetersWasModified(false);
         setShowSpeciesInfo(false);
         lastSessionTokenRef.current = sessionToken;
       }
@@ -114,6 +117,7 @@ export function ObservationModal({
           ? ""
           : String(initialValues.accuracyMeters)
       );
+      setAccuracyMetersWasModified(false);
       setShowSpeciesInfo(false);
     }
     wasVisibleRef.current = visible;
@@ -214,6 +218,7 @@ export function ObservationModal({
     setPhotoAssetIds([]);
     setLocalName("");
     setAccuracyMeters("");
+    setAccuracyMetersWasModified(false);
     setShowSpeciesInfo(false);
     setShowDeleteConfirm(false);
     onClose();
@@ -288,6 +293,7 @@ export function ObservationModal({
         unit: unit.trim(),
         accuracyMeters:
           Number.isFinite(parsedAccuracy) && parsedAccuracy >= 0 ? Math.round(parsedAccuracy) : null,
+        accuracyMetersWasModified,
       });
       if (shouldClose !== false) {
         await resetAndClose();
@@ -488,7 +494,10 @@ export function ObservationModal({
                   <Text style={styles.metaLabel}>Noggrannhet (m)</Text>
                   <TextInput
                     value={accuracyMeters}
-                    onChangeText={setAccuracyMeters}
+                    onChangeText={(value) => {
+                      setAccuracyMeters(value);
+                      setAccuracyMetersWasModified(true);
+                    }}
                     style={[styles.input, styles.metaInput]}
                     placeholder="Ange meter"
                     placeholderTextColor="#77838c"
