@@ -142,7 +142,6 @@ export async function loadSettings(): Promise<AppSettings> {
     // Returnera standardvärden för båda inställningarna
     return {
       gpsPingSeconds: 3,
-      showQuantityField: false,
       visibleFields: {
         quantity: false,
         unit: false,
@@ -163,7 +162,6 @@ export async function loadSettings(): Promise<AppSettings> {
   const parsed = JSON.parse(raw) as Partial<AppSettings>;
   return {
     gpsPingSeconds: parsed.gpsPingSeconds ?? 3,
-    showQuantityField: parsed.showQuantityField ?? false,
     visibleFields: parsed.visibleFields ?? {
       quantity: false,
       unit: false,

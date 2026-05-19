@@ -51,7 +51,6 @@ export function MapListScreen({ navigation }: Props) {
   const [autoFollow, setAutoFollow] = useState(true);
   const [gpsPingSeconds, setGpsPingSeconds] = useState("3");
   const { gpsPos, gpsOptions, setGpsOptions, foregroundPermissionKnown, foregroundPermissionGranted, requestForegroundPermission } = useGpsContext();
-  const [showQuantityField, setShowQuantityField] = useState(false);
   const [visibleFields, setVisibleFields] = useState<VisibleFields>({
     quantity: false,
     unit: false,
@@ -61,9 +60,8 @@ export function MapListScreen({ navigation }: Props) {
     stage: false,
     gender: false,
   });
-  const visibleFieldOptions: Array<{ key: VisibleFieldKey; label: string }> = [
-    { key: "quantity", label: "Antal" },
-    { key: "unit", label: "Enhet" },
+  const visibleFieldOptions: Array<{ key: VisibleFieldKey | "quantityUnit"; label: string }> = [
+    { key: "quantityUnit", label: "Antal och Enhet" },
     { key: "hostSpecies", label: "Art som substrat (Värdväxt/värdart)" },
     { key: "activity", label: "Aktivitet (t.ex. Spel/sång)" },
     { key: "substrate", label: "Substrat (t.ex. Död gren, Gnejs)" },
@@ -170,7 +168,6 @@ export function MapListScreen({ navigation }: Props) {
     setAutoFollow(settings.autoFollow ?? false);
     setGpsPingSeconds(String(settings.gpsPingSeconds));
     setGpsOptions({ pingSeconds: settings.gpsPingSeconds, backgroundGPS: gpsOptions.backgroundGPS });
-    setShowQuantityField(settings.showQuantityField ?? false);
     setVisibleFields(settings.visibleFields ?? {
       quantity: false,
       unit: false,
@@ -355,10 +352,8 @@ export function MapListScreen({ navigation }: Props) {
       const maxSizeValue = Number.isFinite(parsedMaxSize) && parsedMaxSize > 0 ? parsedMaxSize : 2;
       const maxSideValue = Number.parseInt(clampMaxSideInput(maxSide), 10);
 
-      // Skapa det fullständiga objektet som ska sparas
       const newSettings: AppSettings = {
         gpsPingSeconds: pingValue,
-        showQuantityField: showQuantityField,
         visibleFields: visibleFields,
         maxImageSizeMB: maxSizeValue,
         backgroundGPS: gpsOptions.backgroundGPS,
@@ -368,16 +363,16 @@ export function MapListScreen({ navigation }: Props) {
         mapSortAnchor: mapSortAnchor,
       };
 
-      // Spara allt på en gång
+      
       await saveSettings(newSettings);
       await saveMaxSideSetting(maxSideValue);
       setGpsOptions({ pingSeconds: pingValue, backgroundGPS: gpsOptions.backgroundGPS });
       
-      // Uppdatera UI
+      
       setGpsPingSeconds(String(pingValue));
       setMaxImageSizeMB(String(maxSizeValue));
       setMaxSide(String(maxSideValue));
-      //Alert.alert("Sparat", "Inställningar uppdaterade.");
+      
       setShowSettings(false);
     } catch (error) {
       console.error("Kunde inte spara inställningar:", error);
@@ -398,7 +393,6 @@ export function MapListScreen({ navigation }: Props) {
       await saveSettings({
         gpsPingSeconds: pingValue,
         backgroundGPS: nextState,
-        showQuantityField: showQuantityField,
         visibleFields: visibleFields,
         maxImageSizeMB: Number.parseFloat(maxImageSizeMB.replace(",", ".")) || 3,
         autoFollow: autoFollow,
@@ -918,9 +912,8 @@ export function MapListScreen({ navigation }: Props) {
               <TouchableWithoutFeedback onPress={() => {}}>
                 <View style={[styles.modalCard, styles.settingsModalCard]}>
                   <ScrollView keyboardShouldPersistTaps="handled">
-                    <Text style={styles.modalTitle}>Inställningar</Text>
+                    <Text style={[styles.modalTitle, { textAlign: 'center', alignSelf: 'center' }]}>Inställningar</Text>
 
-                    {/* GPS-inställning */}
                     <View style={styles.settingsRow}>
                       <Text style={styles.settingsTitle}>GPS pingfrekvens (2-20s)</Text>
                       <TextInput
@@ -978,44 +971,41 @@ export function MapListScreen({ navigation }: Props) {
                       />
                     </View>
 
-                    {/* Ny rad: Visa antal och enhet */}
-                    <Pressable
-                      style={[styles.settingsRow, { marginVertical: 15, alignItems: "center" }]}
-                      onPress={() => setShowQuantityField(!showQuantityField)}
-                    >
-                      <Text style={styles.settingsTitle}>Visa antal och enhet vid inmatning</Text>
-                      <Ionicons
-                        name={showQuantityField ? checkboxName : squareOutlineName}
-                        size={24}
-                        color={showQuantityField ? "#0a9396" : "#767577"}
-                      />
-                    </Pressable>
-
                     <View style={{ marginVertical: 10, borderTopWidth: 1, borderColor: '#ccc', paddingTop: 15 }}>
                       <Text style={[styles.settingsTitle, { fontWeight: 'bold', marginBottom: 10 }]}>Valbara fält i inmatningsfönstret</Text>
-                      {visibleFieldOptions.map((item) => (
-                        <Pressable
-                          key={item.key}
-                          style={[styles.settingsRow, styles.settingsCompactRow, { paddingVertical: 0, alignItems: 'center', paddingLeft: 12 }]}
-                          onPress={() => setVisibleFields((prev) => ({
-                            ...prev,
-                            [item.key]: !prev[item.key],
-                          }))}
-                        >
-                          <Text style={[styles.settingsTitle, { fontSize: 13 }]}>{item.label}</Text>
-                          <Ionicons
-                            name={visibleFields[item.key] ? checkboxName : squareOutlineName}
-                            size={22}
-                            color={visibleFields[item.key] ? '#0a9396' : '#767577'}
-                          />
-                        </Pressable>
-                      ))}
-                    </View>
-
-                    <View style={styles.settingsRow}>
-                      <Text style={styles.settingsInfoText}>
-                        SWEREF99 TM används vid export till Excel och Artportalen
-                      </Text>
+                      {visibleFieldOptions.map((item) => {
+                        const isSelected =
+                          item.key === "quantityUnit"
+                            ? visibleFields.quantity && visibleFields.unit
+                            : visibleFields[item.key];
+                        return (
+                          <Pressable
+                            key={item.key}
+                            style={[styles.settingsRow, styles.settingsCompactRow, { paddingVertical: 0, alignItems: 'center', paddingLeft: 12 }]}
+                            onPress={() => setVisibleFields((prev) => {
+                              if (item.key === "quantityUnit") {
+                                const next = !(prev.quantity && prev.unit);
+                                return {
+                                  ...prev,
+                                  quantity: next,
+                                  unit: next,
+                                };
+                              }
+                              return {
+                                ...prev,
+                                [item.key]: !prev[item.key],
+                              };
+                            })}
+                          >
+                            <Text style={[styles.settingsTitle, { fontSize: 13 }]}>{item.label}</Text>
+                            <Ionicons
+                              name={isSelected ? checkboxName : squareOutlineName}
+                              size={22}
+                              color={isSelected ? '#0a9396' : '#767577'}
+                            />
+                          </Pressable>
+                        );
+                      })}
                     </View>
 
                     <View style={styles.bottomBar}>
@@ -1035,7 +1025,7 @@ export function MapListScreen({ navigation }: Props) {
                           if (Platform.OS === "ios") {
                             Alert.alert(
                               "Kort guide",
-                              "Importera karta som GeoTIFF från Skogsmonitor. Du kan ha flera kartor.\n\nByt namn på kartan, namnet används som förslag på lokalnamn.\n\nÖppna kartan och registrera punkter eller polygoner.\n\nExportera direkt till Artportalen eller skicka med epost."
+                              "Importera karta som GeoTIFF från Skogsmonitor. Du kan ha flera kartor.\n\nByt namn på kartan, namnet används som förslag på lokalnamn.\n\nÖppna kartan och registrera punkter eller polygoner.\n\nExportera direkt till Artportalen eller skicka med epost.\n\nSWEREF99 TM används vid export till Excel och Artportalen"
                             );
                             return;
                           }
@@ -1091,6 +1081,7 @@ export function MapListScreen({ navigation }: Props) {
               <Text style={styles.helpText}>Byt namn på kartan, namnet används som förslag på lokalnamn.</Text>
               <Text style={styles.helpText}>Öppna kartan och registrera punkter eller polygoner.</Text>
               <Text style={styles.helpText}>Exportera direkt till Artportalen eller skicka med epost.</Text>
+              <Text style={styles.helpText}>SWEREF99 TM används vid export till Excel och Artportalen</Text>
             </View>
             <View style={styles.guideActions}>
               <Pressable style={styles.okBtn} onPress={() => setShowGuide(false)}>
@@ -1197,7 +1188,7 @@ const styles = StyleSheet.create({
   helpText: {
     color: "#22323b",
     lineHeight: 18,
-    marginBottom: 4,
+    marginBottom: 6,
   },
   linkText: {
     color: "#005f73",
@@ -1223,8 +1214,8 @@ const styles = StyleSheet.create({
     borderColor: "#b9c1c8",
     borderWidth: 1,
     borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
     minWidth: 54,
     textAlign: "center",
   },
@@ -1431,7 +1422,7 @@ const styles = StyleSheet.create({
     elevation: 20,
   },
   settingsModalCard: {
-    maxHeight: "82%",
+    maxHeight: "90%",
   },
   modalTitle: {
     fontWeight: "700",
@@ -1519,7 +1510,7 @@ const styles = StyleSheet.create({
   justifyContent: 'space-between', // Trycker isär elementen (vänster/höger)
   alignItems: 'center',          // Centrerar vertikalt
   paddingHorizontal: 20,         // Avstånd från skärmkanterna
-  marginTop: 20,
+  marginTop: 5,
 },
 copyrightBtn: {
   padding: 10,                   // Gör den lättare att träffa

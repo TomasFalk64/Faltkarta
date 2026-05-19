@@ -83,7 +83,6 @@ export type VisibleFields = Record<VisibleFieldKey, boolean>;
 
 export type AppSettings = {
   gpsPingSeconds: number;
-  showQuantityField: boolean;
   visibleFields: VisibleFields;
   maxImageSizeMB: number;
   backgroundGPS: boolean;

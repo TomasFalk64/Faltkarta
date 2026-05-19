@@ -55,7 +55,6 @@ export function MapScreen({ route, navigation }: Props) {
   const [polygonMode, setPolygonMode] = useState(false);
   const [draftPolygon, setDraftPolygon] = useState<LatLon[]>([]);
   const [gpsPingSeconds, setGpsPingSeconds] = useState(3);
-  const [showQuantityField, setShowQuantityField] = useState(false);
   const [visibleFields, setVisibleFields] = useState<VisibleFields>(defaultVisibleFields);
   const [backgroundGPS, setBackgroundGPS] = useState(false);
   const [showScaleBar, setShowScaleBar] = useState(true);
@@ -91,7 +90,6 @@ export function MapScreen({ route, navigation }: Props) {
       setObservations(obs);
       setAutoFollow(settings.autoFollow ?? false);
       setGpsPingSeconds(settings.gpsPingSeconds);
-      setShowQuantityField(settings.showQuantityField ?? false);
       setVisibleFields(settings.visibleFields ?? defaultVisibleFields);
       setBackgroundGPS(settings.backgroundGPS ?? false);
       if (hydrated?.bbox) {
@@ -154,6 +152,21 @@ export function MapScreen({ route, navigation }: Props) {
     return {
       lat: Math.max(map.bbox.minLat, Math.min(map.bbox.maxLat, coord.lat)),
       lon: Math.max(map.bbox.minLon, Math.min(map.bbox.maxLon, coord.lon)),
+    };
+  }
+
+  function centerOnObservation(coord: LatLon) {
+    setIsFollowing(false);
+    setCenterCoord(clampToMapBounds(coord));
+  }
+
+  function polygonCenter(obs: PolygonObservation): LatLon | null {
+    if (obs.wgs84.length === 0) return null;
+    const lats = obs.wgs84.map((coord) => coord.lat);
+    const lons = obs.wgs84.map((coord) => coord.lon);
+    return {
+      lat: (Math.min(...lats) + Math.max(...lats)) / 2,
+      lon: (Math.min(...lons) + Math.max(...lons)) / 2,
     };
   }
 
@@ -368,6 +381,7 @@ export function MapScreen({ route, navigation }: Props) {
   }
 
   async function openPointEditor(obs: PointObservation) {
+    centerOnObservation(obs.wgs84);
     const existing = obs.photoUris.map((ref, index) => ({
       ref: String(ref ?? ""),
       assetId: obs.photoAssetIds?.[index],
@@ -403,6 +417,10 @@ export function MapScreen({ route, navigation }: Props) {
   }
 
   function openPolygonEditor(obs: PolygonObservation) {
+    const center = polygonCenter(obs);
+    if (center) {
+      centerOnObservation(center);
+    }
     setEditingPolygon(obs);
     setPolygonModalSession((v) => v + 1);
     setShowPolygonModal(true);
@@ -656,7 +674,6 @@ export function MapScreen({ route, navigation }: Props) {
         }
         title={editingPoint ? "Redigera punkt" : "Ny punktobservation"}
         sessionToken={pointModalSession}
-        showQuantityField={showQuantityField}
         visibleFields={visibleFields}
         showPointMetaFields
       />

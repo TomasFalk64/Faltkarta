@@ -58,7 +58,6 @@ type Props = {
   onDelete?: () => Promise<void> | void;
   sessionToken?: number;
   showPointMetaFields?: boolean;
-  showQuantityField?: boolean;
   visibleFields?: VisibleFields;
   speciesPlaceholder?: string;
   kind?: "point" | "polygon";
@@ -73,7 +72,6 @@ export function ObservationModal({
   onDelete,
   sessionToken,
   showPointMetaFields = false,
-  showQuantityField = false,
   visibleFields = defaultVisibleFields,
   speciesPlaceholder = "Artnamn",
   kind = "point",
@@ -272,8 +270,8 @@ export function ObservationModal({
     }
     
     const q = fieldValue.trim().toLowerCase();
-    if (!q) return fieldOptions.slice(0, 3);
-    return fieldOptions.filter((opt) => opt.toLowerCase().startsWith(q)).slice(0, 3);
+    if (!q) return fieldOptions;
+    return fieldOptions.filter((opt) => opt.toLowerCase().startsWith(q));
   }, [activeSuggestionsField, unit, activity, substrate, stage, gender]);
 
   async function addPhoto() {
@@ -567,7 +565,7 @@ export function ObservationModal({
             </View>
             {!isPolygon && (
               <>
-                {showQuantityField && (visibleFields.quantity || visibleFields.unit) && (
+                {(visibleFields.quantity || visibleFields.unit) && (
                   <>
                     <View style={styles.metaRow}>
                       {visibleFields.quantity && (
@@ -612,7 +610,11 @@ export function ObservationModal({
                       )}
                     </View>
                     {activeSuggestionsField === "unit" && visibleFields.unit && dropdownSuggestions.length > 0 && (
-                      <View style={styles.suggestions}>
+                      <ScrollView
+                        style={styles.suggestions}
+                        nestedScrollEnabled={true}
+                        keyboardShouldPersistTaps="handled"
+                      >
                         {dropdownSuggestions.map((item) => (
                           <Pressable
                             key={item}
@@ -625,7 +627,7 @@ export function ObservationModal({
                             <Text>{item}</Text>
                           </Pressable>
                         ))}
-                      </View>
+                      </ScrollView>
                     )}
                   </>
                 )}
@@ -669,7 +671,11 @@ export function ObservationModal({
                       placeholderTextColor="#626568"
                     />
                     {activeSuggestionsField === "activity" && dropdownSuggestions.length > 0 && (
-                      <View style={styles.suggestions}>
+                      <ScrollView
+                        style={styles.suggestions}
+                        nestedScrollEnabled={true}
+                        keyboardShouldPersistTaps="handled"
+                      >
                         {dropdownSuggestions.map((item) => (
                           <Pressable
                             key={item}
@@ -682,7 +688,7 @@ export function ObservationModal({
                             <Text>{item}</Text>
                           </Pressable>
                         ))}
-                      </View>
+                      </ScrollView>
                     )}
                   </View>
                 )}
@@ -713,7 +719,11 @@ export function ObservationModal({
                       placeholderTextColor="#626568"
                     />
                     {activeSuggestionsField === "substrate" && dropdownSuggestions.length > 0 && (
-                      <View style={styles.suggestions}>
+                      <ScrollView
+                        style={styles.suggestions}
+                        nestedScrollEnabled={true}
+                        keyboardShouldPersistTaps="handled"
+                      >
                         {dropdownSuggestions.map((item) => (
                           <Pressable
                             key={item}
@@ -726,7 +736,7 @@ export function ObservationModal({
                             <Text>{item}</Text>
                           </Pressable>
                         ))}
-                      </View>
+                      </ScrollView>
                     )}
                   </View>
                 )}
@@ -760,7 +770,11 @@ export function ObservationModal({
                           placeholderTextColor="#626568"
                         />
                         {activeSuggestionsField === "stage" && dropdownSuggestions.length > 0 && (
-                          <View style={styles.suggestions}>
+                          <ScrollView
+                            style={styles.suggestions}
+                            nestedScrollEnabled={true}
+                            keyboardShouldPersistTaps="handled"
+                          >
                             {dropdownSuggestions.map((item) => (
                               <Pressable
                                 key={item}
@@ -773,7 +787,7 @@ export function ObservationModal({
                                 <Text>{item}</Text>
                               </Pressable>
                             ))}
-                          </View>
+                          </ScrollView>
                         )}
                       </View>
                     )}
@@ -805,7 +819,11 @@ export function ObservationModal({
                           placeholderTextColor="#626568"
                         />
                         {activeSuggestionsField === "gender" && dropdownSuggestions.length > 0 && (
-                          <View style={styles.suggestions}>
+                          <ScrollView
+                            style={styles.suggestions}
+                            nestedScrollEnabled={true}
+                            keyboardShouldPersistTaps="handled"
+                          >
                             {dropdownSuggestions.map((item) => (
                               <Pressable
                                 key={item}
@@ -818,7 +836,7 @@ export function ObservationModal({
                                 <Text>{item}</Text>
                               </Pressable>
                             ))}
-                          </View>
+                          </ScrollView>
                         )}
                       </View>
                     )}
@@ -839,7 +857,7 @@ export function ObservationModal({
                   />
                 </View>
                 <View style={[styles.formColumn, styles.narrowColumn]}>
-                  <Text style={styles.fieldLabel}>Noggrannhet (m)</Text>
+                  <Text style={styles.fieldLabel}>Noggrannhet</Text>
                   <TextInput
                     value={accuracyMeters}
                     onChangeText={(value) => {
@@ -1064,7 +1082,7 @@ const styles = StyleSheet.create({
     borderColor: "#d8d8d8",
     borderRadius: 8,
     marginBottom: 8,
-    maxHeight: 120,
+    maxHeight: 135,
   },
   suggestionItem: {
     paddingVertical: 8,
