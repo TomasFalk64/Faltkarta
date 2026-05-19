@@ -63,7 +63,7 @@ function toArtportalenNotes(obs: Observation): string {
 }
 
 export function buildArtportalenTsv(observations: Observation[]): string {
-  const header = "Artnamn\tLokalnamn\tStartdatum\tStarttid\tOst\tNord\tNoggrannhet\tPublik kommentar\tAntal\tEnhet";
+  const header = "Artnamn\tLokalnamn\tStartdatum\tStarttid\tOst\tNord\tNoggrannhet\tPublik kommentar\tAntal\tEnhet\tArt som substrat\tAktivitet\tSubstrat\tÅlder-Stadium\tKön";
   
   // 1. Filtrera bort allt som inte är en punkt
   const pointsOnly = observations.filter((obs) => obs.kind === "point");
@@ -92,7 +92,12 @@ export function buildArtportalenTsv(observations: Observation[]): string {
       accuracy,
       obs.notes,
       (obs.quantity && obs.quantity !== 0) ? String(obs.quantity) : "", 
-      obs.unit ?? ""
+      obs.unit ?? "",
+      obs.hostSpecies ?? "",
+      obs.activity ?? "",
+      obs.substrate ?? "",
+      obs.stage ?? "",
+      obs.gender ?? ""
     ]
       .map((v) => String(v).replace(/[\t\r\n]+/g, " ").trim())
       .join("\t");
@@ -207,6 +212,8 @@ export function buildXlsx(observations: Observation[]): string {
     "Substrat",
     "Substrat-beskrivning",
     "Aktivitet",
+    "Ålder-Stadium",
+    "Kön",
     "Rödlistning",
   ];
   const data = pointsOnly.map((obs) => {
@@ -232,10 +239,12 @@ export function buildXlsx(observations: Observation[]): string {
       time,
       notes,
       "",
+      obs.hostSpecies ?? "",
+      obs.substrate ?? "",
       "",
-      "",
-      "",
-      "",
+      obs.activity ?? "",
+      obs.stage ?? "",
+      obs.gender ?? "",
       redList,
     ];
   });
@@ -645,6 +654,11 @@ function observationToGeoJsonFeature(
         accuracyMeters: point.accuracyMeters,
         quantity: point.quantity,
         unit: point.unit,
+        hostSpecies: point.hostSpecies ?? "",
+        activity: point.activity ?? "",
+        substrate: point.substrate ?? "",
+        stage: point.stage ?? "",
+        gender: point.gender ?? "",
       },
       geometry: {
         type: "Point",
