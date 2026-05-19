@@ -26,6 +26,7 @@ export const dropdownOptions = {
     "Övernattning"
   ],
   substrate: [
+    "Liggande död trädstam, markontakt", "Liggande död trädstam, utan markontakt", "Stående död trädstam/högstubbe",
     "Amfibolit", "Bark på dött träd", "Bark på levande träd", "Barr/blad", "Basalt", "Basisk bergart (grönsten)",
     "Blad", "Block (> 200 mm)", "Block på botten (> 200 mm)", "Blomma på levande träd/buske", "Blomma på levande ört",
     "Branddödat träd", "Brandpåverkad levande träd", "Bro", "Brygga/pir", "Diabas", "Diorit", "Djur", "Dy", 
@@ -37,12 +38,11 @@ export const dropdownOptions = {
     "Hålighet i dött träd med/utan mulm", "Hålighet i levande träd med/utan mulm", "Hår, päls, fjäll eller fjädrar",
     "Hårdbotten", "Inuti död ved", "Inuti levande ved", "Kalksten", "Kambium på levande träd", "Knopp från träd/buske",
     "Knopp från ört/gräs", "Kompost", "Kotte", "Kroppsdel hos levande djur", "Kvartsit", "Larv", "Lera (< 0,002 mm)",
-    "Levande del av ört/gräs", "Levande djur", "Levande vedartad växt", "Liggande död trädstam, markontakt",
-    "Liggande död trädstam, utan markontakt", "Mark/jord på land", "Mineraljord", "Mjukbotten", "Morän", "Mull",
+    "Levande del av ört/gräs", "Levande djur", "Levande vedartad växt",  "Mark/jord på land", "Mineraljord", "Mjukbotten", "Morän", "Mull",
     "Oorganiskt bottenmaterial", "Organiskt material på botten", "Organogen jord", "Pegmatit", "Porfyr", "Puppa",
     "Rot av ört/gräs", "Sand (0,06-2 mm)", "Sand på botten (0,06-2 mm)", "Sandsten", "Savflöde", "Silt/mo/mjäla (0,002-0,06 mm)",
     "Skalgrus", "Spillning", "Sten (60 - 200 mm)", "Sten på botten (60 - 200 mm)", "Sten/berg på land", "Stenmur och -röse",
-    "Stjälk/strå", "Stolpe, trägärdesgård mm", "Stubbe", "Stående död trädstam/högstubbe", "Sur bergart",
+    "Stjälk/strå", "Stolpe, trägärdesgård mm", "Stubbe",  "Sur bergart",
     "Svamp, fruktkropp mm", "Sågspån", "Torv", "Trädbas", "Trädrot", "Trädstam på levande träd",
     "Tångvall eller annan driftrand", "Under bark på död ved", "Ved under vatten", "Vedartad växt", "Vedyta på död ved",
     "Vuxet djur", "Växt", "Ägg", "Ört/gräs"

@@ -567,6 +567,68 @@ export function ObservationModal({
             </View>
             {!isPolygon && (
               <>
+                {showQuantityField && (visibleFields.quantity || visibleFields.unit) && (
+                  <>
+                    <View style={styles.metaRow}>
+                      {visibleFields.quantity && (
+                        <View style={[styles.formColumn, visibleFields.unit ? styles.narrowColumn : null]}>
+                          <Text style={styles.fieldLabel}>Antal</Text>
+                          <TextInput
+                            value={quantity}
+                            onChangeText={setQuantity}
+                            style={[styles.input, styles.metaInput]}
+                            placeholder=""
+                            keyboardType="numeric"
+                          />
+                        </View>
+                      )}
+                      {visibleFields.unit && (
+                        <View
+                          ref={(ref) => {
+                            fieldRefs.current.unit = findNodeHandle(ref);
+                          }}
+                          style={[styles.formColumn, visibleFields.quantity ? styles.wideColumn : null]}
+                        >
+                          <Text style={styles.fieldLabel}>Enhet</Text>
+                          <TextInput
+                            value={unit}
+                            onChangeText={setUnit}
+                            onFocus={() => {
+                              setActiveSuggestionsField("unit");
+                              scrollToField("unit");
+                            }}
+                            onBlur={() => {
+                              if (!dropdownOptions.unit.some((opt) => opt.toLowerCase() === unit.trim().toLowerCase())) {
+                                setUnit("");
+                              }
+                              setActiveSuggestionsField(null);
+                            }}
+                            autoCorrect={false}
+                            spellCheck={false}
+                            style={[styles.input, styles.metaInput]}
+                            placeholder=""
+                          />
+                        </View>
+                      )}
+                    </View>
+                    {activeSuggestionsField === "unit" && visibleFields.unit && dropdownSuggestions.length > 0 && (
+                      <View style={styles.suggestions}>
+                        {dropdownSuggestions.map((item) => (
+                          <Pressable
+                            key={item}
+                            onPress={() => {
+                              setUnit(item);
+                              setActiveSuggestionsField(null);
+                            }}
+                            style={styles.suggestionItem}
+                          >
+                            <Text>{item}</Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                    )}
+                  </>
+                )}
                 {visibleFields.hostSpecies && (
                   <>
                     <Text style={styles.fieldLabel}>Art som substrat</Text>
@@ -574,7 +636,7 @@ export function ObservationModal({
                       value={hostSpecies}
                       onChangeText={setHostSpecies}
                       style={styles.input}
-                      placeholder="t.ex. Tall"
+                      placeholder=""
                       placeholderTextColor="#626568"
                     />
                   </>
@@ -603,7 +665,7 @@ export function ObservationModal({
                       autoCorrect={false}
                       spellCheck={false}
                       style={styles.input}
-                      placeholder="t.ex. Spel/sång"
+                      placeholder=""
                       placeholderTextColor="#626568"
                     />
                     {activeSuggestionsField === "activity" && dropdownSuggestions.length > 0 && (
@@ -647,7 +709,7 @@ export function ObservationModal({
                       autoCorrect={false}
                       spellCheck={false}
                       style={styles.input}
-                      placeholder="t.ex. Stubbe"
+                      placeholder=""
                       placeholderTextColor="#626568"
                     />
                     {activeSuggestionsField === "substrate" && dropdownSuggestions.length > 0 && (
@@ -668,166 +730,106 @@ export function ObservationModal({
                     )}
                   </View>
                 )}
-                {visibleFields.stage && (
-                  <View
-                    ref={(ref) => {
-                      fieldRefs.current.stage = findNodeHandle(ref);
-                    }}
-                  >
-                    <Text style={styles.fieldLabel}>Ålder / Stadium</Text>
-                    <TextInput
-                      value={stage}
-                      onChangeText={setStage}
-                      onFocus={() => {
-                        setActiveSuggestionsField("stage");
-                        scrollToField("stage");
-                      }}
-                      onBlur={() => {
-                        if (!dropdownOptions.stage.some((opt) => opt.toLowerCase() === stage.trim().toLowerCase())) {
-                          setStage("");
-                        }
-                        setActiveSuggestionsField(null);
-                      }}
-                      autoCorrect={false}
-                      spellCheck={false}
-                      style={styles.input}
-                      placeholder="t.ex. 1K"
-                      placeholderTextColor="#626568"
-                    />
-                    {activeSuggestionsField === "stage" && dropdownSuggestions.length > 0 && (
-                      <View style={styles.suggestions}>
-                        {dropdownSuggestions.map((item) => (
-                          <Pressable
-                            key={item}
-                            onPress={() => {
-                              setStage(item);
-                              setActiveSuggestionsField(null);
-                            }}
-                            style={styles.suggestionItem}
-                          >
-                            <Text>{item}</Text>
-                          </Pressable>
-                        ))}
-                      </View>
-                    )}
-                  </View>
-                )}
-                {visibleFields.gender && (
-                  <View
-                    ref={(ref) => {
-                      fieldRefs.current.gender = findNodeHandle(ref);
-                    }}
-                  >
-                    <Text style={styles.fieldLabel}>Kön</Text>
-                    <TextInput
-                      value={gender}
-                      onChangeText={setGender}
-                      onFocus={() => {
-                        setActiveSuggestionsField("gender");
-                        scrollToField("gender");
-                      }}
-                      onBlur={() => {
-                        if (!dropdownOptions.gender.some((opt) => opt.toLowerCase() === gender.trim().toLowerCase())) {
-                          setGender("");
-                        }
-                        setActiveSuggestionsField(null);
-                      }}
-                      autoCorrect={false}
-                      spellCheck={false}
-                      style={styles.input}
-                      placeholder="t.ex. Hane"
-                      placeholderTextColor="#626568"
-                    />
-                    {activeSuggestionsField === "gender" && dropdownSuggestions.length > 0 && (
-                      <View style={styles.suggestions}>
-                        {dropdownSuggestions.map((item) => (
-                          <Pressable
-                            key={item}
-                            onPress={() => {
-                              setGender(item);
-                              setActiveSuggestionsField(null);
-                            }}
-                            style={styles.suggestionItem}
-                          >
-                            <Text>{item}</Text>
-                          </Pressable>
-                        ))}
-                      </View>
-                    )}
-                  </View>
-                )}
-                {showQuantityField && (visibleFields.quantity || visibleFields.unit) && (
-                  <>
-                    <View style={styles.metaRow}>
-                      {visibleFields.quantity && (
-                        <View style={{ flex: visibleFields.unit ? 1 : 1 }}>
-                          <Text style={styles.fieldLabel}>Antal</Text>
-                          <TextInput
-                            value={quantity}
-                            onChangeText={setQuantity}
-                            style={[styles.input, styles.metaInput]}
-                            placeholder=""
-                            keyboardType="numeric"
-                          />
-                        </View>
-                      )}
-                      {visibleFields.unit && (
-                        <View
-                          ref={(ref) => {
-                            fieldRefs.current.unit = findNodeHandle(ref);
+                {(visibleFields.stage || visibleFields.gender) && (
+                  <View style={styles.metaRow}>
+                    {visibleFields.stage && (
+                      <View
+                        ref={(ref) => {
+                          fieldRefs.current.stage = findNodeHandle(ref);
+                        }}
+                        style={[styles.formColumn, visibleFields.gender ? styles.wideColumn : null]}
+                      >
+                        <Text style={styles.fieldLabel}>Ålder/stadium</Text>
+                        <TextInput
+                          value={stage}
+                          onChangeText={setStage}
+                          onFocus={() => {
+                            setActiveSuggestionsField("stage");
+                            scrollToField("stage");
                           }}
-                          style={visibleFields.quantity ? { flex: 2, marginLeft: 10 } : { flex: 1 }}
-                        >
-                          <Text style={styles.fieldLabel}>Enhet</Text>
-                          <TextInput
-                            value={unit}
-                            onChangeText={setUnit}
-                            onFocus={() => {
-                              setActiveSuggestionsField("unit");
-                              scrollToField("unit");
-                            }}
-                            onBlur={() => {
-                              if (!dropdownOptions.unit.some((opt) => opt.toLowerCase() === unit.trim().toLowerCase())) {
-                                setUnit("");
-                              }
-                              setActiveSuggestionsField(null);
-                            }}
-                            autoCorrect={false}
-                            spellCheck={false}
-                            style={[
-                              styles.input,
-                              styles.metaInput,
-                              visibleFields.quantity ? { flex: 2, marginLeft: 10 } : { flex: 1 },
-                            ]}
-                            placeholder="t.ex. cm2"
-                          />
-                        </View>
-                      )}
-                    </View>
-                    {activeSuggestionsField === "unit" && visibleFields.unit && dropdownSuggestions.length > 0 && (
-                      <View style={styles.suggestions}>
-                        {dropdownSuggestions.map((item) => (
-                          <Pressable
-                            key={item}
-                            onPress={() => {
-                              setUnit(item);
-                              setActiveSuggestionsField(null);
-                            }}
-                            style={styles.suggestionItem}
-                          >
-                            <Text>{item}</Text>
-                          </Pressable>
-                        ))}
+                          onBlur={() => {
+                            if (!dropdownOptions.stage.some((opt) => opt.toLowerCase() === stage.trim().toLowerCase())) {
+                              setStage("");
+                            }
+                            setActiveSuggestionsField(null);
+                          }}
+                          autoCorrect={false}
+                          spellCheck={false}
+                          style={[styles.input, styles.metaInput]}
+                          placeholder=""
+                          placeholderTextColor="#626568"
+                        />
+                        {activeSuggestionsField === "stage" && dropdownSuggestions.length > 0 && (
+                          <View style={styles.suggestions}>
+                            {dropdownSuggestions.map((item) => (
+                              <Pressable
+                                key={item}
+                                onPress={() => {
+                                  setStage(item);
+                                  setActiveSuggestionsField(null);
+                                }}
+                                style={styles.suggestionItem}
+                              >
+                                <Text>{item}</Text>
+                              </Pressable>
+                            ))}
+                          </View>
+                        )}
                       </View>
                     )}
-                  </>
+                    {visibleFields.gender && (
+                      <View
+                        ref={(ref) => {
+                          fieldRefs.current.gender = findNodeHandle(ref);
+                        }}
+                        style={[styles.formColumn, visibleFields.stage ? styles.narrowColumn : null]}
+                      >
+                        <Text style={styles.fieldLabel}>Kön</Text>
+                        <TextInput
+                          value={gender}
+                          onChangeText={setGender}
+                          onFocus={() => {
+                            setActiveSuggestionsField("gender");
+                            scrollToField("gender");
+                          }}
+                          onBlur={() => {
+                            if (!dropdownOptions.gender.some((opt) => opt.toLowerCase() === gender.trim().toLowerCase())) {
+                              setGender("");
+                            }
+                            setActiveSuggestionsField(null);
+                          }}
+                          autoCorrect={false}
+                          spellCheck={false}
+                          style={[styles.input, styles.metaInput]}
+                          placeholder=""
+                          placeholderTextColor="#626568"
+                        />
+                        {activeSuggestionsField === "gender" && dropdownSuggestions.length > 0 && (
+                          <View style={styles.suggestions}>
+                            {dropdownSuggestions.map((item) => (
+                              <Pressable
+                                key={item}
+                                onPress={() => {
+                                  setGender(item);
+                                  setActiveSuggestionsField(null);
+                                }}
+                                style={styles.suggestionItem}
+                              >
+                                <Text>{item}</Text>
+                              </Pressable>
+                            ))}
+                          </View>
+                        )}
+                      </View>
+                    )}
+                  </View>
                 )}
               </>
             )}
             {showPointMetaFields && (
-              <>
-                <View style={styles.metaRow}>
-                  <Text style={styles.metaLabel}>Lokalnamn</Text>
+              <View style={styles.metaRow}>
+                <View style={[styles.formColumn, styles.wideColumn]}>
+                  <Text style={styles.fieldLabel}>Lokalnamn</Text>
                   <TextInput
                     value={localName}
                     onChangeText={setLocalName}
@@ -836,8 +838,8 @@ export function ObservationModal({
                     placeholderTextColor="#626568"
                   />
                 </View>
-                <View style={styles.metaRow}>
-                  <Text style={styles.metaLabel}>Noggrannhet (m)</Text>
+                <View style={[styles.formColumn, styles.narrowColumn]}>
+                  <Text style={styles.fieldLabel}>Noggrannhet (m)</Text>
                   <TextInput
                     value={accuracyMeters}
                     onChangeText={(value) => {
@@ -850,7 +852,7 @@ export function ObservationModal({
                     keyboardType="decimal-pad"
                   />
                 </View>
-              </>
+              </View>
             )}
             {photoUris.length < 3 ? (
               <Pressable style={styles.photoBtn} onPress={addPhoto}>
@@ -1039,14 +1041,19 @@ const styles = StyleSheet.create({
   },
   metaRow: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     gap: 10,
     marginBottom: 8,
   },
-  metaLabel: {
-    width: 150,
-    fontWeight: "600",
-    color: "#23313a",
+  formColumn: {
+    flex: 1,
+    minWidth: 0,
+  },
+  narrowColumn: {
+    flex: 1,
+  },
+  wideColumn: {
+    flex: 1.35,
   },
   metaInput: {
     flex: 1,
