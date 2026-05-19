@@ -593,7 +593,12 @@ export function ObservationModal({
                         setActiveSuggestionsField("activity");
                         scrollToField("activity");
                       }}
-                      onBlur={() => setActiveSuggestionsField(null)}
+                      onBlur={() => {
+                        if (!dropdownOptions.activity.some((opt) => opt.toLowerCase() === activity.trim().toLowerCase())) {
+                          setActivity("");
+                        }
+                        setActiveSuggestionsField(null);
+                      }}
                       style={styles.input}
                       placeholder="t.ex. Spel/sång"
                       placeholderTextColor="#77838c"
@@ -630,7 +635,12 @@ export function ObservationModal({
                         setActiveSuggestionsField("substrate");
                         scrollToField("substrate");
                       }}
-                      onBlur={() => setActiveSuggestionsField(null)}
+                      onBlur={() => {
+                        if (!dropdownOptions.substrate.some((opt) => opt.toLowerCase() === substrate.trim().toLowerCase())) {
+                          setSubstrate("");
+                        }
+                        setActiveSuggestionsField(null);
+                      }}
                       style={styles.input}
                       placeholder="t.ex. Stubbe"
                       placeholderTextColor="#77838c"
@@ -667,7 +677,12 @@ export function ObservationModal({
                         setActiveSuggestionsField("stage");
                         scrollToField("stage");
                       }}
-                      onBlur={() => setActiveSuggestionsField(null)}
+                      onBlur={() => {
+                        if (!dropdownOptions.stage.some((opt) => opt.toLowerCase() === stage.trim().toLowerCase())) {
+                          setStage("");
+                        }
+                        setActiveSuggestionsField(null);
+                      }}
                       style={styles.input}
                       placeholder="t.ex. 1K"
                       placeholderTextColor="#77838c"
@@ -704,7 +719,12 @@ export function ObservationModal({
                         setActiveSuggestionsField("gender");
                         scrollToField("gender");
                       }}
-                      onBlur={() => setActiveSuggestionsField(null)}
+                      onBlur={() => {
+                        if (!dropdownOptions.gender.some((opt) => opt.toLowerCase() === gender.trim().toLowerCase())) {
+                          setGender("");
+                        }
+                        setActiveSuggestionsField(null);
+                      }}
                       style={styles.input}
                       placeholder="t.ex. Hane"
                       placeholderTextColor="#77838c"
@@ -757,7 +777,12 @@ export function ObservationModal({
                               setActiveSuggestionsField("unit");
                               scrollToField("unit");
                             }}
-                            onBlur={() => setActiveSuggestionsField(null)}
+                            onBlur={() => {
+                              if (!dropdownOptions.unit.some((opt) => opt.toLowerCase() === unit.trim().toLowerCase())) {
+                                setUnit("");
+                              }
+                              setActiveSuggestionsField(null);
+                            }}
                             style={[
                               styles.input,
                               styles.metaInput,
