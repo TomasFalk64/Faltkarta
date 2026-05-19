@@ -143,6 +143,15 @@ export async function loadSettings(): Promise<AppSettings> {
     return {
       gpsPingSeconds: 3,
       showQuantityField: false,
+      visibleFields: {
+        quantity: false,
+        unit: false,
+        hostSpecies: false,
+        activity: false,
+        substrate: false,
+        stage: false,
+        gender: false,
+      },
       maxImageSizeMB: 3,
       backgroundGPS: false,
       autoFollow: false,
@@ -155,6 +164,15 @@ export async function loadSettings(): Promise<AppSettings> {
   return {
     gpsPingSeconds: parsed.gpsPingSeconds ?? 3,
     showQuantityField: parsed.showQuantityField ?? false,
+    visibleFields: parsed.visibleFields ?? {
+      quantity: false,
+      unit: false,
+      hostSpecies: false,
+      activity: false,
+      substrate: false,
+      stage: false,
+      gender: false,
+    },
     maxImageSizeMB: parsed.maxImageSizeMB ?? 2,
     backgroundGPS: parsed.backgroundGPS ?? false,
     autoFollow: parsed.autoFollow ?? false,

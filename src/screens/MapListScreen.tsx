@@ -19,7 +19,7 @@ import {
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useFocusEffect } from "@react-navigation/native";
 import { RootStackParamList } from "../navigation/types";
-import { AppSettings, LatLon, MapItem } from "../types/models";
+import { AppSettings, LatLon, MapItem, VisibleFields, VisibleFieldKey } from "../types/models";
 import {
   getMaxSideSetting,
   loadMaps,
@@ -52,6 +52,24 @@ export function MapListScreen({ navigation }: Props) {
   const [gpsPingSeconds, setGpsPingSeconds] = useState("3");
   const { gpsPos, gpsOptions, setGpsOptions, foregroundPermissionKnown, foregroundPermissionGranted, requestForegroundPermission } = useGpsContext();
   const [showQuantityField, setShowQuantityField] = useState(false);
+  const [visibleFields, setVisibleFields] = useState<VisibleFields>({
+    quantity: false,
+    unit: false,
+    hostSpecies: false,
+    activity: false,
+    substrate: false,
+    stage: false,
+    gender: false,
+  });
+  const visibleFieldOptions: Array<{ key: VisibleFieldKey; label: string }> = [
+    { key: "quantity", label: "Antal" },
+    { key: "unit", label: "Enhet" },
+    { key: "hostSpecies", label: "Art som substrat (Värdväxt/värdart)" },
+    { key: "activity", label: "Aktivitet (t.ex. Spel/sång)" },
+    { key: "substrate", label: "Substrat (t.ex. Död gren, Gnejs)" },
+    { key: "stage", label: "Ålder / Stadium" },
+    { key: "gender", label: "Kön" },
+  ];
   const [maxImageSizeMB, setMaxImageSizeMB] = useState("3");
   const [maxSide, setMaxSide] = useState("1400");
   const [coordinateSystem, setCoordinateSystem] = useState<"SWEREF99" | "WGS84">("SWEREF99");
@@ -75,6 +93,8 @@ export function MapListScreen({ navigation }: Props) {
   const SKOGSMONITOR_URL = "https://karta.skogsmonitor.se/?background=Lantm%C3%A4terietTopowebb&lat=60.55728&layers=17-26-21-14&lng=16.88599&zoom=7";
   const sortLabel = mapSortMode === "NEAREST" ? "Närmast" : mapSortMode === "ALPHA" ? "A - Ö" : "Senast";
   const nextSortMode = mapSortMode === "LATEST" ? "ALPHA" : mapSortMode === "ALPHA" ? "NEAREST" : "LATEST";
+  const checkboxName = "checkbox";
+  const squareOutlineName = "square-outline";
 
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -151,6 +171,15 @@ export function MapListScreen({ navigation }: Props) {
     setGpsPingSeconds(String(settings.gpsPingSeconds));
     setGpsOptions({ pingSeconds: settings.gpsPingSeconds, backgroundGPS: gpsOptions.backgroundGPS });
     setShowQuantityField(settings.showQuantityField ?? false);
+    setVisibleFields(settings.visibleFields ?? {
+      quantity: false,
+      unit: false,
+      hostSpecies: false,
+      activity: false,
+      substrate: false,
+      stage: false,
+      gender: false,
+    });
     setMaxImageSizeMB(String(settings.maxImageSizeMB ?? 2));
     setMaxSide(String(savedMaxSide));
     setCoordinateSystem(settings.coordinateSystem ?? "SWEREF99");
@@ -330,6 +359,7 @@ export function MapListScreen({ navigation }: Props) {
       const newSettings: AppSettings = {
         gpsPingSeconds: pingValue,
         showQuantityField: showQuantityField,
+        visibleFields: visibleFields,
         maxImageSizeMB: maxSizeValue,
         backgroundGPS: gpsOptions.backgroundGPS,
         autoFollow: autoFollow,
@@ -369,6 +399,7 @@ export function MapListScreen({ navigation }: Props) {
         gpsPingSeconds: pingValue,
         backgroundGPS: nextState,
         showQuantityField: showQuantityField,
+        visibleFields: visibleFields,
         maxImageSizeMB: Number.parseFloat(maxImageSizeMB.replace(",", ".")) || 3,
         autoFollow: autoFollow,
         coordinateSystem: coordinateSystem,
@@ -907,7 +938,7 @@ export function MapListScreen({ navigation }: Props) {
                     >
                       <Text style={styles.settingsTitle}>Följ min position vid centrering</Text>
                       <Ionicons
-                        name={autoFollow ? "checkbox" : "square-outline"}
+                        name={autoFollow ? checkboxName : squareOutlineName}
                         size={24}
                         color={autoFollow ? "#0a9396" : "#767577"}
                       />
@@ -954,11 +985,32 @@ export function MapListScreen({ navigation }: Props) {
                     >
                       <Text style={styles.settingsTitle}>Visa antal och enhet vid inmatning</Text>
                       <Ionicons
-                        name={showQuantityField ? "checkbox" : "square-outline"}
+                        name={showQuantityField ? checkboxName : squareOutlineName}
                         size={24}
                         color={showQuantityField ? "#0a9396" : "#767577"}
                       />
                     </Pressable>
+
+                    <View style={{ marginVertical: 10, borderTopWidth: 1, borderColor: '#ccc', paddingTop: 15 }}>
+                      <Text style={[styles.settingsTitle, { fontWeight: 'bold', marginBottom: 10 }]}>Valbara fält i inmatningsfönstret</Text>
+                      {visibleFieldOptions.map((item) => (
+                        <Pressable
+                          key={item.key}
+                          style={[styles.settingsRow, styles.settingsCompactRow, { paddingVertical: 0, alignItems: 'center', paddingLeft: 12 }]}
+                          onPress={() => setVisibleFields((prev) => ({
+                            ...prev,
+                            [item.key]: !prev[item.key],
+                          }))}
+                        >
+                          <Text style={[styles.settingsTitle, { fontSize: 13 }]}>{item.label}</Text>
+                          <Ionicons
+                            name={visibleFields[item.key] ? checkboxName : squareOutlineName}
+                            size={22}
+                            color={visibleFields[item.key] ? '#0a9396' : '#767577'}
+                          />
+                        </Pressable>
+                      ))}
+                    </View>
 
                     <View style={styles.settingsRow}>
                       <Text style={styles.settingsInfoText}>
@@ -1157,6 +1209,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
     marginBottom: 10,
+  },
+  settingsCompactRow: {
+    marginBottom: 4,
   },
   settingsInfoText: {
     color: "#292c30",

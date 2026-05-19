@@ -10,12 +10,16 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
+  UIManager,
+  findNodeHandle,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Circle, Path } from "react-native-svg";
 import * as ImagePicker from "expo-image-picker";
 import { speciesInfo } from "../data/species_info";
+import { dropdownOptions } from "../data/dropdownOptions";
 import { addUserSpecies, loadUserSpecies, removeUserSpecies } from "../storage/storage";
+import { VisibleFields } from "../types/models";
 
 type ModalPayload = {
   species?: string;
@@ -26,8 +30,23 @@ type ModalPayload = {
   localName?: string;
   quantity?: number;
   unit?: string;
+  hostSpecies?: string;
+  activity?: string;
+  substrate?: string;
+  stage?: string;
+  gender?: string;
   accuracyMeters?: number | null;
   accuracyMetersWasModified?: boolean;
+};
+
+const defaultVisibleFields: VisibleFields = {
+  quantity: false,
+  unit: false,
+  hostSpecies: false,
+  activity: false,
+  substrate: false,
+  stage: false,
+  gender: false,
 };
 
 type Props = {
@@ -40,6 +59,7 @@ type Props = {
   sessionToken?: number;
   showPointMetaFields?: boolean;
   showQuantityField?: boolean;
+  visibleFields?: VisibleFields;
   speciesPlaceholder?: string;
   kind?: "point" | "polygon";
 };
@@ -54,6 +74,7 @@ export function ObservationModal({
   sessionToken,
   showPointMetaFields = false,
   showQuantityField = false,
+  visibleFields = defaultVisibleFields,
   speciesPlaceholder = "Artnamn",
   kind = "point",
 }: Props) {
@@ -64,12 +85,20 @@ export function ObservationModal({
   const [localName, setLocalName] = useState("");
   const [quantity, setQuantity] = useState("");
   const [unit, setUnit] = useState("");
+  const [hostSpecies, setHostSpecies] = useState("");
+  const [activity, setActivity] = useState("");
+  const [substrate, setSubstrate] = useState("");
+  const [stage, setStage] = useState("");
+  const [gender, setGender] = useState("");
   const [accuracyMeters, setAccuracyMeters] = useState("");
   const [accuracyMetersWasModified, setAccuracyMetersWasModified] = useState(false);
   const wasVisibleRef = useRef(false);
   const lastSessionTokenRef = useRef<number | undefined>(undefined);
   const [isShowingSuggestions, setIsShowingSuggestions] = useState(false);
+  const [activeSuggestionsField, setActiveSuggestionsField] = useState<string | null>(null);
   const [userSpecies, setUserSpecies] = useState<string[]>([]);
+  const scrollViewRef = useRef<ScrollView | null>(null);
+  const fieldRefs = useRef<Record<string, any>>({});
   const isSubmittingRef = useRef(false);
   const [pendingNewSpecies, setPendingNewSpecies] = useState<string | null>(null);
   const isPolygon = kind === "polygon";
@@ -88,6 +117,11 @@ export function ObservationModal({
         setLocalName(initialValues?.localName ?? "");
         setQuantity(initialValues?.quantity !== undefined ? String(initialValues.quantity) : "");
         setUnit(initialValues?.unit ?? "");
+        setHostSpecies(initialValues?.hostSpecies ?? "");
+        setActivity(initialValues?.activity ?? "");
+        setSubstrate(initialValues?.substrate ?? "");
+        setStage(initialValues?.stage ?? "");
+        setGender(initialValues?.gender ?? "");
         setAccuracyMeters(
           initialValues?.accuracyMeters === null || initialValues?.accuracyMeters === undefined
             ? ""
@@ -112,6 +146,11 @@ export function ObservationModal({
       setLocalName(initialValues?.localName ?? "");
       setQuantity(initialValues?.quantity !== undefined ? String(initialValues.quantity) : "");
       setUnit(initialValues?.unit ?? "");
+      setHostSpecies(initialValues?.hostSpecies ?? "");
+      setActivity(initialValues?.activity ?? "");
+      setSubstrate(initialValues?.substrate ?? "");
+      setStage(initialValues?.stage ?? "");
+      setGender(initialValues?.gender ?? "");
       setAccuracyMeters(
         initialValues?.accuracyMeters === null || initialValues?.accuracyMeters === undefined
           ? ""
@@ -186,6 +225,57 @@ export function ObservationModal({
     return combinedSpecies.filter((s) => s.toLowerCase().startsWith(q)).slice(0, 3);
   }, [combinedSpecies, species]);
 
+  const scrollToField = (fieldName: string) => {
+    const scrollView = scrollViewRef.current;
+    const fieldHandle = fieldRefs.current[fieldName];
+    if (!scrollView || !fieldHandle) return;
+
+    const scrollHandle = findNodeHandle(scrollView);
+    if (!scrollHandle) return;
+
+    setTimeout(() => {
+      UIManager.measureLayout(
+        fieldHandle,
+        scrollHandle,
+        () => {
+          // ignore measurement failures
+        },
+        (_x: number, y: number) => {
+          scrollView.scrollTo({ y: Math.max(0, y - 10), animated: true });
+        }
+      );
+    }, 120);
+  };
+
+  const dropdownSuggestions = useMemo(() => {
+    if (activeSuggestionsField === null) return [];
+    const fieldOptions = (dropdownOptions as Record<string, string[]>)[activeSuggestionsField];
+    if (!fieldOptions) return [];
+    
+    let fieldValue = "";
+    switch (activeSuggestionsField) {
+      case "unit":
+        fieldValue = unit;
+        break;
+      case "activity":
+        fieldValue = activity;
+        break;
+      case "substrate":
+        fieldValue = substrate;
+        break;
+      case "stage":
+        fieldValue = stage;
+        break;
+      case "gender":
+        fieldValue = gender;
+        break;
+    }
+    
+    const q = fieldValue.trim().toLowerCase();
+    if (!q) return fieldOptions;
+    return fieldOptions.filter((opt) => opt.toLowerCase().startsWith(q)).slice(0, 5);
+  }, [activeSuggestionsField, unit, activity, substrate, stage, gender]);
+
   async function addPhoto() {
     const remaining = Math.max(0, 3 - photoUris.length);
     if (remaining <= 0) return;
@@ -217,6 +307,13 @@ export function ObservationModal({
     setPhotoUris([]);
     setPhotoAssetIds([]);
     setLocalName("");
+    setQuantity("");
+    setUnit("");
+    setHostSpecies("");
+    setActivity("");
+    setSubstrate("");
+    setStage("");
+    setGender("");
     setAccuracyMeters("");
     setAccuracyMetersWasModified(false);
     setShowSpeciesInfo(false);
@@ -291,6 +388,11 @@ export function ObservationModal({
         localName: localName.trim(),
         quantity: quantityAsNumber,
         unit: unit.trim(),
+        hostSpecies: hostSpecies.trim(),
+        activity: activity.trim(),
+        substrate: substrate.trim(),
+        stage: stage.trim(),
+        gender: gender.trim(),
         accuracyMeters:
           Number.isFinite(parsedAccuracy) && parsedAccuracy >= 0 ? Math.round(parsedAccuracy) : null,
         accuracyMetersWasModified,
@@ -346,6 +448,7 @@ export function ObservationModal({
               style={styles.keyboardAvoid}
             >
               <ScrollView
+                ref={scrollViewRef}
                 keyboardShouldPersistTaps="handled"
                 keyboardDismissMode="on-drag"
                 style={styles.scroll}
@@ -359,6 +462,7 @@ export function ObservationModal({
                 onChangeText={(text) => {
                   setSpecies(text);
                   setIsShowingSuggestions(true);
+                  setActiveSuggestionsField(null);
                   if (showSpeciesInfo) {
                     setShowSpeciesInfo(false);
                   }
@@ -461,22 +565,228 @@ export function ObservationModal({
               <Text style={styles.dividerText}>Extra info nedan</Text>
               <View style={styles.line} />
             </View>
-            {showQuantityField && (
-              <View style={styles.metaRow}>
-                <TextInput
-                  value={quantity}
-                  onChangeText={setQuantity}
-                  style={[styles.input, styles.metaInput, { flex: 1 }]}
-                  placeholder="Antal"
-                  keyboardType="numeric"
-                />
-                <TextInput
-                  value={unit}
-                  onChangeText={setUnit}
-                  style={[styles.input, styles.metaInput, { flex: 2, marginLeft: 10 }]}
-                  placeholder="Enhet"
-                />
-              </View>
+            {!isPolygon && (
+              <>
+                {visibleFields.hostSpecies && (
+                  <>
+                    <Text style={styles.fieldLabel}>Art som substrat</Text>
+                    <TextInput
+                      value={hostSpecies}
+                      onChangeText={setHostSpecies}
+                      style={styles.input}
+                      placeholder="t.ex. Tall"
+                      placeholderTextColor="#77838c"
+                    />
+                  </>
+                )}
+                {visibleFields.activity && (
+                  <View
+                    ref={(ref) => {
+                      fieldRefs.current.activity = findNodeHandle(ref);
+                    }}
+                  >
+                    <Text style={styles.fieldLabel}>Aktivitet</Text>
+                    <TextInput
+                      value={activity}
+                      onChangeText={setActivity}
+                      onFocus={() => {
+                        setActiveSuggestionsField("activity");
+                        scrollToField("activity");
+                      }}
+                      onBlur={() => setActiveSuggestionsField(null)}
+                      style={styles.input}
+                      placeholder="t.ex. Spel/sång"
+                      placeholderTextColor="#77838c"
+                    />
+                    {activeSuggestionsField === "activity" && dropdownSuggestions.length > 0 && (
+                      <View style={styles.suggestions}>
+                        {dropdownSuggestions.map((item) => (
+                          <Pressable
+                            key={item}
+                            onPress={() => {
+                              setActivity(item);
+                              setActiveSuggestionsField(null);
+                            }}
+                            style={styles.suggestionItem}
+                          >
+                            <Text>{item}</Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                    )}
+                  </View>
+                )}
+                {visibleFields.substrate && (
+                  <View
+                    ref={(ref) => {
+                      fieldRefs.current.substrate = findNodeHandle(ref);
+                    }}
+                  >
+                    <Text style={styles.fieldLabel}>Substrat</Text>
+                    <TextInput
+                      value={substrate}
+                      onChangeText={setSubstrate}
+                      onFocus={() => {
+                        setActiveSuggestionsField("substrate");
+                        scrollToField("substrate");
+                      }}
+                      onBlur={() => setActiveSuggestionsField(null)}
+                      style={styles.input}
+                      placeholder="t.ex. Stubbe"
+                      placeholderTextColor="#77838c"
+                    />
+                    {activeSuggestionsField === "substrate" && dropdownSuggestions.length > 0 && (
+                      <View style={styles.suggestions}>
+                        {dropdownSuggestions.map((item) => (
+                          <Pressable
+                            key={item}
+                            onPress={() => {
+                              setSubstrate(item);
+                              setActiveSuggestionsField(null);
+                            }}
+                            style={styles.suggestionItem}
+                          >
+                            <Text>{item}</Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                    )}
+                  </View>
+                )}
+                {visibleFields.stage && (
+                  <View
+                    ref={(ref) => {
+                      fieldRefs.current.stage = findNodeHandle(ref);
+                    }}
+                  >
+                    <Text style={styles.fieldLabel}>Ålder / Stadium</Text>
+                    <TextInput
+                      value={stage}
+                      onChangeText={setStage}
+                      onFocus={() => {
+                        setActiveSuggestionsField("stage");
+                        scrollToField("stage");
+                      }}
+                      onBlur={() => setActiveSuggestionsField(null)}
+                      style={styles.input}
+                      placeholder="t.ex. 1K"
+                      placeholderTextColor="#77838c"
+                    />
+                    {activeSuggestionsField === "stage" && dropdownSuggestions.length > 0 && (
+                      <View style={styles.suggestions}>
+                        {dropdownSuggestions.map((item) => (
+                          <Pressable
+                            key={item}
+                            onPress={() => {
+                              setStage(item);
+                              setActiveSuggestionsField(null);
+                            }}
+                            style={styles.suggestionItem}
+                          >
+                            <Text>{item}</Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                    )}
+                  </View>
+                )}
+                {visibleFields.gender && (
+                  <View
+                    ref={(ref) => {
+                      fieldRefs.current.gender = findNodeHandle(ref);
+                    }}
+                  >
+                    <Text style={styles.fieldLabel}>Kön</Text>
+                    <TextInput
+                      value={gender}
+                      onChangeText={setGender}
+                      onFocus={() => {
+                        setActiveSuggestionsField("gender");
+                        scrollToField("gender");
+                      }}
+                      onBlur={() => setActiveSuggestionsField(null)}
+                      style={styles.input}
+                      placeholder="t.ex. Hane"
+                      placeholderTextColor="#77838c"
+                    />
+                    {activeSuggestionsField === "gender" && dropdownSuggestions.length > 0 && (
+                      <View style={styles.suggestions}>
+                        {dropdownSuggestions.map((item) => (
+                          <Pressable
+                            key={item}
+                            onPress={() => {
+                              setGender(item);
+                              setActiveSuggestionsField(null);
+                            }}
+                            style={styles.suggestionItem}
+                          >
+                            <Text>{item}</Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                    )}
+                  </View>
+                )}
+                {showQuantityField && (visibleFields.quantity || visibleFields.unit) && (
+                  <>
+                    <View style={styles.metaRow}>
+                      {visibleFields.quantity && (
+                        <View style={{ flex: visibleFields.unit ? 1 : 1 }}>
+                          <Text style={styles.fieldLabel}>Antal</Text>
+                          <TextInput
+                            value={quantity}
+                            onChangeText={setQuantity}
+                            style={[styles.input, styles.metaInput]}
+                            placeholder=""
+                            keyboardType="numeric"
+                          />
+                        </View>
+                      )}
+                      {visibleFields.unit && (
+                        <View
+                          ref={(ref) => {
+                            fieldRefs.current.unit = findNodeHandle(ref);
+                          }}
+                          style={visibleFields.quantity ? { flex: 2, marginLeft: 10 } : { flex: 1 }}
+                        >
+                          <Text style={styles.fieldLabel}>Enhet</Text>
+                          <TextInput
+                            value={unit}
+                            onChangeText={setUnit}
+                            onFocus={() => {
+                              setActiveSuggestionsField("unit");
+                              scrollToField("unit");
+                            }}
+                            onBlur={() => setActiveSuggestionsField(null)}
+                            style={[
+                              styles.input,
+                              styles.metaInput,
+                              visibleFields.quantity ? { flex: 2, marginLeft: 10 } : { flex: 1 },
+                            ]}
+                            placeholder="t.ex. cm2"
+                          />
+                        </View>
+                      )}
+                    </View>
+                    {activeSuggestionsField === "unit" && visibleFields.unit && dropdownSuggestions.length > 0 && (
+                      <View style={styles.suggestions}>
+                        {dropdownSuggestions.map((item) => (
+                          <Pressable
+                            key={item}
+                            onPress={() => {
+                              setUnit(item);
+                              setActiveSuggestionsField(null);
+                            }}
+                            style={styles.suggestionItem}
+                          >
+                            <Text>{item}</Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                    )}
+                  </>
+                )}
+              </>
             )}
             {showPointMetaFields && (
               <>
@@ -831,6 +1141,13 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: 'bold',
     textTransform: 'uppercase',
+  },
+  fieldLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#475157',
+    marginBottom: 4,
+    textAlign: 'left',
   },
   modalBackdrop: {
     flex: 1,

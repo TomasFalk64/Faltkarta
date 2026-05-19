@@ -54,6 +54,11 @@ export type PointObservation = ObservationBase & {
   accuracyMeters: number | null;
   quantity: number;
   unit: string;
+  hostSpecies?: string;
+  activity?: string;
+  substrate?: string;
+  stage?: string;
+  gender?: string;
   photoAssetIds?: string[];
 };
 
@@ -65,9 +70,21 @@ export type PolygonObservation = ObservationBase & {
 
 export type Observation = PointObservation | PolygonObservation;
 
+export type VisibleFieldKey =
+  | "quantity"
+  | "unit"
+  | "hostSpecies"
+  | "activity"
+  | "substrate"
+  | "stage"
+  | "gender";
+
+export type VisibleFields = Record<VisibleFieldKey, boolean>;
+
 export type AppSettings = {
   gpsPingSeconds: number;
   showQuantityField: boolean;
+  visibleFields: VisibleFields;
   maxImageSizeMB: number;
   backgroundGPS: boolean;
   autoFollow: boolean;

@@ -16,7 +16,7 @@ import {
   upsertMap,
   updateObservation,
 } from "../storage/storage";
-import { LatLon, MapItem, Observation, PolygonObservation, PointObservation } from "../types/models";
+import { LatLon, MapItem, Observation, PolygonObservation, PointObservation, VisibleFields } from "../types/models";
 import { makeId } from "../utils/id";
 import { ensureMapGeorefBounds } from "../services/files";
 import { resolvePointPhotoUri } from "../services/photos";
@@ -24,6 +24,16 @@ import { distanceMeters } from "../services/coords";
 import { getSafeUri } from "../services/mapPaths";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Map">;
+
+const defaultVisibleFields: VisibleFields = {
+  quantity: false,
+  unit: false,
+  hostSpecies: false,
+  activity: false,
+  substrate: false,
+  stage: false,
+  gender: false,
+};
 
 export function MapScreen({ route, navigation }: Props) {
   const { mapId } = route.params;
@@ -46,6 +56,7 @@ export function MapScreen({ route, navigation }: Props) {
   const [draftPolygon, setDraftPolygon] = useState<LatLon[]>([]);
   const [gpsPingSeconds, setGpsPingSeconds] = useState(3);
   const [showQuantityField, setShowQuantityField] = useState(false);
+  const [visibleFields, setVisibleFields] = useState<VisibleFields>(defaultVisibleFields);
   const [backgroundGPS, setBackgroundGPS] = useState(false);
   const [showScaleBar, setShowScaleBar] = useState(true);
   const [showAccuracyHelp, setShowAccuracyHelp] = useState(false);
@@ -81,6 +92,7 @@ export function MapScreen({ route, navigation }: Props) {
       setAutoFollow(settings.autoFollow ?? false);
       setGpsPingSeconds(settings.gpsPingSeconds);
       setShowQuantityField(settings.showQuantityField ?? false);
+      setVisibleFields(settings.visibleFields ?? defaultVisibleFields);
       setBackgroundGPS(settings.backgroundGPS ?? false);
       if (hydrated?.bbox) {
         setCenterCoord({
@@ -193,8 +205,13 @@ export function MapScreen({ route, navigation }: Props) {
     photoAssetIds?: string[];
     localName?: string;
     accuracyMeters?: number | null;
-    quantity?: number; 
+    quantity?: number;
     unit?: string;
+    hostSpecies?: string;
+    activity?: string;
+    substrate?: string;
+    stage?: string;
+    gender?: string;
     accuracyMetersWasModified?: boolean;
   }): Promise<boolean> {
     if (!map) return false;
@@ -233,6 +250,11 @@ export function MapScreen({ route, navigation }: Props) {
               : editingPoint.accuracyMeters,
             quantity: payload.quantity ?? editingPoint.quantity ?? 0,
             unit: payload.unit ?? "",
+            hostSpecies: payload.hostSpecies?.trim() || editingPoint.hostSpecies || undefined,
+            activity: payload.activity?.trim() || editingPoint.activity || undefined,
+            substrate: payload.substrate?.trim() || editingPoint.substrate || undefined,
+            stage: payload.stage?.trim() || editingPoint.stage || undefined,
+            gender: payload.gender?.trim() || editingPoint.gender || undefined,
           }
         : {
             id: pointId,
@@ -250,6 +272,11 @@ export function MapScreen({ route, navigation }: Props) {
             ),
             quantity: payload.quantity ?? 0,
             unit: payload.unit ?? "",
+            hostSpecies: payload.hostSpecies?.trim() || undefined,
+            activity: payload.activity?.trim() || undefined,
+            substrate: payload.substrate?.trim() || undefined,
+            stage: payload.stage?.trim() || undefined,
+            gender: payload.gender?.trim() || undefined,
             dateISO,
             wgs84: frozenPointCoord || crosshairPos,
           };
@@ -612,6 +639,11 @@ export function MapScreen({ route, navigation }: Props) {
                 accuracyMeters: editingPoint.accuracyMeters,
                 quantity: editingPoint.quantity,
                 unit: editingPoint.unit,
+                hostSpecies: editingPoint.hostSpecies,
+                activity: editingPoint.activity,
+                substrate: editingPoint.substrate,
+                stage: editingPoint.stage,
+                gender: editingPoint.gender,
               }
             : {
                 species: "",
@@ -625,6 +657,7 @@ export function MapScreen({ route, navigation }: Props) {
         title={editingPoint ? "Redigera punkt" : "Ny punktobservation"}
         sessionToken={pointModalSession}
         showQuantityField={showQuantityField}
+        visibleFields={visibleFields}
         showPointMetaFields
       />
       <ObservationModal
@@ -650,6 +683,7 @@ export function MapScreen({ route, navigation }: Props) {
         }
         title={editingPolygon ? "Redigera polygon" : "Ny polygon"}
         sessionToken={polygonModalSession}
+        visibleFields={visibleFields}
         speciesPlaceholder="Polygonnamn"
         kind="polygon"
       />
