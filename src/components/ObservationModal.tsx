@@ -272,8 +272,8 @@ export function ObservationModal({
     }
     
     const q = fieldValue.trim().toLowerCase();
-    if (!q) return fieldOptions;
-    return fieldOptions.filter((opt) => opt.toLowerCase().startsWith(q)).slice(0, 5);
+    if (!q) return fieldOptions.slice(0, 3);
+    return fieldOptions.filter((opt) => opt.toLowerCase().startsWith(q)).slice(0, 3);
   }, [activeSuggestionsField, unit, activity, substrate, stage, gender]);
 
   async function addPhoto() {
@@ -473,7 +473,7 @@ export function ObservationModal({
                 }}
                 onBlur={() => setTimeout(() => setIsShowingSuggestions(false), 120)}
                 placeholder={speciesPlaceholder}
-                placeholderTextColor="#77838c"
+                placeholderTextColor="#626568"
                 style={[styles.input, styles.speciesInput]}
               />
               {isUserSpeciesOnly() && (
@@ -557,7 +557,7 @@ export function ObservationModal({
               onFocus={() => setIsShowingSuggestions(false)}
               style={[styles.input, styles.notes]}
               placeholder="Beskrivning"
-              placeholderTextColor="#77838c"
+              placeholderTextColor="#626568"
               multiline
             />
             <View style={styles.dividerContainer}>
@@ -575,7 +575,7 @@ export function ObservationModal({
                       onChangeText={setHostSpecies}
                       style={styles.input}
                       placeholder="t.ex. Tall"
-                      placeholderTextColor="#77838c"
+                      placeholderTextColor="#626568"
                     />
                   </>
                 )}
@@ -599,9 +599,12 @@ export function ObservationModal({
                         }
                         setActiveSuggestionsField(null);
                       }}
+                      autoComplete="off"
+                      autoCorrect={false}
+                      spellCheck={false}
                       style={styles.input}
                       placeholder="t.ex. Spel/sång"
-                      placeholderTextColor="#77838c"
+                      placeholderTextColor="#626568"
                     />
                     {activeSuggestionsField === "activity" && dropdownSuggestions.length > 0 && (
                       <View style={styles.suggestions}>
@@ -641,9 +644,11 @@ export function ObservationModal({
                         }
                         setActiveSuggestionsField(null);
                       }}
+                      autoCorrect={false}
+                      spellCheck={false}
                       style={styles.input}
                       placeholder="t.ex. Stubbe"
-                      placeholderTextColor="#77838c"
+                      placeholderTextColor="#626568"
                     />
                     {activeSuggestionsField === "substrate" && dropdownSuggestions.length > 0 && (
                       <View style={styles.suggestions}>
@@ -683,9 +688,11 @@ export function ObservationModal({
                         }
                         setActiveSuggestionsField(null);
                       }}
+                      autoCorrect={false}
+                      spellCheck={false}
                       style={styles.input}
                       placeholder="t.ex. 1K"
-                      placeholderTextColor="#77838c"
+                      placeholderTextColor="#626568"
                     />
                     {activeSuggestionsField === "stage" && dropdownSuggestions.length > 0 && (
                       <View style={styles.suggestions}>
@@ -725,9 +732,11 @@ export function ObservationModal({
                         }
                         setActiveSuggestionsField(null);
                       }}
+                      autoCorrect={false}
+                      spellCheck={false}
                       style={styles.input}
                       placeholder="t.ex. Hane"
-                      placeholderTextColor="#77838c"
+                      placeholderTextColor="#626568"
                     />
                     {activeSuggestionsField === "gender" && dropdownSuggestions.length > 0 && (
                       <View style={styles.suggestions}>
@@ -783,6 +792,8 @@ export function ObservationModal({
                               }
                               setActiveSuggestionsField(null);
                             }}
+                            autoCorrect={false}
+                            spellCheck={false}
                             style={[
                               styles.input,
                               styles.metaInput,
@@ -822,7 +833,7 @@ export function ObservationModal({
                     onChangeText={setLocalName}
                     style={[styles.input, styles.metaInput]}
                     placeholder="Lokalnamn"
-                    placeholderTextColor="#77838c"
+                    placeholderTextColor="#626568"
                   />
                 </View>
                 <View style={styles.metaRow}>
@@ -835,7 +846,7 @@ export function ObservationModal({
                     }}
                     style={[styles.input, styles.metaInput]}
                     placeholder="Ange meter"
-                    placeholderTextColor="#77838c"
+                    placeholderTextColor="#626568"
                     keyboardType="decimal-pad"
                   />
                 </View>
