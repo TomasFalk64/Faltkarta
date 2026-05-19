@@ -749,7 +749,7 @@ export function ObservationModal({
                         }}
                         style={[styles.formColumn, visibleFields.gender ? styles.wideColumn : null]}
                       >
-                        <Text style={styles.fieldLabel}>Ålder/stadium</Text>
+                        <Text style={styles.fieldLabel}>Ålder-Stadium</Text>
                         <TextInput
                           value={stage}
                           onChangeText={setStage}

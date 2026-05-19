@@ -65,7 +65,7 @@ export function MapListScreen({ navigation }: Props) {
     { key: "hostSpecies", label: "Art som substrat (Värdväxt/värdart)" },
     { key: "activity", label: "Aktivitet (t.ex. Spel/sång)" },
     { key: "substrate", label: "Substrat (t.ex. Död gren, Gnejs)" },
-    { key: "stage", label: "Ålder / Stadium" },
+    { key: "stage", label: "Ålder-Stadium" },
     { key: "gender", label: "Kön" },
   ];
   const [maxImageSizeMB, setMaxImageSizeMB] = useState("3");
@@ -973,6 +973,7 @@ export function MapListScreen({ navigation }: Props) {
 
                     <View style={{ marginVertical: 10, borderTopWidth: 1, borderColor: '#ccc', paddingTop: 15 }}>
                       <Text style={[styles.settingsTitle, { fontWeight: 'bold', marginBottom: 10 }]}>Valbara fält i inmatningsfönstret</Text>
+                      <Text style={[styles.settingsTitle, { fontSize: 12, fontStyle: 'italic', fontWeight: '400', marginBottom: 10 }]}>Använd med försiktighet</Text>
                       {visibleFieldOptions.map((item) => {
                         const isSelected =
                           item.key === "quantityUnit"
@@ -1422,7 +1423,7 @@ const styles = StyleSheet.create({
     elevation: 20,
   },
   settingsModalCard: {
-    maxHeight: "90%",
+    maxHeight: "94%",
   },
   modalTitle: {
     fontWeight: "700",
@@ -1510,7 +1511,7 @@ const styles = StyleSheet.create({
   justifyContent: 'space-between', // Trycker isär elementen (vänster/höger)
   alignItems: 'center',          // Centrerar vertikalt
   paddingHorizontal: 20,         // Avstånd från skärmkanterna
-  marginTop: 5,
+  marginTop: 1,
 },
 copyrightBtn: {
   padding: 10,                   // Gör den lättare att träffa

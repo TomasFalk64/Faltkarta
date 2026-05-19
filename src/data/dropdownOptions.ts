@@ -26,11 +26,11 @@ export const dropdownOptions = {
     "Övernattning"
   ],
   substrate: [
-    "Liggande död trädstam, markontakt", "Liggande död trädstam, utan markontakt", "Stående död trädstam/högstubbe",
+    "Liggande död trädstam, markkontakt", "Liggande död trädstam, utan markkontakt", "Stående död trädstam/högstubbe",
     "Amfibolit", "Bark på dött träd", "Bark på levande träd", "Barr/blad", "Basalt", "Basisk bergart (grönsten)",
     "Blad", "Block (> 200 mm)", "Block på botten (> 200 mm)", "Blomma på levande träd/buske", "Blomma på levande ört",
     "Branddödat träd", "Brandpåverkad levande träd", "Bro", "Brygga/pir", "Diabas", "Diorit", "Djur", "Dy", 
-    "Död delar av ört/gräs", "Död gren", "Död trädstam", "Död ved  vedartad växt", "Dött djur, kadaver",
+    "Död delar av ört/gräs", "Död gren", "Död trädstam", "Död ved vedartad växt", "Dött djur, kadaver",
     "Efterlämning av djur", "Findetritus på botten", "Finsediment på botten", "Friliggande bo", "Frukt",
     "Frö från träd/buske", "Frö från ört/gräs", "Förna", "Gabbro", "Gallbildning", "Glimmerskiffer", "Gnejs",
     "Granit", "Gren på levande träd", "Grovdetritus på botten", "Grus (2-60 mm)", "Grus på botten (2-60 mm)",
