@@ -103,6 +103,11 @@ export function ObservationModal({
   const [showSpeciesInfo, setShowSpeciesInfo] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
+  function closeSuggestionPopovers() {
+    setIsShowingSuggestions(false);
+    setActiveSuggestionsField(null);
+  }
+
   useEffect(() => {
     if (sessionToken !== undefined) {
       if (lastSessionTokenRef.current !== sessionToken) {
@@ -127,6 +132,7 @@ export function ObservationModal({
         );
         setAccuracyMetersWasModified(false);
         setShowSpeciesInfo(false);
+        closeSuggestionPopovers();
         lastSessionTokenRef.current = sessionToken;
       }
       wasVisibleRef.current = visible;
@@ -153,9 +159,10 @@ export function ObservationModal({
         initialValues?.accuracyMeters === null || initialValues?.accuracyMeters === undefined
           ? ""
           : String(initialValues.accuracyMeters)
-      );
+        );
       setAccuracyMetersWasModified(false);
       setShowSpeciesInfo(false);
+      closeSuggestionPopovers();
     }
     wasVisibleRef.current = visible;
   }, [initialValues, isPolygon, sessionToken, visible]);
@@ -316,6 +323,7 @@ export function ObservationModal({
     setAccuracyMetersWasModified(false);
     setShowSpeciesInfo(false);
     setShowDeleteConfirm(false);
+    closeSuggestionPopovers();
     onClose();
   }
 
@@ -337,6 +345,7 @@ export function ObservationModal({
   }
 
   function confirmDelete() {
+    closeSuggestionPopovers();
     if (!onDelete) {
       void resetAndClose();
       return;
@@ -352,6 +361,7 @@ export function ObservationModal({
   }
 
   async function submit() {
+    closeSuggestionPopovers();
     if (!species || species.trim().length === 0) {
       // Alert.alert("Fel", "Du måste ange ett artnamn.");
       return;
