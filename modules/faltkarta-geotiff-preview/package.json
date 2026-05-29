@@ -1,0 +1,12 @@
+{
+  "name": "faltkarta-geotiff-preview",
+  "version": "1.0.0",
+  "description": "Native GeoTIFF preview generation for Faltkarta.",
+  "license": "MIT",
+  "main": "index.js",
+  "expo-module": "expo-module.config.json",
+  "platforms": [
+    "ios",
+    "android"
+  ]
+}

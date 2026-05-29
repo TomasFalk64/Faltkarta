@@ -1,5 +1,6 @@
 import * as FileSystem from "expo-file-system/legacy";
 import * as DocumentPicker from "expo-document-picker";
+import { requireOptionalNativeModule } from "expo-modules-core";
 import { Alert } from "react-native";
 import { fromByteArray, toByteArray } from "base64-js";
 import * as UTIF from "utif";
@@ -23,6 +24,29 @@ const SWEREF99_TM_DEF =
   "+proj=utm +zone=33 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs";
 
 proj4.defs("EPSG:3006", SWEREF99_TM_DEF);
+
+type GeoTiffMetadata = { bbox: MapItem["bbox"]; georef: NonNullable<MapItem["georef"]> };
+type DecodedGeoTiff = {
+  buffer: ArrayBuffer;
+  ifd: Record<string, unknown>;
+};
+type MapImportSource = {
+  id: string;
+  title: string;
+  importName: string;
+  targetUri: string;
+};
+type NativeGeoTiffPreviewModule = {
+  generatePreview?: (
+    inputUri: string,
+    outputUri: string,
+    maxSide: number
+  ) => Promise<string | { previewUri?: string; ifd?: Record<string, unknown> } | null | undefined>;
+};
+type NativeGeoTiffPreviewResult = {
+  previewUri: string;
+  ifd?: Record<string, unknown>;
+};
 
 export async function ensureDataDirs() {
   await ensureDir(MAPS_DIR);
@@ -62,19 +86,13 @@ export async function pickAndImportGeoTiff(
     const safeName = sanitizeFileName(asset.name);
     const targetUri = `${MAPS_DIR}/${id}_${safeName}`;
     await FileSystem.copyAsync({ from: asset.uri, to: targetUri });
-    const metadata = await extractGeoTiffMetadata(targetUri);
-    const thumbnailUri = await generatePreviewFromGeoTiff(targetUri, id);
-
-    return {
+    const baseName = asset.name.replace(/\.(tif|tiff)$/i, "");
+    return await importGeoTiffMap({
       id,
-      title: asset.name.replace(/\.(tif|tiff)$/i, ""),
-      importName: asset.name.replace(/\.(tif|tiff)$/i, ""),
-      fileName: toStoredMapPath(targetUri),
-      previewFileName: thumbnailUri ? toStoredMapPath(thumbnailUri) : undefined,
-      createdAt: new Date().toISOString(),
-      bbox: metadata?.bbox ?? undefined,
-      georef: metadata?.georef ?? undefined,
-    };
+      title: baseName,
+      importName: baseName,
+      targetUri,
+    });
   } finally {
     onLoadingStatusChange?.(false);
   }
@@ -131,19 +149,12 @@ export async function createBlankGeoTiffMap(center: LatLon): Promise<MapItem> {
     encoding: FileSystem.EncodingType.Base64,
   });
 
-  const metadataFromFile = await extractGeoTiffMetadata(targetUri);
-  const previewUri = await generatePreviewFromGeoTiff(targetUri, id);
-
-  return {
+  return await importGeoTiffMap({
     id,
     title: "Tom karta",
     importName: "Tom karta",
-    fileName: toStoredMapPath(targetUri),
-    previewFileName: previewUri ? toStoredMapPath(previewUri) : undefined,
-    createdAt: new Date().toISOString(),
-    bbox: metadataFromFile?.bbox,
-    georef: metadataFromFile?.georef,
-  };
+    targetUri,
+  });
 }
 
 function ensureUtifGeoTagTypes() {
@@ -169,25 +180,25 @@ export async function downloadAndImportGeoTiffFromUrl(url: string): Promise<MapI
   const safeName = sanitizeFileName(info.fileName);
   const targetUri = `${MAPS_DIR}/${id}_${safeName}`;
   await FileSystem.downloadAsync(url, targetUri);
-  const metadata = await extractGeoTiffMetadata(targetUri);
-  const thumbnailUri = await generatePreviewFromGeoTiff(targetUri, id);
-  return {
+  return await importGeoTiffMap({
     id,
     title: info.baseName,
     importName: info.baseName,
-    fileName: toStoredMapPath(targetUri),
-    previewFileName: thumbnailUri ? toStoredMapPath(thumbnailUri) : undefined,
-    createdAt: new Date().toISOString(),
-    bbox: metadata?.bbox ?? undefined,
-    georef: metadata?.georef ?? undefined,
-  };
+    targetUri,
+  });
 }
 
 export async function ensureGeoTiffPreview(map: MapItem): Promise<MapItem> {
   if (map.previewFileName) {
     return map;
   }
-  const preview = await generatePreviewFromGeoTiff(getSafeUri(map.fileName, "map"), map.id);
+  const mapUri = getSafeUri(map.fileName, "map");
+  const nativePreview = await generatePreviewWithNativeModule(mapUri, map.id);
+  if (nativePreview?.previewUri) {
+    return { ...map, previewFileName: toStoredMapPath(nativePreview.previewUri) };
+  }
+  const decoded = await readGeoTiff(mapUri);
+  const preview = decoded ? await generatePreviewFromDecodedGeoTiff(decoded, map.id) : null;
   if (!preview) {
     return map;
   }
@@ -258,20 +269,80 @@ export function exportDir(): string {
   return EXPORT_DIR;
 }
 
-async function generatePreviewFromGeoTiff(geoTiffUri: string, mapId: string): Promise<string | null> {
+async function importGeoTiffMap(source: MapImportSource): Promise<MapItem> {
+  const nativeResult = await generatePreviewWithNativeModule(source.targetUri, source.id);
+  const nativeMetadata = nativeResult?.ifd ? extractGeoTiffMetadataFromIfd(nativeResult.ifd) : null;
+  const needsJsFallback = !nativeResult?.previewUri || !nativeMetadata;
+  const decoded = needsJsFallback ? await readGeoTiff(source.targetUri) : null;
+  const metadata = nativeMetadata ?? (decoded ? extractGeoTiffMetadataFromIfd(decoded.ifd) : null);
+  const previewUri =
+    nativeResult?.previewUri ?? (decoded ? await generatePreviewFromDecodedGeoTiff(decoded, source.id) : null);
+  return buildImportedMapItem(source, metadata, previewUri);
+}
+
+function buildImportedMapItem(
+  source: MapImportSource,
+  metadata: GeoTiffMetadata | null,
+  previewUri: string | null
+): MapItem {
+  return {
+    id: source.id,
+    title: source.title,
+    importName: source.importName,
+    fileName: toStoredMapPath(source.targetUri),
+    previewFileName: previewUri ? toStoredMapPath(previewUri) : undefined,
+    createdAt: new Date().toISOString(),
+    bbox: metadata?.bbox ?? undefined,
+    georef: metadata?.georef ?? undefined,
+  };
+}
+
+async function readGeoTiff(geoTiffUri: string): Promise<DecodedGeoTiff | null> {
   try {
     const base64 = await FileSystem.readAsStringAsync(geoTiffUri, {
       encoding: FileSystem.EncodingType.Base64,
     });
     const tiffBytes = toByteArray(base64);
-    const tiffBuffer = toArrayBuffer(tiffBytes);
-    const ifds = UTIF.decode(tiffBuffer);
+    const buffer = toArrayBuffer(tiffBytes);
+    const ifds = UTIF.decode(buffer);
     if (!ifds.length) {
       return null;
     }
+    return { buffer, ifd: ifds[0] as Record<string, unknown> };
+  } catch {
+    return null;
+  }
+}
 
-    const ifd = ifds[0];
-    UTIF.decodeImage(tiffBuffer, ifd);
+async function generatePreviewWithNativeModule(
+  geoTiffUri: string,
+  mapId: string
+): Promise<NativeGeoTiffPreviewResult | null> {
+  const module = requireOptionalNativeModule<NativeGeoTiffPreviewModule>("FaltkartaGeoTiffPreview");
+  if (!module?.generatePreview) {
+    return null;
+  }
+
+  try {
+    const maxSide = await getMaxSideSetting();
+    const outUri = `${PREVIEWS_DIR}/${mapId}_preview.png`;
+    const result = await module.generatePreview(geoTiffUri, outUri, maxSide);
+    if (typeof result === "string") {
+      return { previewUri: result };
+    }
+    return {
+      previewUri: result?.previewUri ?? outUri,
+      ifd: result?.ifd,
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function generatePreviewFromDecodedGeoTiff(decoded: DecodedGeoTiff, mapId: string): Promise<string | null> {
+  try {
+    const ifd = decoded.ifd;
+    UTIF.decodeImage(decoded.buffer, ifd);
     const rgba = UTIF.toRGBA8(ifd);
     const srcW = Number(ifd.width ?? 0);
     const srcH = Number(ifd.height ?? 0);
@@ -297,17 +368,13 @@ async function generatePreviewFromGeoTiff(geoTiffUri: string, mapId: string): Pr
 
 async function extractGeoTiffMetadata(
   geoTiffUri: string
-): Promise<{ bbox: MapItem["bbox"]; georef: NonNullable<MapItem["georef"]> } | null> {
-  try {
-    const base64 = await FileSystem.readAsStringAsync(geoTiffUri, {
-      encoding: FileSystem.EncodingType.Base64,
-    });
-    const tiffBytes = toByteArray(base64);
-    const tiffBuffer = toArrayBuffer(tiffBytes);
-    const ifds = UTIF.decode(tiffBuffer);
-    if (!ifds.length) return null;
+): Promise<GeoTiffMetadata | null> {
+  const decoded = await readGeoTiff(geoTiffUri);
+  return decoded ? extractGeoTiffMetadataFromIfd(decoded.ifd) : null;
+}
 
-    const ifd = ifds[0] as Record<string, unknown>;
+function extractGeoTiffMetadataFromIfd(ifd: Record<string, unknown>): GeoTiffMetadata | null {
+  try {
     const width = Number(ifd.width ?? ifd.t256 ?? 0);
     const height = Number(ifd.height ?? ifd.t257 ?? 0);
     if (width <= 0 || height <= 0) return null;

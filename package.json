@@ -30,6 +30,7 @@
     "expo-sharing": "~14.0.8",
     "expo-task-manager": "~14.0.9",
     "expo-web-browser": "~15.0.11",
+    "faltkarta-geotiff-preview": "file:modules/faltkarta-geotiff-preview",
     "jszip": "^3.10.1",
     "papaparse": "^5.5.3",
     "piexifjs": "^1.0.6",
