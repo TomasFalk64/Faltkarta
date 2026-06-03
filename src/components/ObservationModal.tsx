@@ -17,7 +17,7 @@ import Svg, { Circle, Path } from "react-native-svg";
 import * as ImagePicker from "expo-image-picker";
 import { speciesInfo } from "../data/species_info";
 import { speciesGroups } from "../data/speciesGroups";
-import { dropdownOptions } from "../data/dropdownOptions";
+import { ARTGRUPP_OPTIONS, DEFAULT_OPTIONS } from "../data/dropdownOptionsGroups";
 import {
   addUserSpecies,
   loadUserSpecies,
@@ -130,6 +130,7 @@ export function ObservationModal({
   const isPolygon = kind === "polygon";
   const [showSpeciesInfo, setShowSpeciesInfo] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  type DropdownField = keyof typeof DEFAULT_OPTIONS;
 
   function closeSuggestionPopovers() {
     setIsShowingSuggestions(false);
@@ -301,37 +302,104 @@ export function ObservationModal({
     const scrollView = scrollViewRef.current;
     const y = fieldLayouts[fieldName];
     if (!scrollView || y === undefined) return;
-    scrollView.scrollTo({ y: Math.max(0, y - 10), animated: true });
+    const extraOffset =
+      fieldName === "unit" || fieldName === "stage" || fieldName === "gender" ? 140 : 10;
+    scrollView.scrollTo({ y: Math.max(0, y - extraOffset), animated: true });
   };
 
-  const dropdownSuggestions = useMemo(() => {
-    if (activeSuggestionsField === null) return [];
-    const fieldOptions = (dropdownOptions as Record<string, string[]>)[activeSuggestionsField];
-    if (!fieldOptions) return [];
-    
-    let fieldValue = "";
-    switch (activeSuggestionsField) {
-      case "unit":
-        fieldValue = unit;
-        break;
-      case "activity":
-        fieldValue = activity;
-        break;
-      case "substrate":
-        fieldValue = substrate;
-        break;
-      case "stage":
-        fieldValue = stage;
-        break;
-      case "gender":
-        fieldValue = gender;
-        break;
+  const activeGroupOptions =
+    currentSelectedGroup && ARTGRUPP_OPTIONS[currentSelectedGroup]
+      ? ARTGRUPP_OPTIONS[currentSelectedGroup]
+      : DEFAULT_OPTIONS;
+
+  const getFieldOptions = (field: DropdownField) => activeGroupOptions[field] ?? [];
+  const hasFieldOptions = (field: DropdownField) => getFieldOptions(field).length > 0;
+
+  function renderDropdownField(
+    field: DropdownField,
+    value: string,
+    setValue: (v: string) => void,
+    label: string
+  ) {
+    if (!visibleFields[field]) return null;
+
+    const options = getFieldOptions(field);
+    const disabled = options.length === 0;
+    const isActive = activeSuggestionsField === field;
+    const fieldStyle =
+      field === "unit" || field === "stage" || field === "gender"
+        ? [styles.input, styles.metaInput, disabled ? styles.disabledDropdownInput : null]
+        : [styles.input, disabled ? styles.disabledDropdownInput : null];
+
+    const body = (
+      <>
+        <Text style={styles.fieldLabel}>{label}</Text>
+        <Pressable
+          onPress={() => {
+            if (disabled) return;
+            const opening = activeSuggestionsField !== field;
+            setActiveSuggestionsField(opening ? field : null);
+            if (opening) {
+              setTimeout(() => {
+                scrollToField(field);
+              }, 50);
+            }
+          }}
+          style={fieldStyle}
+        >
+          <Text style={{ color: disabled ? "#7a7a7a" : "#172121", fontSize: 16 }}>
+            {value.trim() || "Välj..."}
+          </Text>
+        </Pressable>
+        {isActive && !disabled && options.length > 0 && (
+          <ScrollView
+            style={styles.suggestions}
+            nestedScrollEnabled={true}
+            keyboardShouldPersistTaps="handled"
+          >
+            {options.map((item) => (
+              <Pressable
+                key={item}
+                onPress={() => {
+                  setValue(item);
+                  setActiveSuggestionsField(null);
+                }}
+                style={styles.suggestionItem}
+              >
+                <Text>{item}</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        )}
+      </>
+    );
+
+    if (field === "unit") {
+      return (
+        <View style={[styles.formColumn, visibleFields.quantity ? styles.wideColumn : null]}>
+          {body}
+        </View>
+      );
     }
-    
-    const q = fieldValue.trim().toLowerCase();
-    if (!q) return fieldOptions;
-    return fieldOptions.filter((opt) => opt.toLowerCase().startsWith(q));
-  }, [activeSuggestionsField, unit, activity, substrate, stage, gender]);
+
+    if (field === "stage") {
+      return (
+        <View style={[styles.formColumn, visibleFields.gender ? styles.wideColumn : null]}>
+          {body}
+        </View>
+      );
+    }
+
+    if (field === "gender") {
+      return (
+        <View style={[styles.formColumn, visibleFields.stage ? styles.narrowColumn : null]}>
+          {body}
+        </View>
+      );
+    }
+
+    return body;
+  }
 
   async function addPhoto() {
     const remaining = Math.max(0, 3 - photoUris.length);
@@ -435,6 +503,16 @@ export function ObservationModal({
     clearSpeciesGroupPrompt();
   }
 
+  function resetExtraInfoFields() {
+    setQuantity("");
+    setUnit("");
+    setHostSpecies("");
+    setActivity("");
+    setSubstrate("");
+    setStage("");
+    setGender("");
+  }
+
   function validateSpeciesGroup(): boolean {
     if (isPolygon) return true;
     const trimmed = species.trim();
@@ -479,6 +557,7 @@ export function ObservationModal({
       setUserSpecies(nextSpecies);
     }
     setSpecies(name);
+    resetExtraInfoFields();
     clearSpeciesGroupPrompt();
   }
 
@@ -687,10 +766,11 @@ export function ObservationModal({
             {isShowingSuggestions && suggestions.length > 0 && (
               <View style={styles.suggestions}>
                 {suggestions.map((item) => (
-                  <Pressable 
+                    <Pressable 
                     key={item} 
                     onPress={() => {
                       setSpecies(item);
+                      resetExtraInfoFields();
                       setShowSpeciesInfo(false);
                       setIsShowingSuggestions(false);
                       setDeclinedSpeciesGroupPromptFor(null);
@@ -734,8 +814,16 @@ export function ObservationModal({
             {!isPolygon && (
               <>
                 {(visibleFields.quantity || visibleFields.unit) && (
-                  <>
-                    <View style={styles.metaRow}>
+                  <View
+                    style={styles.metaRow}
+                    onLayout={(e) => {
+                      const y = e.nativeEvent.layout.y;
+                      if (visibleFields.quantity) {
+                        rememberFieldLayout("quantity", y);
+                      }
+                      rememberFieldLayout("unit", y);
+                    }}
+                  >
                       {visibleFields.quantity && (
                         <View style={[styles.formColumn, visibleFields.unit ? styles.narrowColumn : null]}>
                           <Text style={styles.fieldLabel}>Antal</Text>
@@ -748,54 +836,8 @@ export function ObservationModal({
                           />
                         </View>
                       )}
-                      {visibleFields.unit && (
-                        <View
-                          onLayout={(event) => rememberFieldLayout("unit", event.nativeEvent.layout.y)}
-                          style={[styles.formColumn, visibleFields.quantity ? styles.wideColumn : null]}
-                        >
-                          <Text style={styles.fieldLabel}>Enhet</Text>
-                          <TextInput
-                            value={unit}
-                            onChangeText={setUnit}
-                            onFocus={() => {
-                              setActiveSuggestionsField("unit");
-                              scrollToField("unit");
-                            }}
-                            onBlur={() => {
-                              if (!dropdownOptions.unit.some((opt) => opt.toLowerCase() === unit.trim().toLowerCase())) {
-                                setUnit("");
-                              }
-                              setActiveSuggestionsField(null);
-                            }}
-                            autoCorrect={false}
-                            spellCheck={false}
-                            style={[styles.input, styles.metaInput]}
-                            placeholder=""
-                          />
-                        </View>
-                      )}
-                    </View>
-                    {activeSuggestionsField === "unit" && visibleFields.unit && dropdownSuggestions.length > 0 && (
-                      <ScrollView
-                        style={styles.suggestions}
-                        nestedScrollEnabled={true}
-                        keyboardShouldPersistTaps="handled"
-                      >
-                        {dropdownSuggestions.map((item) => (
-                          <Pressable
-                            key={item}
-                            onPress={() => {
-                              setUnit(item);
-                              setActiveSuggestionsField(null);
-                            }}
-                            style={styles.suggestionItem}
-                          >
-                            <Text>{item}</Text>
-                          </Pressable>
-                        ))}
-                      </ScrollView>
-                    )}
-                  </>
+                      {renderDropdownField("unit", unit, setUnit, "Enhet")}
+                  </View>
                 )}
                 {visibleFields.hostSpecies && (
                   <>
@@ -809,195 +851,19 @@ export function ObservationModal({
                     />
                   </>
                 )}
-                {visibleFields.activity && (
-                  <View
-                    onLayout={(event) => rememberFieldLayout("activity", event.nativeEvent.layout.y)}
-                  >
-                    <Text style={styles.fieldLabel}>Aktivitet</Text>
-                    <TextInput
-                      value={activity}
-                      onChangeText={setActivity}
-                      onFocus={() => {
-                        setActiveSuggestionsField("activity");
-                        scrollToField("activity");
-                      }}
-                      onBlur={() => {
-                        if (!dropdownOptions.activity.some((opt) => opt.toLowerCase() === activity.trim().toLowerCase())) {
-                          setActivity("");
-                        }
-                        setActiveSuggestionsField(null);
-                      }}
-                      autoComplete="off"
-                      autoCorrect={false}
-                      spellCheck={false}
-                      style={styles.input}
-                      placeholder=""
-                      placeholderTextColor="#626568"
-                    />
-                    {activeSuggestionsField === "activity" && dropdownSuggestions.length > 0 && (
-                      <ScrollView
-                        style={styles.suggestions}
-                        nestedScrollEnabled={true}
-                        keyboardShouldPersistTaps="handled"
-                      >
-                        {dropdownSuggestions.map((item) => (
-                          <Pressable
-                            key={item}
-                            onPress={() => {
-                              setActivity(item);
-                              setActiveSuggestionsField(null);
-                            }}
-                            style={styles.suggestionItem}
-                          >
-                            <Text>{item}</Text>
-                          </Pressable>
-                        ))}
-                      </ScrollView>
-                    )}
-                  </View>
-                )}
-                {visibleFields.substrate && (
-                  <View
-                    onLayout={(event) => rememberFieldLayout("substrate", event.nativeEvent.layout.y)}
-                  >
-                    <Text style={styles.fieldLabel}>Substrat</Text>
-                    <TextInput
-                      value={substrate}
-                      onChangeText={setSubstrate}
-                      onFocus={() => {
-                        setActiveSuggestionsField("substrate");
-                        scrollToField("substrate");
-                      }}
-                      onBlur={() => {
-                        if (!dropdownOptions.substrate.some((opt) => opt.toLowerCase() === substrate.trim().toLowerCase())) {
-                          setSubstrate("");
-                        }
-                        setActiveSuggestionsField(null);
-                      }}
-                      autoCorrect={false}
-                      spellCheck={false}
-                      style={styles.input}
-                      placeholder=""
-                      placeholderTextColor="#626568"
-                    />
-                    {activeSuggestionsField === "substrate" && dropdownSuggestions.length > 0 && (
-                      <ScrollView
-                        style={styles.suggestions}
-                        nestedScrollEnabled={true}
-                        keyboardShouldPersistTaps="handled"
-                      >
-                        {dropdownSuggestions.map((item) => (
-                          <Pressable
-                            key={item}
-                            onPress={() => {
-                              setSubstrate(item);
-                              setActiveSuggestionsField(null);
-                            }}
-                            style={styles.suggestionItem}
-                          >
-                            <Text>{item}</Text>
-                          </Pressable>
-                        ))}
-                      </ScrollView>
-                    )}
-                  </View>
-                )}
+                {renderDropdownField("activity", activity, setActivity, "Aktivitet")}
+                {renderDropdownField("substrate", substrate, setSubstrate, "Substrat")}
                 {(visibleFields.stage || visibleFields.gender) && (
-                  <View style={styles.metaRow}>
-                    {visibleFields.stage && (
-                      <View
-                        onLayout={(event) => rememberFieldLayout("stage", event.nativeEvent.layout.y)}
-                        style={[styles.formColumn, visibleFields.gender ? styles.wideColumn : null]}
-                      >
-                        <Text style={styles.fieldLabel}>Ålder-Stadium</Text>
-                        <TextInput
-                          value={stage}
-                          onChangeText={setStage}
-                          onFocus={() => {
-                            setActiveSuggestionsField("stage");
-                            scrollToField("stage");
-                          }}
-                          onBlur={() => {
-                            if (!dropdownOptions.stage.some((opt) => opt.toLowerCase() === stage.trim().toLowerCase())) {
-                              setStage("");
-                            }
-                            setActiveSuggestionsField(null);
-                          }}
-                          autoCorrect={false}
-                          spellCheck={false}
-                          style={[styles.input, styles.metaInput]}
-                          placeholder=""
-                          placeholderTextColor="#626568"
-                        />
-                        {activeSuggestionsField === "stage" && dropdownSuggestions.length > 0 && (
-                          <ScrollView
-                            style={styles.suggestions}
-                            nestedScrollEnabled={true}
-                            keyboardShouldPersistTaps="handled"
-                          >
-                            {dropdownSuggestions.map((item) => (
-                              <Pressable
-                                key={item}
-                                onPress={() => {
-                                  setStage(item);
-                                  setActiveSuggestionsField(null);
-                                }}
-                                style={styles.suggestionItem}
-                              >
-                                <Text>{item}</Text>
-                              </Pressable>
-                            ))}
-                          </ScrollView>
-                        )}
-                      </View>
-                    )}
-                    {visibleFields.gender && (
-                      <View
-                        onLayout={(event) => rememberFieldLayout("gender", event.nativeEvent.layout.y)}
-                        style={[styles.formColumn, visibleFields.stage ? styles.narrowColumn : null]}
-                      >
-                        <Text style={styles.fieldLabel}>Kön</Text>
-                        <TextInput
-                          value={gender}
-                          onChangeText={setGender}
-                          onFocus={() => {
-                            setActiveSuggestionsField("gender");
-                            scrollToField("gender");
-                          }}
-                          onBlur={() => {
-                            if (!dropdownOptions.gender.some((opt) => opt.toLowerCase() === gender.trim().toLowerCase())) {
-                              setGender("");
-                            }
-                            setActiveSuggestionsField(null);
-                          }}
-                          autoCorrect={false}
-                          spellCheck={false}
-                          style={[styles.input, styles.metaInput]}
-                          placeholder=""
-                          placeholderTextColor="#626568"
-                        />
-                        {activeSuggestionsField === "gender" && dropdownSuggestions.length > 0 && (
-                          <ScrollView
-                            style={styles.suggestions}
-                            nestedScrollEnabled={true}
-                            keyboardShouldPersistTaps="handled"
-                          >
-                            {dropdownSuggestions.map((item) => (
-                              <Pressable
-                                key={item}
-                                onPress={() => {
-                                  setGender(item);
-                                  setActiveSuggestionsField(null);
-                                }}
-                                style={styles.suggestionItem}
-                              >
-                                <Text>{item}</Text>
-                              </Pressable>
-                            ))}
-                          </ScrollView>
-                        )}
-                      </View>
-                    )}
+                  <View
+                    style={styles.metaRow}
+                    onLayout={(e) => {
+                      const y = e.nativeEvent.layout.y;
+                      rememberFieldLayout("stage", y);
+                      rememberFieldLayout("gender", y);
+                    }}
+                  >
+                    {renderDropdownField("stage", stage, setStage, "Ålder-Stadium")}
+                    {renderDropdownField("gender", gender, setGender, "Kön")}
                   </View>
                 )}
               </>
@@ -1260,6 +1126,11 @@ const styles = StyleSheet.create({
   metaInput: {
     flex: 1,
     marginBottom: 0,
+  },
+  disabledDropdownInput: {
+    backgroundColor: "#e0e0e0",
+    color: "#7a7a7a",
+    opacity: 0.85,
   },
   suggestions: {
     borderWidth: 1,
