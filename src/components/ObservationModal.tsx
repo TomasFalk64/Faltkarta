@@ -78,6 +78,7 @@ const hostSpeciesEnabledGroups = new Set([
   "Alger",
   "Svampar",
   "Ryggradslösa djur",
+  "Obestämd",
 ]);
 
 type Props = {
@@ -131,7 +132,7 @@ export function ObservationModal({
   const [activeSuggestionsField, setActiveSuggestionsField] = useState<string | null>(null);
   const [userSpecies, setUserSpecies] = useState<string[]>([]);
   const [ownSpeciesGroups, setOwnSpeciesGroups] = useState<Record<string, string>>({});
-  const [currentSelectedGroup, setCurrentSelectedGroup] = useState<string>("");
+  const [currentSelectedGroup, setCurrentSelectedGroup] = useState<string>("Obestämd");
   const scrollViewRef = useRef<ScrollView | null>(null);
   const speciesInputRef = useRef<TextInput | null>(null);
   const [fieldLayouts, setFieldLayouts] = useState<Record<string, number>>({});
@@ -175,7 +176,7 @@ export function ObservationModal({
         );
         setAccuracyMetersWasModified(false);
         setShowSpeciesInfo(false);
-        setCurrentSelectedGroup(initialSpeciesGroup);
+        setCurrentSelectedGroup(initialSpeciesGroup || "Obestämd");
         setPendingSpeciesGroupSpecies(null);
         setPendingSpeciesGroupValue("Obestämd");
         setPendingSpeciesKnownGroup(null);
@@ -211,7 +212,7 @@ export function ObservationModal({
         );
       setAccuracyMetersWasModified(false);
       setShowSpeciesInfo(false);
-      setCurrentSelectedGroup(initialSpeciesGroup);
+      setCurrentSelectedGroup(initialSpeciesGroup || "Obestämd");
       setPendingSpeciesGroupSpecies(null);
       setPendingSpeciesGroupValue("Obestämd");
       setPendingSpeciesKnownGroup(null);
@@ -475,7 +476,7 @@ export function ObservationModal({
     setAccuracyMetersWasModified(false);
     setShowSpeciesInfo(false);
     setShowDeleteConfirm(false);
-    setCurrentSelectedGroup("");
+    setCurrentSelectedGroup("Obestämd");
     setPendingSpeciesGroupSpecies(null);
     setPendingSpeciesGroupValue("Obestämd");
     setPendingSpeciesKnownGroup(null);
@@ -503,7 +504,7 @@ export function ObservationModal({
     ]);
     setUserSpecies(updatedSpecies);
     setOwnSpeciesGroups(updatedGroups);
-    setCurrentSelectedGroup("");
+    setCurrentSelectedGroup("Obestämd");
     setDeclinedSpeciesGroupPromptFor(null);
     clearSpeciesGroupPrompt();
     setSpecies("");
@@ -531,7 +532,7 @@ export function ObservationModal({
 
   function resetSpeciesPromptDecision() {
     setDeclinedSpeciesGroupPromptFor(null);
-    setCurrentSelectedGroup("");
+    setCurrentSelectedGroup("Obestämd");
     clearSpeciesGroupPrompt();
   }
 
@@ -548,7 +549,10 @@ export function ObservationModal({
   function validateSpeciesGroup(): boolean {
     if (isPolygon) return true;
     const trimmed = species.trim();
-    if (!trimmed) return true;
+    if (!trimmed) {
+      setCurrentSelectedGroup("Obestämd");
+      return true;
+    }
 
     const group = findSpeciesGroup(trimmed);
     const knownName = findKnownSpeciesName(trimmed);
@@ -594,6 +598,7 @@ export function ObservationModal({
   function declineSpeciesGroup() {
     const name = pendingSpeciesGroupSpecies?.trim() || species.trim();
     setDeclinedSpeciesGroupPromptFor(name.toLowerCase());
+    setCurrentSelectedGroup(pendingSpeciesKnownGroup ?? "Obestämd");
     clearSpeciesGroupPrompt();
   }
 
@@ -806,10 +811,10 @@ export function ObservationModal({
                       setIsShowingSuggestions(false);
                       setDeclinedSpeciesGroupPromptFor(null);
                       const group = findSpeciesGroup(item);
-                      if (group) {
-                        console.log("Aktuell artgrupp:", group);
-                      }
-                      setCurrentSelectedGroup(group ?? "");
+                      
+                      console.log("Aktuell artgrupp:", group);
+                      
+                      setCurrentSelectedGroup(group ?? "Obestämd");
                       if (group) {
                         clearSpeciesGroupPrompt();
                       }

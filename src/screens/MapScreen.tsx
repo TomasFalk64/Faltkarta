@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, Modal, Pressable, ScrollView, Share, StyleSheet, Text, View } from "react-native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { Ionicons } from "@expo/vector-icons";
 import Svg, { Circle, Polygon } from "react-native-svg";
@@ -529,6 +529,30 @@ export function MapScreen({ route, navigation }: Props) {
     }, 120);
   }
 
+  function handleSharePoint(obs: PointObservation) {
+    //console.log("Hela observationen:", JSON.stringify(obs, null, 2));
+    // Stäng listan först
+    setShowPointList(false);
+
+    // Vänta ut animationen och dela sedan
+    setTimeout(async () => {
+      try {
+        const lat = obs.wgs84.lat;
+        const lon = obs.wgs84.lon;
+        console.log("Hela observationen:", lat, "  ", lon);
+        const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`;
+        const message = `Fältkarta\n ${obs.species}\n\nSe platsen på kartan:\n${mapsUrl}`;
+
+        await Share.share({
+          message: message,
+        });
+      } catch (error) {
+        Alert.alert("Kunde inte dela", "Ett fel uppstod när delningsmenyn skulle öppnas.");
+        console.error("Dela-fel:", error);
+      }
+    }, 150);
+  }
+
   function openPolygonEditor(obs: PolygonObservation) {
     const center = polygonCenter(obs);
     if (center) {
@@ -713,9 +737,17 @@ export function MapScreen({ route, navigation }: Props) {
                       )}
                     </Pressable>
                     {obs.kind === "point" ? (
-                      <Pressable style={styles.copySpeciesBtn} onPress={() => openCopiedPointModal(obs)}>
-                        <Ionicons name="copy-outline" size={16} color="#fff" />
-                      </Pressable>
+                      <>
+                        {/* Vänster: Kopiera */}
+                        <Pressable style={styles.copySpeciesBtn} onPress={() => openCopiedPointModal(obs)}>
+                          <Ionicons name="copy-outline" size={16} color="#fff" />
+                        </Pressable>
+
+                        {/* Höger: Dela */}
+                        <Pressable style={styles.shareSpeciesBtn} onPress={() => handleSharePoint(obs)}>
+                          <Ionicons name="share-social-outline" size={16} color="#fff" />
+                        </Pressable>
+                      </>
                     ) : null}
                   </View>
                 ))
@@ -1028,6 +1060,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
+  },
+  shareSpeciesBtn: {
+    width: 26,
+    height: 26,
+    borderRadius: 7,
+    backgroundColor: "rgba(255,255,255,0.12)",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+    marginLeft: 1, // Mellanrum mellan ikonerna!
   },
 });
 
