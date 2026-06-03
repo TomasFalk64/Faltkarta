@@ -71,6 +71,15 @@ const speciesGroupOptions = [
   "Obestämd",
 ];
 
+const hostSpeciesEnabledGroups = new Set([
+  "Kärlväxter",
+  "Mossor",
+  "Lavar",
+  "Alger",
+  "Svampar",
+  "Ryggradslösa djur",
+]);
+
 type Props = {
   visible: boolean;
   title: string;
@@ -83,6 +92,7 @@ type Props = {
   visibleFields?: VisibleFields;
   speciesPlaceholder?: string;
   kind?: "point" | "polygon";
+  initialSpeciesGroup?: string;
 };
 
 export function ObservationModal({
@@ -97,6 +107,7 @@ export function ObservationModal({
   visibleFields = defaultVisibleFields,
   speciesPlaceholder = "Artnamn",
   kind = "point",
+  initialSpeciesGroup = "",
 }: Props) {
   const [species, setSpecies] = useState("");
   const [notes, setNotes] = useState("");
@@ -161,7 +172,7 @@ export function ObservationModal({
         );
         setAccuracyMetersWasModified(false);
         setShowSpeciesInfo(false);
-        setCurrentSelectedGroup("");
+        setCurrentSelectedGroup(initialSpeciesGroup);
         setPendingSpeciesGroupSpecies(null);
         setPendingSpeciesGroupValue("Obestämd");
         setPendingSpeciesKnownGroup(null);
@@ -197,7 +208,7 @@ export function ObservationModal({
         );
       setAccuracyMetersWasModified(false);
       setShowSpeciesInfo(false);
-      setCurrentSelectedGroup("");
+      setCurrentSelectedGroup(initialSpeciesGroup);
       setPendingSpeciesGroupSpecies(null);
       setPendingSpeciesGroupValue("Obestämd");
       setPendingSpeciesKnownGroup(null);
@@ -206,7 +217,7 @@ export function ObservationModal({
       closeSuggestionPopovers();
     }
     wasVisibleRef.current = visible;
-  }, [initialValues, isPolygon, sessionToken, visible]);
+  }, [initialValues, initialSpeciesGroup, isPolygon, sessionToken, visible]);
 
   useEffect(() => {
     if (!visible) return;
@@ -311,6 +322,7 @@ export function ObservationModal({
     currentSelectedGroup && ARTGRUPP_OPTIONS[currentSelectedGroup]
       ? ARTGRUPP_OPTIONS[currentSelectedGroup]
       : DEFAULT_OPTIONS;
+  const isHostSpeciesEnabled = hostSpeciesEnabledGroups.has(currentSelectedGroup);
 
   const getFieldOptions = (field: DropdownField) => activeGroupOptions[field] ?? [];
   const hasFieldOptions = (field: DropdownField) => getFieldOptions(field).length > 0;
@@ -328,8 +340,8 @@ export function ObservationModal({
     const isActive = activeSuggestionsField === field;
     const fieldStyle =
       field === "unit" || field === "stage" || field === "gender"
-        ? [styles.input, styles.metaInput, disabled ? styles.disabledDropdownInput : null]
-        : [styles.input, disabled ? styles.disabledDropdownInput : null];
+        ? [styles.input, styles.dropdownSelect, styles.dropdownMetaSelect, disabled ? styles.disabledDropdownInput : null]
+        : [styles.input, styles.dropdownSelect, disabled ? styles.disabledDropdownInput : null];
 
     const body = (
       <>
@@ -348,7 +360,7 @@ export function ObservationModal({
           style={fieldStyle}
         >
           <Text style={{ color: disabled ? "#7a7a7a" : "#172121", fontSize: 16 }}>
-            {value.trim() || "Välj..."}
+            {value.trim()}
           </Text>
         </Pressable>
         {isActive && !disabled && options.length > 0 && (
@@ -357,6 +369,15 @@ export function ObservationModal({
             nestedScrollEnabled={true}
             keyboardShouldPersistTaps="handled"
           >
+            <Pressable
+              onPress={() => {
+                setValue("");
+                setActiveSuggestionsField(null);
+              }}
+              style={styles.suggestionItem}
+            >
+              <Text style={styles.clearSuggestionText}>Rensa</Text>
+            </Pressable>
             {options.map((item) => (
               <Pressable
                 key={item}
@@ -521,7 +542,6 @@ export function ObservationModal({
     const group = findSpeciesGroup(trimmed);
     const knownName = findKnownSpeciesName(trimmed);
     if (group && knownName) {
-      console.log("Aktuell artgrupp:", group);
       setCurrentSelectedGroup(group);
       clearSpeciesGroupPrompt();
       return true;
@@ -549,7 +569,6 @@ export function ObservationModal({
       const nextGroups = await saveUserSpeciesGroup(name, group);
       setOwnSpeciesGroups(nextGroups);
     }
-    console.log("Aktuell artgrupp:", group);
     setCurrentSelectedGroup(group);
     setDeclinedSpeciesGroupPromptFor(null);
     if (!findKnownSpeciesName(name)) {
@@ -830,7 +849,7 @@ export function ObservationModal({
                           <TextInput
                             value={quantity}
                             onChangeText={setQuantity}
-                            style={[styles.input, styles.metaInput]}
+                            style={[styles.input, styles.dropdownSelect, styles.dropdownMetaSelect]}
                             placeholder=""
                             keyboardType="numeric"
                           />
@@ -845,7 +864,11 @@ export function ObservationModal({
                     <TextInput
                       value={hostSpecies}
                       onChangeText={setHostSpecies}
-                      style={styles.input}
+                      editable={isHostSpeciesEnabled}
+                      style={[
+                        styles.input,
+                        !isHostSpeciesEnabled ? styles.disabledDropdownInput : null,
+                      ]}
                       placeholder=""
                       placeholderTextColor="#626568"
                     />
@@ -1127,6 +1150,13 @@ const styles = StyleSheet.create({
     flex: 1,
     marginBottom: 0,
   },
+  dropdownSelect: {
+    minHeight: 46,
+    justifyContent: "center",
+  },
+  dropdownMetaSelect: {
+    marginBottom: 0,
+  },
   disabledDropdownInput: {
     backgroundColor: "#e0e0e0",
     color: "#7a7a7a",
@@ -1144,6 +1174,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: "#ececec",
+  },
+  clearSuggestionText: {
+    fontStyle: "italic",
   },
   photoBtn: {
     backgroundColor: "#005f73",

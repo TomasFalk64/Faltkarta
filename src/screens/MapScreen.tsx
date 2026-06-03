@@ -13,9 +13,11 @@ import {
   loadMaps,
   loadObservationsForMap,
   loadSettings,
+  loadUserSpeciesGroups,
   upsertMap,
   updateObservation,
 } from "../storage/storage";
+import { speciesGroups } from "../data/speciesGroups";
 import { LatLon, MapItem, Observation, PolygonObservation, PointObservation, VisibleFields } from "../types/models";
 import { makeId } from "../utils/id";
 import { ensureMapGeorefBounds } from "../services/files";
@@ -47,11 +49,35 @@ export function MapScreen({ route, navigation }: Props) {
   const [showPolygonModal, setShowPolygonModal] = useState(false);
   const [showPointList, setShowPointList] = useState(false);
   const [pointModalSession, setPointModalSession] = useState(0);
+  const [pointModalInitialValues, setPointModalInitialValues] = useState<{
+    species: string;
+    notes: string;
+    photoUris: string[];
+    photoAssetIds?: string[];
+    localName?: string;
+    quantity?: number;
+    unit?: string;
+    hostSpecies?: string;
+    activity?: string;
+    substrate?: string;
+    stage?: string;
+    gender?: string;
+    accuracyMeters?: number | null;
+  }>({
+    species: "",
+    notes: "",
+    photoUris: [],
+    photoAssetIds: [],
+    localName: "",
+    accuracyMeters: null,
+  });
+  const [pointModalInitialSpeciesGroup, setPointModalInitialSpeciesGroup] = useState("");
   const [polygonModalSession, setPolygonModalSession] = useState(0);
   const [editingPoint, setEditingPoint] = useState<PointObservation | null>(null);
   const [editingPolygon, setEditingPolygon] = useState<PolygonObservation | null>(null);
   const [editingPointPhotoPreviewUris, setEditingPointPhotoPreviewUris] = useState<string[]>([]);
   const [editingPointPhotoPreviewAssetIds, setEditingPointPhotoPreviewAssetIds] = useState<string[]>([]);
+  const [ownSpeciesGroups, setOwnSpeciesGroups] = useState<Record<string, string>>({});
   const [polygonMode, setPolygonMode] = useState(false);
   const [draftPolygon, setDraftPolygon] = useState<LatLon[]>([]);
   const [gpsPingSeconds, setGpsPingSeconds] = useState(3);
@@ -75,12 +101,30 @@ export function MapScreen({ route, navigation }: Props) {
   const editingPhotoLookupRef = useRef<Record<string, { ref: string; assetId?: string }>>({});
   const editingMissingPhotosRef = useRef<Array<{ ref: string; assetId?: string }>>([]);
 
+  const speciesGroupsByLower = useMemo(() => {
+    const map = new Map<string, string>();
+    Object.entries(speciesGroups).forEach(([name, group]) => {
+      const normalized = String(group ?? "").trim();
+      if (normalized) map.set(name.toLowerCase(), normalized);
+    });
+    Object.entries(ownSpeciesGroups).forEach(([name, group]) => {
+      const normalized = String(group ?? "").trim();
+      if (normalized) map.set(name.toLowerCase(), normalized);
+    });
+    return map;
+  }, [ownSpeciesGroups]);
+
+  function findSpeciesGroup(value: string): string {
+    return speciesGroupsByLower.get(value.trim().toLowerCase()) ?? "";
+  }
+
   useEffect(() => {
     (async () => {
-      const [maps, obs, settings] = await Promise.all([
+      const [maps, obs, settings, groups] = await Promise.all([
         loadMaps(),
         loadObservationsForMap(mapId),
         loadSettings(),
+        loadUserSpeciesGroups(),
       ]);
       const current = maps.find((m) => m.id === mapId) ?? null;
       const hydrated = current ? await ensureMapGeorefBounds(current) : current;
@@ -88,6 +132,7 @@ export function MapScreen({ route, navigation }: Props) {
         await upsertMap(hydrated);
       }
       setObservations(obs);
+      setOwnSpeciesGroups(groups);
       setAutoFollow(settings.autoFollow ?? false);
       setGpsPingSeconds(settings.gpsPingSeconds);
       setVisibleFields(settings.visibleFields ?? defaultVisibleFields);
@@ -412,8 +457,76 @@ export function MapScreen({ route, navigation }: Props) {
     setEditingPoint(obs);
     setFrozenPointCoord(obs.wgs84);
     setFrozenAccuracyMeters(obs.accuracyMeters);
+    setPointModalInitialValues({
+      species: obs.species,
+      notes: obs.notes,
+      photoUris: previewUris,
+      photoAssetIds: previewAssetIds,
+      localName: obs.localName,
+      accuracyMeters: obs.accuracyMeters,
+      quantity: obs.quantity,
+      unit: obs.unit,
+      hostSpecies: obs.hostSpecies,
+      activity: obs.activity,
+      substrate: obs.substrate,
+      stage: obs.stage,
+      gender: obs.gender,
+    });
+    setPointModalInitialSpeciesGroup(findSpeciesGroup(obs.species));
     setPointModalSession((v) => v + 1);
     setShowPointModal(true);
+  }
+
+  function openNewPointModal() {
+    setEditingPoint(null);
+    setEditingPointPhotoPreviewUris([]);
+    setEditingPointPhotoPreviewAssetIds([]);
+    editingPhotoLookupRef.current = {};
+    editingMissingPhotosRef.current = [];
+    setFrozenPointCoord(crosshairPos);
+    setFrozenAccuracyMeters(displayAccuracyMeters ?? rawAccuracyMeters ?? null);
+    setPointModalInitialValues({
+      species: "",
+      notes: "",
+      photoUris: [],
+      photoAssetIds: [],
+      localName: map?.title ?? "",
+      accuracyMeters: displayAccuracyMeters ?? rawAccuracyMeters ?? null,
+    });
+    setPointModalInitialSpeciesGroup("");
+    setPointModalSession((v) => v + 1);
+    setShowPointModal(true);
+  }
+
+  function openCopiedPointModal(obs: PointObservation) {
+    setShowPointList(false);
+    setTimeout(() => {
+      setEditingPoint(null);
+      setEditingPointPhotoPreviewUris([]);
+      setEditingPointPhotoPreviewAssetIds([]);
+      editingPhotoLookupRef.current = {};
+      editingMissingPhotosRef.current = [];
+      setFrozenPointCoord(crosshairPos);
+      setFrozenAccuracyMeters(displayAccuracyMeters ?? rawAccuracyMeters ?? null);
+      setPointModalInitialValues({
+        species: obs.species,
+        notes: obs.notes,
+        photoUris: [],
+        photoAssetIds: [],
+        localName: obs.localName,
+        accuracyMeters: displayAccuracyMeters ?? rawAccuracyMeters ?? null,
+        quantity: obs.quantity,
+        unit: obs.unit,
+        hostSpecies: obs.hostSpecies,
+        activity: obs.activity,
+        substrate: obs.substrate,
+        stage: obs.stage,
+        gender: obs.gender,
+      });
+      setPointModalInitialSpeciesGroup(findSpeciesGroup(obs.species));
+      setPointModalSession((v) => v + 1);
+      setShowPointModal(true);
+    }, 120);
   }
 
   function openPolygonEditor(obs: PolygonObservation) {
@@ -510,17 +623,7 @@ export function MapScreen({ route, navigation }: Props) {
         </Pressable>
         <Pressable
           style={styles.mainBtn}
-          onPress={() => {
-            setEditingPoint(null);
-            setEditingPointPhotoPreviewUris([]);
-            setEditingPointPhotoPreviewAssetIds([]);
-            editingPhotoLookupRef.current = {};
-            editingMissingPhotosRef.current = [];
-            setFrozenPointCoord(crosshairPos);
-            setFrozenAccuracyMeters(displayAccuracyMeters ?? rawAccuracyMeters ?? null);
-            setPointModalSession((v) => v + 1);
-            setShowPointModal(true);
-          }}
+          onPress={openNewPointModal}
         >
           <Text style={styles.mainBtnIcon}>📍</Text>
         </Pressable>
@@ -586,29 +689,35 @@ export function MapScreen({ route, navigation }: Props) {
                 <Text style={styles.pointListEmpty}>Inga punkter sparade.</Text>
               ) : (
                 pointList.map((obs) => (
-                  <Pressable
-                    key={obs.id}
-                    style={styles.pointListItem}
-                    onPress={() => {
-                      setShowPointList(false);
-                      if (obs.kind === "point") {
-                        void openPointEditor(obs);
-                      } else {
-                        openPolygonEditor(obs);
-                      }
-                    }}
-                  >
-                    <Text style={styles.pointListItemSpecies}>
-                      {obs.kind === "point" ? obs.species : obs.polygonName}
-                    </Text>
-                    {obs.kind === 'point' ? (
-                      <Text style={styles.pointListItemMeta}>
-                        Noggrannhet: {obs.accuracyMeters} m
+                  <View key={obs.id} style={styles.pointListItem}>
+                    <Pressable
+                      style={styles.pointListItemMain}
+                      onPress={() => {
+                        setShowPointList(false);
+                        if (obs.kind === "point") {
+                          void openPointEditor(obs);
+                        } else {
+                          openPolygonEditor(obs);
+                        }
+                      }}
+                    >
+                      <Text style={styles.pointListItemSpecies}>
+                        {obs.kind === "point" ? obs.species : obs.polygonName}
                       </Text>
-                    ) : (
-                      <Text style={styles.pointListItemMeta}>Polygon</Text>
-                    )}
-                  </Pressable>
+                      {obs.kind === "point" ? (
+                        <Text style={styles.pointListItemMeta}>
+                          Noggrannhet: {obs.accuracyMeters} m
+                        </Text>
+                      ) : (
+                        <Text style={styles.pointListItemMeta}>Polygon</Text>
+                      )}
+                    </Pressable>
+                    {obs.kind === "point" ? (
+                      <Pressable style={styles.copySpeciesBtn} onPress={() => openCopiedPointModal(obs)}>
+                        <Ionicons name="copy-outline" size={16} color="#fff" />
+                      </Pressable>
+                    ) : null}
+                  </View>
                 ))
               )}
             </ScrollView>
@@ -643,39 +752,30 @@ export function MapScreen({ route, navigation }: Props) {
           editingMissingPhotosRef.current = [];
           setFrozenPointCoord(null);
           setFrozenAccuracyMeters(null);
+          setPointModalInitialSpeciesGroup("");
         }}
         onSave={onAddPoint}
         onDelete={editingPoint ? onDeletePoint : undefined}
-        initialValues={
-          editingPoint
-            ? {
-                species: editingPoint.species,
-                notes: editingPoint.notes,
-                photoUris: editingPointPhotoPreviewUris,
-                photoAssetIds: editingPointPhotoPreviewAssetIds,
-                localName: editingPoint.localName,
-                accuracyMeters: editingPoint.accuracyMeters,
-                quantity: editingPoint.quantity,
-                unit: editingPoint.unit,
-                hostSpecies: editingPoint.hostSpecies,
-                activity: editingPoint.activity,
-                substrate: editingPoint.substrate,
-                stage: editingPoint.stage,
-                gender: editingPoint.gender,
-              }
-            : {
-                species: "",
-                notes: "",
-                photoUris: [],
-                photoAssetIds: [],
-                localName: map.title,
-                accuracyMeters: displayAccuracyMeters ?? rawAccuracyMeters ?? null,
-              }
-        }
+        initialValues={editingPoint ? {
+          species: editingPoint.species,
+          notes: editingPoint.notes,
+          photoUris: editingPointPhotoPreviewUris,
+          photoAssetIds: editingPointPhotoPreviewAssetIds,
+          localName: editingPoint.localName,
+          accuracyMeters: editingPoint.accuracyMeters,
+          quantity: editingPoint.quantity,
+          unit: editingPoint.unit,
+          hostSpecies: editingPoint.hostSpecies,
+          activity: editingPoint.activity,
+          substrate: editingPoint.substrate,
+          stage: editingPoint.stage,
+          gender: editingPoint.gender,
+        } : pointModalInitialValues}
         title={editingPoint ? "Redigera punkt" : "Ny punktobservation"}
         sessionToken={pointModalSession}
         visibleFields={visibleFields}
         showPointMetaFields
+        initialSpeciesGroup={pointModalInitialSpeciesGroup}
       />
       <ObservationModal
         visible={showPolygonModal}
@@ -909,8 +1009,24 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 8,
     paddingVertical: 7,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  pointListItemMain: {
+    flex: 1,
+    gap: 2,
   },
   pointListItemSpecies: { color: "#fff", fontWeight: "700" },
   pointListItemMeta: { color: "#d9d9d9", marginTop: 2, fontSize: 12 },
+  copySpeciesBtn: {
+    width: 26,
+    height: 26,
+    borderRadius: 7,
+    backgroundColor: "rgba(255,255,255,0.12)",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
 });
 

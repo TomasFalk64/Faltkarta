@@ -141,7 +141,7 @@ export const ARTGRUPP_OPTIONS: Record<string, GroupOptions> = {
     unit: ["Exemplar", "Lekgropar", "Äggklumpar"],
     stage: ["Ägg", "Larv", "Årsyngel", "Adult"],
     gender: ["Hane", "Hona"],
-    activity: ["Död av sjukdom/svält", "Dödad av predator", "Fragment", "Funnen död", "Födosökande", "Individmärkt", "Lek", "Sjuk", "Vandrande", "Äggläggande"],
+    activity: ["Lek", "Vandrande", "Död av sjukdom/svält", "Dödad av predator", "Fragment", "Funnen död", "Födosökande", "Individmärkt", "Sjuk", "Äggläggande"],
     substrate: [],
   },
   "Fåglar": {
