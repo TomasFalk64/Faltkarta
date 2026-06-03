@@ -776,6 +776,7 @@ export function MapScreen({ route, navigation }: Props) {
         visibleFields={visibleFields}
         showPointMetaFields
         initialSpeciesGroup={pointModalInitialSpeciesGroup}
+        autoFocusSpecies={!editingPoint && pointModalInitialValues.species === ""}
       />
       <ObservationModal
         visible={showPolygonModal}

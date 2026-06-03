@@ -93,6 +93,7 @@ type Props = {
   speciesPlaceholder?: string;
   kind?: "point" | "polygon";
   initialSpeciesGroup?: string;
+  autoFocusSpecies?: boolean;
 };
 
 export function ObservationModal({
@@ -108,6 +109,7 @@ export function ObservationModal({
   speciesPlaceholder = "Artnamn",
   kind = "point",
   initialSpeciesGroup = "",
+  autoFocusSpecies = false,
 }: Props) {
   const [species, setSpecies] = useState("");
   const [notes, setNotes] = useState("");
@@ -131,6 +133,7 @@ export function ObservationModal({
   const [ownSpeciesGroups, setOwnSpeciesGroups] = useState<Record<string, string>>({});
   const [currentSelectedGroup, setCurrentSelectedGroup] = useState<string>("");
   const scrollViewRef = useRef<ScrollView | null>(null);
+  const speciesInputRef = useRef<TextInput | null>(null);
   const [fieldLayouts, setFieldLayouts] = useState<Record<string, number>>({});
   const isSubmittingRef = useRef(false);
   const [pendingSpeciesGroupSpecies, setPendingSpeciesGroupSpecies] = useState<string | null>(null);
@@ -231,6 +234,14 @@ export function ObservationModal({
         setOwnSpeciesGroups({});
       });
   }, [visible, sessionToken]);
+
+  useEffect(() => {
+    if (!visible || !autoFocusSpecies) return;
+    const timer = setTimeout(() => {
+      speciesInputRef.current?.focus();
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [autoFocusSpecies, visible, sessionToken]);
 
   useEffect(() => {
     // 1. Arten måste vara knärot
@@ -706,6 +717,7 @@ export function ObservationModal({
               style={styles.speciesRow}
             >
               <TextInput
+                ref={speciesInputRef}
                 value={species}
                 autoCorrect={false}
                 spellCheck={false}
