@@ -9,16 +9,23 @@ import {
   Image,
   ScrollView,
   KeyboardAvoidingView,
+  Keyboard,
   Platform,
-  UIManager,
-  findNodeHandle,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Circle, Path } from "react-native-svg";
 import * as ImagePicker from "expo-image-picker";
 import { speciesInfo } from "../data/species_info";
+import { speciesGroups } from "../data/speciesGroups";
 import { dropdownOptions } from "../data/dropdownOptions";
-import { addUserSpecies, loadUserSpecies, removeUserSpecies } from "../storage/storage";
+import {
+  addUserSpecies,
+  loadUserSpecies,
+  loadUserSpeciesGroups,
+  removeUserSpecies,
+  removeUserSpeciesGroup,
+  saveUserSpeciesGroup,
+} from "../storage/storage";
 import { VisibleFields } from "../types/models";
 
 type ModalPayload = {
@@ -48,6 +55,21 @@ const defaultVisibleFields: VisibleFields = {
   stage: false,
   gender: false,
 };
+
+const speciesGroupOptions = [
+  "Kärlväxter",
+  "Mossor",
+  "Lavar",
+  "Svampar",
+  "Alger",
+  "Ryggradslösa djur",
+  "Däggdjur (exkl.fladdermöss)",
+  "Fladdermöss",
+  "Grod-&kräldjur",
+  "Fiskar",
+  "Fåglar",
+  "Obestämd",
+];
 
 type Props = {
   visible: boolean;
@@ -95,10 +117,16 @@ export function ObservationModal({
   const [isShowingSuggestions, setIsShowingSuggestions] = useState(false);
   const [activeSuggestionsField, setActiveSuggestionsField] = useState<string | null>(null);
   const [userSpecies, setUserSpecies] = useState<string[]>([]);
+  const [ownSpeciesGroups, setOwnSpeciesGroups] = useState<Record<string, string>>({});
+  const [currentSelectedGroup, setCurrentSelectedGroup] = useState<string>("");
   const scrollViewRef = useRef<ScrollView | null>(null);
-  const fieldRefs = useRef<Record<string, any>>({});
+  const [fieldLayouts, setFieldLayouts] = useState<Record<string, number>>({});
   const isSubmittingRef = useRef(false);
-  const [pendingNewSpecies, setPendingNewSpecies] = useState<string | null>(null);
+  const [pendingSpeciesGroupSpecies, setPendingSpeciesGroupSpecies] = useState<string | null>(null);
+  const [pendingSpeciesGroupValue, setPendingSpeciesGroupValue] = useState("Obestämd");
+  const [pendingSpeciesKnownGroup, setPendingSpeciesKnownGroup] = useState<string | null>(null);
+  const [showSpeciesGroupOptions, setShowSpeciesGroupOptions] = useState(false);
+  const [declinedSpeciesGroupPromptFor, setDeclinedSpeciesGroupPromptFor] = useState<string | null>(null);
   const isPolygon = kind === "polygon";
   const [showSpeciesInfo, setShowSpeciesInfo] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -132,6 +160,12 @@ export function ObservationModal({
         );
         setAccuracyMetersWasModified(false);
         setShowSpeciesInfo(false);
+        setCurrentSelectedGroup("");
+        setPendingSpeciesGroupSpecies(null);
+        setPendingSpeciesGroupValue("Obestämd");
+        setPendingSpeciesKnownGroup(null);
+        setShowSpeciesGroupOptions(false);
+        setDeclinedSpeciesGroupPromptFor(null);
         closeSuggestionPopovers();
         lastSessionTokenRef.current = sessionToken;
       }
@@ -162,6 +196,12 @@ export function ObservationModal({
         );
       setAccuracyMetersWasModified(false);
       setShowSpeciesInfo(false);
+      setCurrentSelectedGroup("");
+      setPendingSpeciesGroupSpecies(null);
+      setPendingSpeciesGroupValue("Obestämd");
+      setPendingSpeciesKnownGroup(null);
+      setShowSpeciesGroupOptions(false);
+      setDeclinedSpeciesGroupPromptFor(null);
       closeSuggestionPopovers();
     }
     wasVisibleRef.current = visible;
@@ -169,9 +209,15 @@ export function ObservationModal({
 
   useEffect(() => {
     if (!visible) return;
-    loadUserSpecies()
-      .then((list) => setUserSpecies(list))
-      .catch(() => setUserSpecies([]));
+    Promise.all([loadUserSpecies(), loadUserSpeciesGroups()])
+      .then(([list, groups]) => {
+        setUserSpecies(list);
+        setOwnSpeciesGroups(groups);
+      })
+      .catch(() => {
+        setUserSpecies([]);
+        setOwnSpeciesGroups({});
+      });
   }, [visible, sessionToken]);
 
   useEffect(() => {
@@ -204,6 +250,23 @@ export function ObservationModal({
     return map;
   }, []);
 
+  const speciesGroupsByLower = useMemo(() => {
+    const map = new Map<string, string>();
+    Object.entries(speciesGroups).forEach(([name, group]) => {
+      const normalized = String(group ?? "").trim();
+      if (normalized) {
+        map.set(name.toLowerCase(), normalized);
+      }
+    });
+    Object.entries(ownSpeciesGroups).forEach(([name, group]) => {
+      const normalized = String(group ?? "").trim();
+      if (normalized) {
+        map.set(name.toLowerCase(), normalized);
+      }
+    });
+    return map;
+  }, [ownSpeciesGroups]);
+
   const selectedInfo = useMemo(() => {
     if (!species) return null;
     const direct = speciesInfo[species];
@@ -230,26 +293,15 @@ export function ObservationModal({
     return combinedSpecies.filter((s) => s.toLowerCase().startsWith(q)).slice(0, 3);
   }, [combinedSpecies, species]);
 
+  function rememberFieldLayout(fieldName: string, y: number) {
+    setFieldLayouts((prev) => (prev[fieldName] === y ? prev : { ...prev, [fieldName]: y }));
+  }
+
   const scrollToField = (fieldName: string) => {
     const scrollView = scrollViewRef.current;
-    const fieldHandle = fieldRefs.current[fieldName];
-    if (!scrollView || !fieldHandle) return;
-
-    const scrollHandle = findNodeHandle(scrollView);
-    if (!scrollHandle) return;
-
-    setTimeout(() => {
-      UIManager.measureLayout(
-        fieldHandle,
-        scrollHandle,
-        () => {
-          // ignore measurement failures
-        },
-        (_x: number, y: number) => {
-          scrollView.scrollTo({ y: Math.max(0, y - 10), animated: true });
-        }
-      );
-    }, 120);
+    const y = fieldLayouts[fieldName];
+    if (!scrollView || y === undefined) return;
+    scrollView.scrollTo({ y: Math.max(0, y - 10), animated: true });
   };
 
   const dropdownSuggestions = useMemo(() => {
@@ -323,6 +375,12 @@ export function ObservationModal({
     setAccuracyMetersWasModified(false);
     setShowSpeciesInfo(false);
     setShowDeleteConfirm(false);
+    setCurrentSelectedGroup("");
+    setPendingSpeciesGroupSpecies(null);
+    setPendingSpeciesGroupValue("Obestämd");
+    setPendingSpeciesKnownGroup(null);
+    setShowSpeciesGroupOptions(false);
+    setDeclinedSpeciesGroupPromptFor(null);
     closeSuggestionPopovers();
     onClose();
   }
@@ -339,9 +397,95 @@ export function ObservationModal({
 
   async function removeFromUserSpecies() {
     const trimmed = species.trim();
-    const updated = await removeUserSpecies(trimmed);
-    setUserSpecies(updated);
+    const [updatedSpecies, updatedGroups] = await Promise.all([
+      removeUserSpecies(trimmed),
+      removeUserSpeciesGroup(trimmed),
+    ]);
+    setUserSpecies(updatedSpecies);
+    setOwnSpeciesGroups(updatedGroups);
+    setCurrentSelectedGroup("");
+    setDeclinedSpeciesGroupPromptFor(null);
+    clearSpeciesGroupPrompt();
     setSpecies("");
+  }
+
+  function findKnownSpeciesName(value: string): string | null {
+    const lower = value.trim().toLowerCase();
+    if (!lower) return null;
+    const standard = Object.keys(speciesInfo).find((name) => name.toLowerCase() === lower);
+    if (standard) return standard;
+    return userSpecies.find((name) => name.toLowerCase() === lower) ?? null;
+  }
+
+  function findSpeciesGroup(value: string): string | null {
+    const group = speciesGroupsByLower.get(value.trim().toLowerCase());
+    return group?.trim() || null;
+  }
+
+  function clearSpeciesGroupPrompt() {
+    setPendingSpeciesGroupSpecies(null);
+    setPendingSpeciesGroupValue("Obestämd");
+    setPendingSpeciesKnownGroup(null);
+    setShowSpeciesGroupOptions(false);
+  }
+
+  function resetSpeciesPromptDecision() {
+    setDeclinedSpeciesGroupPromptFor(null);
+    setCurrentSelectedGroup("");
+    clearSpeciesGroupPrompt();
+  }
+
+  function validateSpeciesGroup(): boolean {
+    if (isPolygon) return true;
+    const trimmed = species.trim();
+    if (!trimmed) return true;
+
+    const group = findSpeciesGroup(trimmed);
+    const knownName = findKnownSpeciesName(trimmed);
+    if (group && knownName) {
+      console.log("Aktuell artgrupp:", group);
+      setCurrentSelectedGroup(group);
+      clearSpeciesGroupPrompt();
+      return true;
+    }
+
+    if (declinedSpeciesGroupPromptFor === trimmed.toLowerCase()) {
+      clearSpeciesGroupPrompt();
+      return true;
+    }
+
+    setCurrentSelectedGroup("");
+    setPendingSpeciesGroupSpecies(knownName ?? trimmed);
+    setPendingSpeciesKnownGroup(group);
+    setPendingSpeciesGroupValue("Obestämd");
+    Keyboard.dismiss();
+    scrollToField("species");
+    return false;
+  }
+
+  async function confirmSpeciesGroup() {
+    const name = pendingSpeciesGroupSpecies?.trim();
+    const group = pendingSpeciesKnownGroup ?? (pendingSpeciesGroupValue.trim() || "Obestämd");
+    if (!name) return;
+    if (!pendingSpeciesKnownGroup) {
+      const nextGroups = await saveUserSpeciesGroup(name, group);
+      setOwnSpeciesGroups(nextGroups);
+    }
+    console.log("Aktuell artgrupp:", group);
+    setCurrentSelectedGroup(group);
+    setDeclinedSpeciesGroupPromptFor(null);
+    if (!findKnownSpeciesName(name)) {
+      const nextSpecies = await addUserSpecies(name);
+      setUserSpecies(nextSpecies);
+    }
+    setSpecies(name);
+    clearSpeciesGroupPrompt();
+  }
+
+  function declineSpeciesGroup() {
+    const name = pendingSpeciesGroupSpecies?.trim() || species.trim();
+    setDeclinedSpeciesGroupPromptFor(name.toLowerCase());
+    clearSpeciesGroupPrompt();
   }
 
   function confirmDelete() {
@@ -366,10 +510,7 @@ export function ObservationModal({
       // Alert.alert("Fel", "Du måste ange ett artnamn.");
       return;
     }
-    const trimmedSpecies = species.trim();
-    const isKnown = combinedSpecies.some((s) => s.toLowerCase() === trimmedSpecies.toLowerCase());
-    if (!isPolygon && showPointMetaFields && !isKnown) {
-      setPendingNewSpecies(trimmedSpecies);
+    if (!validateSpeciesGroup()) {
       return;
     }
     await doSave(false);
@@ -462,13 +603,17 @@ export function ObservationModal({
                 style={styles.scroll}
                 contentContainerStyle={styles.scrollContent}
               >
-            <View style={styles.speciesRow}>
+            <View
+              onLayout={(event) => rememberFieldLayout("species", event.nativeEvent.layout.y)}
+              style={styles.speciesRow}
+            >
               <TextInput
                 value={species}
                 autoCorrect={false}
                 spellCheck={false}
                 onChangeText={(text) => {
                   setSpecies(text);
+                  resetSpeciesPromptDecision();
                   setIsShowingSuggestions(true);
                   setActiveSuggestionsField(null);
                   if (showSpeciesInfo) {
@@ -479,7 +624,11 @@ export function ObservationModal({
                   setIsShowingSuggestions(true);
                   setShowSpeciesInfo(false);
                 }}
-                onBlur={() => setTimeout(() => setIsShowingSuggestions(false), 120)}
+                onBlur={() => {
+                  setTimeout(() => setIsShowingSuggestions(false), 120);
+                  validateSpeciesGroup();
+                }}
+                onSubmitEditing={() => validateSpeciesGroup()}
                 placeholder={speciesPlaceholder}
                 placeholderTextColor="#626568"
                 style={[styles.input, styles.speciesInput]}
@@ -544,6 +693,15 @@ export function ObservationModal({
                       setSpecies(item);
                       setShowSpeciesInfo(false);
                       setIsShowingSuggestions(false);
+                      setDeclinedSpeciesGroupPromptFor(null);
+                      const group = findSpeciesGroup(item);
+                      if (group) {
+                        console.log("Aktuell artgrupp:", group);
+                      }
+                      setCurrentSelectedGroup(group ?? "");
+                      if (group) {
+                        clearSpeciesGroupPrompt();
+                      }
                     }} 
                     style={styles.suggestionItem}
                   >
@@ -592,9 +750,7 @@ export function ObservationModal({
                       )}
                       {visibleFields.unit && (
                         <View
-                          ref={(ref) => {
-                            fieldRefs.current.unit = findNodeHandle(ref);
-                          }}
+                          onLayout={(event) => rememberFieldLayout("unit", event.nativeEvent.layout.y)}
                           style={[styles.formColumn, visibleFields.quantity ? styles.wideColumn : null]}
                         >
                           <Text style={styles.fieldLabel}>Enhet</Text>
@@ -655,9 +811,7 @@ export function ObservationModal({
                 )}
                 {visibleFields.activity && (
                   <View
-                    ref={(ref) => {
-                      fieldRefs.current.activity = findNodeHandle(ref);
-                    }}
+                    onLayout={(event) => rememberFieldLayout("activity", event.nativeEvent.layout.y)}
                   >
                     <Text style={styles.fieldLabel}>Aktivitet</Text>
                     <TextInput
@@ -704,9 +858,7 @@ export function ObservationModal({
                 )}
                 {visibleFields.substrate && (
                   <View
-                    ref={(ref) => {
-                      fieldRefs.current.substrate = findNodeHandle(ref);
-                    }}
+                    onLayout={(event) => rememberFieldLayout("substrate", event.nativeEvent.layout.y)}
                   >
                     <Text style={styles.fieldLabel}>Substrat</Text>
                     <TextInput
@@ -754,9 +906,7 @@ export function ObservationModal({
                   <View style={styles.metaRow}>
                     {visibleFields.stage && (
                       <View
-                        ref={(ref) => {
-                          fieldRefs.current.stage = findNodeHandle(ref);
-                        }}
+                        onLayout={(event) => rememberFieldLayout("stage", event.nativeEvent.layout.y)}
                         style={[styles.formColumn, visibleFields.gender ? styles.wideColumn : null]}
                       >
                         <Text style={styles.fieldLabel}>Ålder-Stadium</Text>
@@ -803,9 +953,7 @@ export function ObservationModal({
                     )}
                     {visibleFields.gender && (
                       <View
-                        ref={(ref) => {
-                          fieldRefs.current.gender = findNodeHandle(ref);
-                        }}
+                        onLayout={(event) => rememberFieldLayout("gender", event.nativeEvent.layout.y)}
                         style={[styles.formColumn, visibleFields.stage ? styles.narrowColumn : null]}
                       >
                         <Text style={styles.fieldLabel}>Kön</Text>
@@ -907,49 +1055,74 @@ export function ObservationModal({
             </View>
               </ScrollView>
             </KeyboardAvoidingView>
+            {!isPolygon && pendingSpeciesGroupSpecies ? (
+              <View style={styles.speciesPromptOverlay} pointerEvents="auto">
+                <View style={styles.speciesPromptCard}>
+                  <Text style={styles.speciesPromptTitle}>
+                    Vill du lägga till {pendingSpeciesGroupSpecies} som en ny art?
+                  </Text>
+                  {pendingSpeciesKnownGroup ? (
+                    <Text style={styles.speciesPromptText}>Artgrupp: {pendingSpeciesKnownGroup}</Text>
+                  ) : (
+                    <>
+                      <Pressable
+                        style={styles.speciesGroupSelect}
+                        onPress={() => setShowSpeciesGroupOptions((value) => !value)}
+                      >
+                        <Text style={styles.speciesGroupSelectText}>{pendingSpeciesGroupValue}</Text>
+                        <Text style={styles.speciesGroupSelectChevron}>{showSpeciesGroupOptions ? "▲" : "▼"}</Text>
+                      </Pressable>
+                      {showSpeciesGroupOptions ? (
+                        <ScrollView
+                          style={styles.speciesGroupOptions}
+                          nestedScrollEnabled
+                          keyboardShouldPersistTaps="handled"
+                        >
+                          {speciesGroupOptions.map((group) => (
+                            <Pressable
+                              key={group}
+                              style={[
+                                styles.speciesGroupOption,
+                                pendingSpeciesGroupValue === group ? styles.speciesGroupOptionSelected : undefined,
+                              ]}
+                              onPress={() => {
+                                setPendingSpeciesGroupValue(group);
+                                setShowSpeciesGroupOptions(false);
+                              }}
+                            >
+                              <Text
+                                style={[
+                                  styles.speciesGroupOptionText,
+                                  pendingSpeciesGroupValue === group ? styles.speciesGroupOptionTextSelected : undefined,
+                                ]}
+                              >
+                                {group}
+                              </Text>
+                            </Pressable>
+                          ))}
+                        </ScrollView>
+                      ) : null}
+                    </>
+                  )}
+                  <View style={styles.speciesPromptActions}>
+                    <Pressable
+                      style={[styles.speciesPromptBtn, styles.speciesPromptCancel]}
+                      onPress={declineSpeciesGroup}
+                    >
+                      <Text style={styles.speciesPromptBtnText}>Nej/Avbryt</Text>
+                    </Pressable>
+                    <Pressable
+                      style={[styles.speciesPromptBtn, styles.speciesPromptOk]}
+                      onPress={() => void confirmSpeciesGroup()}
+                    >
+                      <Text style={styles.speciesPromptBtnText}>Ja/Spara</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              </View>
+            ) : null}
         </View>
 
-        <Modal
-          transparent
-          visible={!!pendingNewSpecies}
-          animationType="fade"
-          onRequestClose={() => setPendingNewSpecies(null)}
-        >
-          <View style={styles.modalBackdrop}>
-            <View style={styles.speciesPromptCard}>
-              <Text style={styles.speciesPromptTitle}>Ny art</Text>
-              <Text style={styles.speciesPromptText}>
-                {pendingNewSpecies
-                  ? `Arten "${pendingNewSpecies}" finns inte i f\u00f6rslagslistan, vill du l\u00e4gga till den?`
-                  : ""}
-              </Text>
-              <View style={styles.speciesPromptActions}>
-                <Pressable
-                  style={[styles.speciesPromptBtn, styles.speciesPromptCancel]}
-                  onPress={() => {
-                    setPendingNewSpecies(null);
-                    void doSave(false);
-                  }}
-                >
-                  <Text style={styles.speciesPromptBtnText}>Nej</Text>
-                </Pressable>
-                <Pressable
-                  style={[styles.speciesPromptBtn, styles.speciesPromptOk]}
-                  onPress={() => {
-                    const next = pendingNewSpecies;
-                    setPendingNewSpecies(null);
-                    if (next) {
-                      setSpecies(next);
-                    }
-                    void doSave(true);
-                  }}
-                >
-                  <Text style={styles.speciesPromptBtnText}>Ja</Text>
-                </Pressable>
-              </View>
-            </View>
-          </View>
-        </Modal>
         <Modal
           transparent
           visible={showDeleteConfirm}
@@ -1012,6 +1185,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     marginBottom: 5,
     padding: 14,
+    position: "relative",
   },
   input: {
     borderWidth: 1,
@@ -1227,20 +1401,29 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: 16,
   },
+  speciesPromptOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 999,
+    elevation: 999,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 18,
+  },
   speciesPromptCard: {
     backgroundColor: "#fff",
-    borderRadius: 12,
+    borderRadius: 8,
     borderWidth: 2,
     borderColor: "#005f73",
-    padding: 14,
-    width: "90%",
-    maxWidth: 360,
+    padding: 16,
+    width: "100%",
+    maxWidth: 430,
   },
   speciesPromptTitle: {
-    fontSize: 18,
+    fontSize: 15,
     fontWeight: "800",
     color: "#172121",
-    marginBottom: 6,
+    marginBottom: 10,
   },
   speciesPromptText: {
     color: "#23313a",
@@ -1249,6 +1432,7 @@ const styles = StyleSheet.create({
   speciesPromptActions: {
     flexDirection: "row",
     gap: 8,
+    marginTop: 10,
   },
   speciesPromptBtn: {
     flex: 1,
@@ -1265,6 +1449,52 @@ const styles = StyleSheet.create({
   speciesPromptBtnText: {
     color: "#fff",
     fontWeight: "700",
+  },
+  speciesGroupSelect: {
+    minHeight: 44,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#b8c2c7",
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#f8fafb",
+  },
+  speciesGroupSelectText: {
+    flex: 1,
+    color: "#172121",
+    fontWeight: "700",
+  },
+  speciesGroupSelectChevron: {
+    color: "#475157",
+    fontSize: 12,
+    marginLeft: 8,
+  },
+  speciesGroupOptions: {
+    borderWidth: 1,
+    borderColor: "#d3dde2",
+    borderRadius: 8,
+    marginTop: 6,
+    overflow: "hidden",
+    maxHeight: 280,
+  },
+  speciesGroupOption: {
+    paddingVertical: 9,
+    paddingHorizontal: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#e4eaee",
+    backgroundColor: "#fff",
+  },
+  speciesGroupOptionSelected: {
+    backgroundColor: "#e5f3f5",
+  },
+  speciesGroupOptionText: {
+    color: "#172121",
+  },
+  speciesGroupOptionTextSelected: {
+    fontWeight: "800",
+    color: "#005f73",
   },
   modalCard: {
     backgroundColor: "#fff",

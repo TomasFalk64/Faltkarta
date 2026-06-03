@@ -6,6 +6,7 @@ const MAPS_KEY = "maps:v1";
 const OBS_KEY = "observations:v1";
 const SETTINGS_KEY = "settings:v1";
 const USER_SPECIES_KEY = "userSpecies.json";
+const USER_SPECIES_GROUPS_KEY = "ownSpeciesGroups:v1";
 const MAX_SIDE_SETTING_KEY = "maxSideSetting:v1";
 const DEFAULT_MAX_SIDE = 1400;
 
@@ -253,6 +254,44 @@ export async function removeUserSpecies(value: string): Promise<string[]> {
   const list = await loadUserSpecies();
   const next = list.filter((item) => item.toLowerCase() !== name.toLowerCase());
   await AsyncStorage.setItem(USER_SPECIES_KEY, JSON.stringify(next));
+  return next;
+}
+
+export async function loadUserSpeciesGroups(): Promise<Record<string, string>> {
+  const raw = await AsyncStorage.getItem(USER_SPECIES_GROUPS_KEY);
+  if (!raw) return {};
+  const parsed = JSON.parse(raw) as Record<string, string>;
+  return Object.fromEntries(
+    Object.entries(parsed)
+      .map(([species, group]) => [String(species ?? "").trim(), String(group ?? "").trim()])
+      .filter(([species, group]) => species.length > 0 && group.length > 0)
+  );
+}
+
+export async function saveUserSpeciesGroup(species: string, group: string): Promise<Record<string, string>> {
+  const name = String(species ?? "").trim();
+  const value = String(group ?? "").trim();
+  const current = await loadUserSpeciesGroups();
+  if (!name || !value) return current;
+
+  const existingKey = Object.keys(current).find((key) => key.toLowerCase() === name.toLowerCase());
+  const next = { ...current };
+  if (existingKey && existingKey !== name) {
+    delete next[existingKey];
+  }
+  next[name] = value;
+  await AsyncStorage.setItem(USER_SPECIES_GROUPS_KEY, JSON.stringify(next));
+  return next;
+}
+
+export async function removeUserSpeciesGroup(species: string): Promise<Record<string, string>> {
+  const name = String(species ?? "").trim();
+  if (!name) return await loadUserSpeciesGroups();
+  const current = await loadUserSpeciesGroups();
+  const next = Object.fromEntries(
+    Object.entries(current).filter(([key]) => key.toLowerCase() !== name.toLowerCase())
+  );
+  await AsyncStorage.setItem(USER_SPECIES_GROUPS_KEY, JSON.stringify(next));
   return next;
 }
 

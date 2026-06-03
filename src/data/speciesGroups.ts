@@ -1,3 +1,4 @@
+// @ts-nocheck
 // Denna fil är autogenererad utifrån samlings-CSV och synkad mot species_info.ts
 export const speciesGroups: Record<string, string> = {
   // === Alger ===
