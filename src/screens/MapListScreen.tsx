@@ -944,21 +944,40 @@ export function MapListScreen({ navigation }: Props) {
           <Pressable style={StyleSheet.absoluteFill} onPress={saveDescription} />
           
           <KeyboardAvoidingView 
-            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            behavior={Platform.OS === "ios" ? "padding" : undefined}
             style={styles.keyboardView}
           >
             <View style={[styles.modalCard, styles.descriptionModalCard]}>
               <Text style={styles.modalTitle}>Anteckningar</Text>
               
-              <TextInput
-                value={descriptionText}
-                onChangeText={setDescriptionText}
-                multiline
-                textAlignVertical="top"
-                style={[styles.modalInput, styles.descriptionInput]}
-                placeholder="Valfri text..."
-                placeholderTextColor="#999"
-              />
+              {Platform.OS === "android" ? (
+                <ScrollView 
+                  style={styles.modalScrollView} 
+                  contentContainerStyle={styles.modalScrollViewContent}
+                  keyboardShouldPersistTaps="handled"
+                >
+                  <TextInput
+                    value={descriptionText}
+                    onChangeText={setDescriptionText}
+                    multiline
+                    textAlignVertical="top"
+                    style={[styles.modalInput, styles.descriptionInput]}
+                    placeholder="Valfri text..."
+                    placeholderTextColor="#999"
+                  />
+                </ScrollView>
+              ) : (
+                <TextInput
+                  value={descriptionText}
+                  onChangeText={setDescriptionText}
+                  multiline
+                  textAlignVertical="top"
+                  style={[styles.modalInput, styles.descriptionInput, styles.descriptionInputIOS]}
+                  placeholder="Valfri text..."
+                  placeholderTextColor="#999"
+                />
+              )}
+              
               
               <View style={styles.modalActionsThree}>
                 <Pressable
@@ -1428,30 +1447,50 @@ const styles = StyleSheet.create({
     marginTop: -4,
   },
   keyboardView: {
-    flex: 1,
-    width: "100%",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 12,
-  },
-  descriptionModalCard: {
-    width: "95%",
-    maxHeight: "80%",
-    padding: 15,
-    alignSelf: "center",
-  },
-  descriptionInput: {
-    width: "100%",
-    padding: 12,
-    minHeight: 140,
-    maxHeight: 280,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: "#b9c1c8",
-    borderRadius: 8,
-    backgroundColor: "#fff",
-    textAlignVertical: "top",
-  },
+  flex: 1,
+  width: "100%",
+  alignItems: "center",
+  justifyContent: "center",
+  paddingHorizontal: 12,
+},
+descriptionModalCard: {
+  width: "95%",
+  height: "85%", 
+  maxHeight: 400, 
+  padding: 15,
+  alignSelf: "center",
+  backgroundColor: "#fff", 
+  borderRadius: 12,
+  justifyContent: "space-between",
+},
+modalScrollView: {
+  flex: 1, 
+  width: "100%",
+},
+modalScrollViewContent: {
+  flexGrow: 1,
+},
+descriptionInput: {
+  flex: 1, 
+  width: "100%",
+  padding: 12,
+  minHeight: 140, 
+  marginBottom: 4,
+  borderWidth: 1,
+  borderColor: "#b9c1c8",
+  borderRadius: 8,
+  backgroundColor: "#fff",
+  textAlignVertical: "top",
+},
+descriptionInputIOS: {
+  height: "100%", 
+},
+modalActionsThree: {
+  flexDirection: "row",
+  justifyContent: "space-between",
+  width: "100%",
+  marginTop: 10, // Ger lite avstånd från textrutan ovanför
+},
   menuText: {
     fontSize: 22,
     fontWeight: "700",
