@@ -695,11 +695,11 @@ export function MapListScreen({ navigation }: Props) {
               <Text style={styles.mapDate}>{new Date(item.createdAt).toLocaleDateString()}</Text>
             </View>
             <View style={styles.mapActionsContainer}>
-              <Pressable
-                style={styles.descriptionBtn}
-                onPress={() => openDescriptionModal(item)}
+              <Pressable 
+                style={styles.exportBtn} 
+                onPress={() => navigation.navigate("Export", { mapId: item.id })} 
               >
-                <Ionicons name="document-text-outline" size={20} color="#005f73" />
+                <Ionicons name="share-outline" size={20} color="#005f73" />
               </Pressable>
               <Pressable style={styles.menuBtn} onPress={() => onOpenMenu(item)}>
                 <Text style={styles.menuText}>...</Text>
@@ -905,7 +905,7 @@ export function MapListScreen({ navigation }: Props) {
                 openDescriptionModal(selected);
               }}
             >
-              <Text style={styles.menuActionText}>Områdesbeskrivning</Text>
+              <Text style={styles.menuActionText}>Anteckningar</Text>
             </Pressable>
             <Pressable
               style={styles.menuActionBtn}
@@ -948,7 +948,7 @@ export function MapListScreen({ navigation }: Props) {
             style={styles.keyboardView}
           >
             <View style={[styles.modalCard, styles.descriptionModalCard]}>
-              <Text style={styles.modalTitle}>Områdesbeskrivning</Text>
+              <Text style={styles.modalTitle}>Anteckningar</Text>
               
               <TextInput
                 value={descriptionText}
@@ -956,7 +956,7 @@ export function MapListScreen({ navigation }: Props) {
                 multiline
                 textAlignVertical="top"
                 style={[styles.modalInput, styles.descriptionInput]}
-                placeholder="Anteckningar..."
+                placeholder="Valfri text..."
                 placeholderTextColor="#999"
               />
               
