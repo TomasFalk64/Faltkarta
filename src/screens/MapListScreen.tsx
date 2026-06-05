@@ -92,6 +92,7 @@ export function MapListScreen({ navigation }: Props) {
   const [startDisclosureDismissed, setStartDisclosureDismissed] = useState(false);
   const [mapSortMode, setMapSortMode] = useState<"LATEST" | "ALPHA" | "NEAREST">("ALPHA");
   const [mapSortAnchor, setMapSortAnchor] = useState<LatLon | undefined>(undefined);
+  const [observationCounts, setObservationCounts] = useState<Record<string, number>>({});
 
   const SKOGSMONITOR_URL = "https://karta.skogsmonitor.se/?background=Lantm%C3%A4terietTopowebb&lat=60.55728&layers=17-26-21-14&lng=16.88599&zoom=7";
   const sortLabel = mapSortMode === "NEAREST" ? "Närmast" : mapSortMode === "ALPHA" ? "A - Ö" : "Senast";
@@ -187,7 +188,13 @@ export function MapListScreen({ navigation }: Props) {
     setCoordinateSystem(settings.coordinateSystem ?? "SWEREF99");
     const descriptions = await loadAreaDescriptions();
     setAreaDescriptions(descriptions);
-  }, [gpsOptions.backgroundGPS, setGpsOptions]);
+    const byMap = await loadObservationsByMapId();
+    const counts: Record<string, number> = {};
+    for (const mapId in byMap) {
+      counts[mapId] = byMap[mapId]?.length ?? 0;
+    }
+    setObservationCounts(counts);
+  }, [gpsOptions.backgroundGPS, setGpsOptions, observationCounts]);
 
   useEffect(() => {
     const resetBackgroundGpsOnAppOpen = async () => {
@@ -746,7 +753,7 @@ export function MapListScreen({ navigation }: Props) {
               </View>
             </View>
             <View style={styles.mapActionsContainer}>
-              {item.observations && item.observations.length > 0 ? (
+              {(observationCounts[item.id] ?? 0) > 0 ? (
               <Pressable 
                 style={styles.exportBtn} 
                 onPress={() => navigation.navigate("Export", { mapId: item.id })} 
