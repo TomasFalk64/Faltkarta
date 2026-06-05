@@ -51,7 +51,7 @@ type Props = NativeStackScreenProps<RootStackParamList, "MapList">;
 export function MapListScreen({ navigation }: Props) {
   const [maps, setMaps] = useState<MapItem[]>([]);
   const [autoFollow, setAutoFollow] = useState(true);
-  const [gpsPingSeconds, setGpsPingSeconds] = useState("3");
+  const [gpsPingSeconds, setGpsPingSeconds] = useState("2");
   const { gpsPos, gpsOptions, setGpsOptions, foregroundPermissionKnown, foregroundPermissionGranted, requestForegroundPermission } = useGpsContext();
   const [visibleFields, setVisibleFields] = useState<VisibleFields>({
     quantity: false,
@@ -172,7 +172,7 @@ export function MapListScreen({ navigation }: Props) {
     setMapSortAnchor(settings.mapSortAnchor);
     setMaps(sortMaps(allMaps, mode, settings.mapSortAnchor));
     setAutoFollow(settings.autoFollow ?? false);
-    setGpsPingSeconds(String(settings.gpsPingSeconds));
+    setGpsPingSeconds("2"); // setGpsPingSeconds(String(settings.gpsPingSeconds));
     setGpsOptions({ pingSeconds: settings.gpsPingSeconds, backgroundGPS: gpsOptions.backgroundGPS });
     setVisibleFields(settings.visibleFields ?? {
       quantity: false,
@@ -200,7 +200,7 @@ export function MapListScreen({ navigation }: Props) {
     const resetBackgroundGpsOnAppOpen = async () => {
       try {
         const settings = await loadSettings();
-        const pingSeconds = settings.gpsPingSeconds ?? 3;
+        const pingSeconds = settings.gpsPingSeconds ?? 2;
         setGpsOptions({ pingSeconds, backgroundGPS: false });
         if (settings.backgroundGPS) {
           await saveSettings({
@@ -1153,16 +1153,17 @@ export function MapListScreen({ navigation }: Props) {
                   <ScrollView keyboardShouldPersistTaps="handled">
                     <Text style={[styles.modalTitle, { textAlign: 'center', alignSelf: 'center' }]}>Inställningar</Text>
 
-                    <View style={styles.settingsRow}>
-                      <Text style={styles.settingsTitle}>GPS pingfrekvens (2-20s)</Text>
-                      <TextInput
-                        value={gpsPingSeconds}
-                        onChangeText={setGpsPingSeconds}
-                        onBlur={() => setGpsPingSeconds(clampPingInput(gpsPingSeconds))}
-                        style={styles.pingInput}
-                        keyboardType="number-pad"
-                      />
-                    </View>
+                    {/* <View style={styles.settingsRow}>
+  <Text style={styles.settingsTitle}>GPS pingfrekvens (2-20s)</Text>
+  <TextInput
+    value={gpsPingSeconds}
+    onChangeText={setGpsPingSeconds}
+    onBlur={() => setGpsPingSeconds(clampPingInput(gpsPingSeconds))}
+    style={styles.pingInput}
+    keyboardType="number-pad"
+  />
+</View> 
+*/}
 
                     <Pressable
                       style={[styles.settingsRow, { marginVertical: 6, alignItems: "center" }]}
