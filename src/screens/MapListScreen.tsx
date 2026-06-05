@@ -312,6 +312,20 @@ export function MapListScreen({ navigation }: Props) {
     setDescriptionText(areaDescriptions[item.id] ?? "");
   }
 
+  async function toggleMapStatus(mapId: string, field: "isBackedUp" | "isReportedToAP", value: boolean) {
+    const existing = maps.find((m) => m.id === mapId);
+    if (!existing) return;
+    const updated: MapItem = {
+      ...existing,
+      [field]: value,
+    };
+    const next = await upsertMap(updated);
+    setMaps(sortMaps(next, mapSortMode, mapSortAnchor));
+    if (menuMap?.id === mapId) {
+      setMenuMap(updated);
+    }
+  }
+
   async function saveDescription() {
     if (!descriptionModalMap) return;
     const next = await saveAreaDescription(descriptionModalMap.id, descriptionText);
@@ -692,15 +706,54 @@ export function MapListScreen({ navigation }: Props) {
               <Text style={styles.mapName} numberOfLines={1}>
                 {item.title}
               </Text>
-              <Text style={styles.mapDate}>{new Date(item.createdAt).toLocaleDateString()}</Text>
+              <View style={styles.mapStatusRow}>
+                {/* 📝 ANTECKNINGS-IKON - Visas endast om det finns text i beskrivningen/anteckningen */}
+                {areaDescriptions[item.id] && areaDescriptions[item.id].trim() !== "" ? (
+                  <View style={[styles.listIconBox, { backgroundColor: "#838181" }]}> 
+                    {/*  📝📄📋  */}
+                    <Text style={styles.listEmojiInsideBox}>
+                      📝
+                    </Text>
+                  </View>
+                ) : null}
+                  
+
+                {/* ☁️ MOLN-STATUS - Visas endast om item.isBackedUp är sant */}
+                {item.isBackedUp ? Platform.select({
+                  ios: (
+                    <Ionicons 
+                      name="cloud-done" 
+                      size={22} 
+                      color="#2196f3" 
+                      style={styles.mapStatusIcon} 
+                    />
+                  ),
+                  android: (
+                    <View style={[styles.listIconBox, { backgroundColor: "#2196f3" }]}>
+                      <Text style={styles.listEmojiInsideBox}>
+                        ☁️
+                      </Text>
+                    </View>
+                  )
+                }) : null}
+                
+                {item.isReportedToAP ? (
+                  <Text style={styles.listEmojiIcon}>
+                    ✅
+                  </Text>
+                ) : null}
+                <Text style={styles.mapDate}>{new Date(item.createdAt).toLocaleDateString()}</Text>
+              </View>
             </View>
             <View style={styles.mapActionsContainer}>
+              {item.observations && item.observations.length > 0 ? (
               <Pressable 
                 style={styles.exportBtn} 
                 onPress={() => navigation.navigate("Export", { mapId: item.id })} 
               >
                 <Ionicons name="share-outline" size={25} color="#005f73" />
               </Pressable>
+              ) : null}
               <Pressable style={styles.menuBtn} onPress={() => onOpenMenu(item)}>
                 <Text style={styles.menuText}>...</Text>
               </Pressable>
@@ -713,8 +766,21 @@ export function MapListScreen({ navigation }: Props) {
         <Text style={styles.fabText}>+</Text>
       </Pressable>
 
-      <Pressable style={styles.infoFab} onPress={() => setShowSettings(true)}>
-        <Text style={styles.infoFabText}>i</Text>
+     <Pressable style={styles.infoFab} onPress={() => setShowSettings(true)}>
+        {Platform.select({
+          ios: (
+            /* iOS: Rent och snyggt Ionicons-kugghjul */
+            <Text style={styles.iosGearEmoji}>
+              ⚙️
+            </Text>
+          ),
+          android: (
+            /* Android: Stabil system-emoji som aldrig buggar bort */
+            <Text style={styles.androidGearEmoji}>
+              ⚙️
+            </Text>
+          )
+        })}
       </Pressable>
 
       <Pressable 
@@ -886,16 +952,7 @@ export function MapListScreen({ navigation }: Props) {
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setMenuMap(null)} />
           <View style={styles.menuModalCard}>
             <Text style={styles.modalTitle}>{menuMap?.title ?? "Karta"}</Text>
-            <Pressable
-              style={styles.menuActionBtn}
-              onPress={() => {
-                if (!menuMap) return;
-                setMenuMap(null);
-                openRename(menuMap);
-              }}
-            >
-              <Text style={styles.menuActionText}>Byt namn</Text>
-            </Pressable>
+
             <Pressable
               style={styles.menuActionBtn}
               onPress={() => {
@@ -919,6 +976,79 @@ export function MapListScreen({ navigation }: Props) {
             >
               <Text style={styles.menuActionText}>Importera polygon</Text>
             </Pressable>
+
+            {/* ─── STATUSSEKTION ─── */}
+            <View style={styles.menuDivider} />
+            
+            <Text style={styles.statusSectionTitle}>Status</Text>
+            
+            <View style={styles.iconStatusRow}>
+              {/* MOLN-IKON (Säkerhetskopiering) */}
+              <Pressable 
+                style={styles.statusIconBtn} 
+                onPress={() => {
+                  if (!menuMap) return;
+                  const currentStatus = menuMap.isBackedUp ?? false;
+                  void toggleMapStatus(menuMap.id, 'isBackedUp', !currentStatus);
+                }}
+              >
+                {Platform.select({
+                  ios: (
+                    /* iOS: Rent snyggt moln direkt (Ionicons fungerar utmärkt här) */
+                    <Ionicons 
+                      name={menuMap?.isBackedUp ? "cloud-done" : "cloud-offline-outline"} 
+                      size={42} 
+                      color={menuMap?.isBackedUp ? "#2196f3" : "#999999"} 
+                    />
+                  ),
+                  android: (
+                    /* Android: Säker, färgad bakgrundsruta med emoji som inte buggar */
+                    <View 
+                      style={[
+                        styles.iconContainerBox, 
+                        { backgroundColor: menuMap?.isBackedUp ? "#2196f3" : "#e0e0e0" },
+                        { transform: [{ translateY: 3 }] } // Din Android-justering för höjden
+                      ]}
+                    >
+                      <Text style={[styles.emojiIconBox, { opacity: menuMap?.isBackedUp ? 1 : 0.6 }]}>
+                        ☁️
+                      </Text>
+                    </View>
+                  )
+                })}
+              </Pressable>
+
+              {/* CHECK-IKON (Artportalen) */}
+              <Pressable 
+                style={styles.statusIconBtn} 
+                onPress={() => {
+                  if (!menuMap) return;
+                  const currentStatus = menuMap.isReportedToAP ?? false;
+                  void toggleMapStatus(menuMap.id, 'isReportedToAP', !currentStatus);
+                }}
+              >
+                <Text style={{ fontSize: 28, color: menuMap?.isReportedToAP ? "#4caf50" : "#999999" }}>
+  {menuMap?.isReportedToAP ? "✅" : "☑️"}
+</Text>
+              </Pressable>
+            </View>
+            
+            <View style={styles.menuDivider} />
+            {/* ────────────────────── */}
+
+            <Pressable
+              style={styles.menuActionBtn}
+              onPress={() => {
+                if (!menuMap) return;
+                setMenuMap(null);
+                openRename(menuMap);
+              }}
+            >
+              <Text style={styles.menuActionText}>Byt namn</Text>
+            </Pressable>
+
+
+
             <Pressable
               style={[styles.menuActionBtn, styles.menuDangerBtn]}
               onPress={() => {
@@ -1433,13 +1563,23 @@ const styles = StyleSheet.create({
     alignSelf: "center",
     gap: 1,
   },
+  mapStatusRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 1,
+    flexWrap: "wrap",
+  },
+  mapStatusIcon: {
+    marginTop: 1,
+  },
   descriptionBtn: {
     paddingHorizontal: 10,
-    paddingVertical: 1,
+    paddingVertical: 0,
   },
   exportBtn: {
     paddingHorizontal: 10,
     paddingVertical: 0,
+   
   },
   menuBtn: {
     paddingHorizontal: 12,
@@ -1484,12 +1624,6 @@ descriptionInput: {
 },
 descriptionInputIOS: {
   height: "100%", 
-},
-modalActionsThree: {
-  flexDirection: "row",
-  justifyContent: "space-between",
-  width: "100%",
-  marginTop: 10, // Ger lite avstånd från textrutan ovanför
 },
   menuText: {
     fontSize: 22,
@@ -1540,11 +1674,10 @@ modalActionsThree: {
     paddingHorizontal: 18,
     height: 42,
     borderRadius: 21,
-    // backgroundColor sätts direkt i Pressable ovan
     justifyContent: "center",
     alignItems: "center",
-    elevation: 5,   // Gör att den syns på Android
-    zIndex: 1000,   // Gör att den syns över kartan
+    elevation: 5,   
+    zIndex: 1000,  
   },
   exitFabText: {
     color: "#fff",
@@ -1577,12 +1710,12 @@ modalActionsThree: {
     paddingHorizontal: 40,
     alignSelf: "center",
     minWidth: 200,
-    // Skugga för iOS
+  
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25,
     shadowRadius: 10,
-    // Skugga för Android
+    
     elevation: 20,
   },
   settingsModalCard: {
@@ -1668,6 +1801,8 @@ modalActionsThree: {
     paddingVertical: 10,
     paddingHorizontal: 10,
     marginTop: 8,
+    width: "90%",
+    alignSelf: "center",
   },
   menuDangerBtn: {
     backgroundColor: "#9b2226",
@@ -1681,20 +1816,109 @@ modalActionsThree: {
     marginTop: 10,
   },
   bottomBar: {
-  flexDirection: 'row',          // Lägger elementen på rad
-  justifyContent: 'space-between', // Trycker isär elementen (vänster/höger)
-  alignItems: 'center',          // Centrerar vertikalt
-  paddingHorizontal: 20,         // Avstånd från skärmkanterna
+  flexDirection: 'row',          
+  justifyContent: 'space-between', 
+  alignItems: 'center',          
+  paddingHorizontal: 20,        
   marginTop: 1,
 },
 copyrightBtn: {
-  padding: 10,                   // Gör den lättare att träffa
+  padding: 10,                   
 },
 copyrightText: {
   fontSize: 18,
   color: '#888',
 },
+menuDivider: {
+  height: 1,
+  backgroundColor: "#e0e0e0", // Tunn linje
+  marginVertical: 10,
+  width: "100%",
+},
+statusSectionTitle: {
+  fontSize: 14,
+  color: "#666",
+  fontWeight: "600",
+  textAlign: "center",
+  marginBottom: 8,
+},
+iconStatusRow: {
+  flexDirection: "row",
+  justifyContent: "center",
+  alignItems: "center",
+  gap: 60, // Avstånd mellan molnet och checken
+  width: "100%",
+  paddingVertical: 0,
+},
+statusIconBtn: {
+  padding: 5, // Gör träffytan större
+  alignItems: "center",
+  justifyContent: "center",
+},
+
+emojiIcon: {
+  fontSize: 32,
+  textAlign: "center",
+},
+iconContainerBox: {
+  width: 40,               
+  height: 40,             
+  borderRadius: 8,        
+  display: "flex",
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "center",
+  borderWidth: 0, 
+  margin: 0,
+  padding: 0,
+},
+emojiIconBox: {
+  fontSize: 20,            // Storleken på emojin inuti rutan
+  textAlign: "center",
+  includeFontPadding: false,
+  
+},
+listEmojiIcon: {
+  fontSize: 10,            
+  marginRight: 6,          
+  textAlign: "center",
+  includeFontPadding: false, 
+},
+listIconBox: {
+  width: 16,                 
+  height: 16,                
+  borderRadius: 4,           
+  justifyContent: "center",
+  alignItems: "center",
+  marginRight: 2,            // Avstånd till nästa ikon eller till datumet
+},
+listEmojiInsideBox: {
+  fontSize: 9,              
+  textAlign: "center",
+  includeFontPadding: false, 
+},
+listNoteIcon: {
+  fontSize: 11,              
+  marginRight: -1,            
+  textAlign: "center",
+  includeFontPadding: false,
+  
+},
+androidGearEmoji: {
+  fontSize: 18,         
+  textAlign: "center",
+  color: "#010708",           
+  includeFontPadding: false,  
+  transform: [{ translateY: -1 }], 
+},
+iosGearEmoji: {
+  fontSize: 22,               
+  textAlign: "center",
+  color: "#010708",           
+  includeFontPadding: false,  
+},
 });
+
 
 
 

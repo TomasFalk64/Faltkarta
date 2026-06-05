@@ -34,6 +34,8 @@ export type MapItem = {
     maxLat: number;
     maxLon: number;
   };
+  isBackedUp?: boolean;
+  isReportedToAP?: boolean;
 };
 
 export type ObservationBase = {
