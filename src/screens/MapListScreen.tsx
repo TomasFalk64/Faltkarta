@@ -699,7 +699,7 @@ export function MapListScreen({ navigation }: Props) {
                 style={styles.exportBtn} 
                 onPress={() => navigation.navigate("Export", { mapId: item.id })} 
               >
-                <Ionicons name="share-outline" size={20} color="#005f73" />
+                <Ionicons name="share-outline" size={25} color="#005f73" />
               </Pressable>
               <Pressable style={styles.menuBtn} onPress={() => onOpenMenu(item)}>
                 <Text style={styles.menuText}>...</Text>
@@ -1439,12 +1439,12 @@ const styles = StyleSheet.create({
   },
   exportBtn: {
     paddingHorizontal: 10,
-    paddingVertical: 1,
+    paddingVertical: 0,
   },
   menuBtn: {
     paddingHorizontal: 12,
-    paddingVertical: 1,
-    marginTop: -4,
+    paddingVertical: 0,
+    marginTop: -6,
   },
   keyboardView: {
   flex: 1,
