@@ -7,6 +7,7 @@ const OBS_KEY = "observations:v1";
 const SETTINGS_KEY = "settings:v1";
 const USER_SPECIES_KEY = "userSpecies.json";
 const USER_SPECIES_GROUPS_KEY = "ownSpeciesGroups:v1";
+const AREA_DESCRIPTION_KEY = "mapAreaDescriptions:v1";
 const MAX_SIDE_SETTING_KEY = "maxSideSetting:v1";
 const DEFAULT_MAX_SIDE = 1400;
 
@@ -72,6 +73,36 @@ export async function removeMap(mapId: string): Promise<MapItem[]> {
   const byMap = await loadObservationsByMapId();
   delete byMap[mapId];
   await saveObservationsByMapId(byMap);
+  await removeAreaDescription(mapId);
+  return next;
+}
+
+export async function loadAreaDescriptions(): Promise<Record<string, string>> {
+  const raw = await AsyncStorage.getItem(AREA_DESCRIPTION_KEY);
+  if (!raw) return {};
+  const parsed = JSON.parse(raw) as Record<string, string>;
+  return Object.fromEntries(
+    Object.entries(parsed)
+      .map(([mapId, description]) => [String(mapId ?? "").trim(), String(description ?? "").trim()])
+      .filter(([mapId]) => mapId.length > 0)
+  );
+}
+
+export async function saveAreaDescription(mapId: string, description: string): Promise<Record<string, string>> {
+  const key = String(mapId ?? "").trim();
+  if (!key) return await loadAreaDescriptions();
+  const current = await loadAreaDescriptions();
+  const next = { ...current, [key]: String(description ?? "").trim() };
+  await AsyncStorage.setItem(AREA_DESCRIPTION_KEY, JSON.stringify(next));
+  return next;
+}
+
+export async function removeAreaDescription(mapId: string): Promise<Record<string, string>> {
+  const key = String(mapId ?? "").trim();
+  if (!key) return await loadAreaDescriptions();
+  const current = await loadAreaDescriptions();
+  const next = Object.fromEntries(Object.entries(current).filter(([id]) => id !== key));
+  await AsyncStorage.setItem(AREA_DESCRIPTION_KEY, JSON.stringify(next));
   return next;
 }
 

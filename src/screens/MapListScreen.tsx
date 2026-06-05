@@ -8,7 +8,7 @@ import {
   Modal,
   Pressable,
   Platform,
-  ScrollView, 
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -22,11 +22,13 @@ import { RootStackParamList } from "../navigation/types";
 import { AppSettings, LatLon, MapItem, VisibleFields, VisibleFieldKey } from "../types/models";
 import {
   getMaxSideSetting,
+  loadAreaDescriptions,
   loadMaps,
   loadObservationsByMapId,
   loadSettings,
   removeMap,
   renameMapAndSyncPointLocalNames,
+  saveAreaDescription,
   saveMaxSideSetting,
   saveObservationsByMapId,
   saveSettings,
@@ -83,6 +85,9 @@ export function MapListScreen({ navigation }: Props) {
   const [showMapBuildLoading, setShowMapBuildLoading] = useState(false);
   const [importPolygonMap, setImportPolygonMap] = useState<MapItem | null>(null);
   const [showBackgroundDisclosure, setShowBackgroundDisclosure] = useState(false);
+  const [areaDescriptions, setAreaDescriptions] = useState<Record<string, string>>({});
+  const [descriptionModalMap, setDescriptionModalMap] = useState<MapItem | null>(null);
+  const [descriptionText, setDescriptionText] = useState("");
   const [showStartDisclosure, setShowStartDisclosure] = useState(false);
   const [startDisclosureDismissed, setStartDisclosureDismissed] = useState(false);
   const [mapSortMode, setMapSortMode] = useState<"LATEST" | "ALPHA" | "NEAREST">("ALPHA");
@@ -180,6 +185,8 @@ export function MapListScreen({ navigation }: Props) {
     setMaxImageSizeMB(String(settings.maxImageSizeMB ?? 2));
     setMaxSide(String(savedMaxSide));
     setCoordinateSystem(settings.coordinateSystem ?? "SWEREF99");
+    const descriptions = await loadAreaDescriptions();
+    setAreaDescriptions(descriptions);
   }, [gpsOptions.backgroundGPS, setGpsOptions]);
 
   useEffect(() => {
@@ -298,6 +305,23 @@ export function MapListScreen({ navigation }: Props) {
 
   function onOpenMenu(item: MapItem) {
     setMenuMap(item);
+  }
+
+  function openDescriptionModal(item: MapItem) {
+    setDescriptionModalMap(item);
+    setDescriptionText(areaDescriptions[item.id] ?? "");
+  }
+
+  async function saveDescription() {
+    if (!descriptionModalMap) return;
+    const next = await saveAreaDescription(descriptionModalMap.id, descriptionText);
+    setAreaDescriptions(next);
+    setDescriptionModalMap(null);
+  }
+
+  function cancelDescriptionModal() {
+    setDescriptionModalMap(null);
+    setDescriptionText("");
   }
 
   function openRename(item: MapItem) {
@@ -670,9 +694,17 @@ export function MapListScreen({ navigation }: Props) {
               </Text>
               <Text style={styles.mapDate}>{new Date(item.createdAt).toLocaleDateString()}</Text>
             </View>
-            <Pressable style={styles.menuBtn} onPress={() => onOpenMenu(item)}>
-              <Text style={styles.menuText}>...</Text>
-            </Pressable>
+            <View style={styles.mapActionsContainer}>
+              <Pressable
+                style={styles.descriptionBtn}
+                onPress={() => openDescriptionModal(item)}
+              >
+                <Ionicons name="document-text-outline" size={20} color="#005f73" />
+              </Pressable>
+              <Pressable style={styles.menuBtn} onPress={() => onOpenMenu(item)}>
+                <Text style={styles.menuText}>...</Text>
+              </Pressable>
+            </View>
           </Pressable>
         )}
       />
@@ -870,10 +902,10 @@ export function MapListScreen({ navigation }: Props) {
                 if (!menuMap) return;
                 const selected = menuMap;
                 setMenuMap(null);
-                navigation.navigate("Export", { mapId: selected.id });
+                openDescriptionModal(selected);
               }}
             >
-              <Text style={styles.menuActionText}>Export</Text>
+              <Text style={styles.menuActionText}>Områdesbeskrivning</Text>
             </Pressable>
             <Pressable
               style={styles.menuActionBtn}
@@ -885,7 +917,7 @@ export function MapListScreen({ navigation }: Props) {
                 setImportPolygonMap(selected);
               }}
             >
-              <Text style={styles.menuActionText}>Importera område (Polygon)</Text>
+              <Text style={styles.menuActionText}>Importera polygon</Text>
             </Pressable>
             <Pressable
               style={[styles.menuActionBtn, styles.menuDangerBtn]}
@@ -899,6 +931,57 @@ export function MapListScreen({ navigation }: Props) {
               <Text style={styles.menuActionText}>Radera karta</Text>
             </Pressable>
           </View>
+        </View>
+      </Modal>
+
+      <Modal
+        transparent
+        visible={!!descriptionModalMap}
+        onRequestClose={saveDescription}
+        animationType="slide"
+      >
+        <View style={styles.modalBackdrop}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={saveDescription} />
+          
+          <KeyboardAvoidingView 
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            style={styles.keyboardView}
+          >
+            <View style={[styles.modalCard, styles.descriptionModalCard]}>
+              <Text style={styles.modalTitle}>Områdesbeskrivning</Text>
+              
+              <TextInput
+                value={descriptionText}
+                onChangeText={setDescriptionText}
+                multiline
+                textAlignVertical="top"
+                style={[styles.modalInput, styles.descriptionInput]}
+                placeholder="Anteckningar..."
+                placeholderTextColor="#999"
+              />
+              
+              <View style={styles.modalActionsThree}>
+                <Pressable
+                  onPress={cancelDescriptionModal}
+                  style={[styles.modalBtn, styles.cancelBtn, styles.modalBtnShort]}
+                >
+                  <Text style={styles.modalBtnText}>Avbryt</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => setDescriptionText("")}
+                  style={[styles.modalBtn, styles.clearBtn, styles.modalBtnShort]}
+                >
+                  <Text style={styles.modalBtnText}>Rensa</Text>
+                </Pressable>
+                <Pressable
+                  onPress={saveDescription}
+                  style={[styles.modalBtn, styles.okBtn, styles.modalBtnShort]}
+                >
+                  <Text style={styles.modalBtnText}>Spara</Text>
+                </Pressable>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
         </View>
       </Modal>
 
@@ -1324,9 +1407,50 @@ const styles = StyleSheet.create({
     color: "#5c6770",
     marginTop: 2,
   },
+  mapActionsContainer: {
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    alignSelf: "center",
+    gap: 1,
+  },
+  descriptionBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 1,
+  },
+  exportBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 1,
+  },
   menuBtn: {
     paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingVertical: 1,
+    marginTop: -4,
+  },
+  keyboardView: {
+    flex: 1,
+    width: "100%",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 12,
+  },
+  descriptionModalCard: {
+    width: "95%",
+    maxHeight: "80%",
+    padding: 15,
+    alignSelf: "center",
+  },
+  descriptionInput: {
+    width: "100%",
+    padding: 12,
+    minHeight: 140,
+    maxHeight: 280,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: "#b9c1c8",
+    borderRadius: 8,
+    backgroundColor: "#fff",
+    textAlignVertical: "top",
   },
   menuText: {
     fontSize: 22,
@@ -1457,12 +1581,23 @@ const styles = StyleSheet.create({
     gap: 8,
     marginTop: 12,
   },
+  modalActionsThree: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 12,
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
   modalBtn: {
     paddingVertical: 11,
     borderRadius: 8,
+    flex: 1,
   },
   modalBtnShort: {
-    minWidth: 110,
+    minWidth: 0,
+  },
+  clearBtn: {
+    backgroundColor: "#7c6b8f",
   },
   modalBtnWide: {
     paddingHorizontal: 18,
