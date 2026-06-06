@@ -194,7 +194,7 @@ export function MapListScreen({ navigation }: Props) {
       counts[mapId] = byMap[mapId]?.length ?? 0;
     }
     setObservationCounts(counts);
-  }, [gpsOptions.backgroundGPS, setGpsOptions, observationCounts]);
+  }, [gpsOptions.backgroundGPS, setGpsOptions]);
 
   useEffect(() => {
     const resetBackgroundGpsOnAppOpen = async () => {
@@ -390,9 +390,9 @@ export function MapListScreen({ navigation }: Props) {
   }
   const onSaveSettings = async () => {
     try {
-      const parsedPing = Number.parseInt(gpsPingSeconds, 10);
-      const rawPing = Number.isFinite(parsedPing) ? parsedPing : 3;
-      const pingValue = Math.min(20, Math.max(2, rawPing));
+      //const parsedPing = Number.parseInt(gpsPingSeconds, 10);
+      //const rawPing = Number.isFinite(parsedPing) ? parsedPing : 3;
+      const pingValue = 2; // Math.min(20, Math.max(2, rawPing));
       const parsedMaxSize = Number.parseFloat(maxImageSizeMB.replace(",", "."));
       const maxSizeValue = Number.isFinite(parsedMaxSize) && parsedMaxSize > 0 ? parsedMaxSize : 2;
       const maxSideValue = Number.parseInt(clampMaxSideInput(maxSide), 10);
@@ -1164,6 +1164,46 @@ export function MapListScreen({ navigation }: Props) {
   />
 </View> 
 */}
+                    <View style={styles.settingsRowColumn}>
+                      <Text style={styles.settingsTitle}>Koordinatsystem för export</Text>
+                      
+                      {/* Yttre balken (Ramen) */}
+                      <View style={styles.segmentedControlBg}>
+                        
+                        {/* Knapp 1: WGS84 */}
+                        <Pressable 
+                          style={[
+                            styles.segmentedControlTab, 
+                            coordinateSystem === "WGS84" && styles.segmentedControlTabActive
+                          ]}
+                          onPress={() => setCoordinateSystem("WGS84")}
+                        >
+                          <Text style={[
+                            styles.segmentedControlText, 
+                            coordinateSystem === "WGS84" && styles.segmentedControlTextActive
+                          ]}>
+                            WGS84
+                          </Text>
+                        </Pressable>
+
+                        {/* Knapp 2: SWEREF99 */}
+                        <Pressable 
+                          style={[
+                            styles.segmentedControlTab, 
+                            coordinateSystem === "SWEREF99" && styles.segmentedControlTabActive
+                          ]}
+                          onPress={() => setCoordinateSystem("SWEREF99")}
+                        >
+                          <Text style={[
+                            styles.segmentedControlText, 
+                            coordinateSystem === "SWEREF99" && styles.segmentedControlTextActive
+                          ]}>
+                            SWEREF99 TM
+                          </Text>
+                        </Pressable>
+
+                      </View>
+                    </View>
 
                     <Pressable
                       style={[styles.settingsRow, { marginVertical: 6, alignItems: "center" }]}
@@ -1924,6 +1964,55 @@ iosGearEmoji: {
   textAlign: "center",
   color: "#010708",           
   includeFontPadding: false,  
+},
+// En variant av din gamla rad, men anpassad för att ha kontrollen under texten
+settingsRowColumn: {
+  flexDirection: 'column',
+  marginBottom: 20,
+  width: '100%',
+},
+
+// Själva huvudbalken (Bakgrunden)
+segmentedControlBg: {
+  flexDirection: 'row',
+  backgroundColor: '#dcdcdf', 
+  borderRadius: 25,
+  padding: 3,               
+  width: '90%',
+  alignSelf: 'center',
+},
+
+// En enskild flik/knapp (Både aktiv och inaktiv delar denna)
+segmentedControlTab: {
+  flex: 1,                    // Gör att båda halvorna blir exakt lika breda
+  paddingVertical: 3,
+  alignItems: 'center',
+  justifyContent: 'center',
+  borderRadius: 20,            // Lite mindre än yttre bakgrunden 
+},
+
+// STIL NÄR EN FLIK ÄR VALD:
+segmentedControlTabActive: {
+  backgroundColor: '#ffffff', 
+  // En mjuk skugga runt den aktiva fliken:
+  shadowColor: '#000',
+  shadowOffset: { width: 0, height: 1 },
+  shadowOpacity: 0.12,
+  shadowRadius: 1.5,
+  elevation: 2,               // Skugga för Android
+},
+
+// Texten för en inaktiv flik
+segmentedControlText: {
+  fontSize: 12,
+  fontWeight: '500',
+  color: '#222121',     
+},
+
+// Texten för en AKTIV flik
+segmentedControlTextActive: {
+  color: '#000000',     
+  fontWeight: '600',
 },
 });
 
