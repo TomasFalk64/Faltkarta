@@ -100,6 +100,7 @@ export function MapScreen({ route, navigation }: Props) {
   } = useGpsContext();
   const editingPhotoLookupRef = useRef<Record<string, { ref: string; assetId?: string }>>({});
   const editingMissingPhotosRef = useRef<Array<{ ref: string; assetId?: string }>>([]);
+  const followTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const speciesGroupsByLower = useMemo(() => {
     const map = new Map<string, string>();
@@ -192,6 +193,30 @@ export function MapScreen({ route, navigation }: Props) {
     setTimeout(() => setToast(null), 1500);
   }
 
+  function clearFollowTimeout() {
+    if (followTimeoutRef.current !== null) {
+      clearTimeout(followTimeoutRef.current);
+      followTimeoutRef.current = null;
+    }
+  }
+
+  function handleManualMapInteraction() {
+    setIsFollowing(false);
+    clearFollowTimeout();
+    followTimeoutRef.current = setTimeout(() => {
+      followTimeoutRef.current = null;
+      if (autoFollow) {
+        setIsFollowing(true);
+      }
+    }, 10000);
+  }
+
+  useEffect(() => {
+    return () => {
+      clearFollowTimeout();
+    };
+  }, []);
+
   function clampToMapBounds(coord: LatLon): LatLon {
     if (!map?.bbox) return coord;
     return {
@@ -226,6 +251,7 @@ export function MapScreen({ route, navigation }: Props) {
   }
 
   function onCenterToGps() {
+    clearFollowTimeout();
     if (autoFollow && isFollowing) {
       setIsFollowing(false);
       return;
@@ -656,9 +682,9 @@ export function MapScreen({ route, navigation }: Props) {
         onPanGeoDelta={(dLat, dLon) =>
           setCenterCoord((prev) => clampToMapBounds({ lat: prev.lat + dLat, lon: prev.lon + dLon }))
         }
-        onPanDrag={() => setIsFollowing(false)}
+        onPanDrag={handleManualMapInteraction}
         onPanStateChange={(isPanning) => setHeadingSuspended(isPanning)}
-        onZoom={() => setIsFollowing(false)}
+        onZoom={handleManualMapInteraction}
         onPressPoint={(id) => {
           const obs = observations.find((o) => o.id === id);
           if (obs && obs.kind === "point") {
