@@ -306,13 +306,28 @@ export function MapScreen({ route, navigation }: Props) {
             accuracyMeters: payload.accuracyMetersWasModified
               ? clampAccuracy(payload.accuracyMeters)
               : editingPoint.accuracyMeters,
-            quantity: payload.quantity ?? editingPoint.quantity ?? 0,
-            unit: payload.unit ?? "",
-            hostSpecies: payload.hostSpecies?.trim() || editingPoint.hostSpecies || undefined,
-            activity: payload.activity?.trim() || editingPoint.activity || undefined,
-            substrate: payload.substrate?.trim() || editingPoint.substrate || undefined,
-            stage: payload.stage?.trim() || editingPoint.stage || undefined,
-            gender: payload.gender?.trim() || editingPoint.gender || undefined,
+            quantity: payload.quantity !== undefined ? payload.quantity : editingPoint.quantity ?? 0,
+            unit: payload.unit !== undefined ? payload.unit : editingPoint.unit ?? "",
+            hostSpecies:
+              payload.hostSpecies !== undefined
+                ? payload.hostSpecies.trim() || undefined
+                : editingPoint.hostSpecies,
+            activity:
+              payload.activity !== undefined
+                ? payload.activity.trim() || undefined
+                : editingPoint.activity,
+            substrate:
+              payload.substrate !== undefined
+                ? payload.substrate.trim() || undefined
+                : editingPoint.substrate,
+            stage:
+              payload.stage !== undefined
+                ? payload.stage.trim() || undefined
+                : editingPoint.stage,
+            gender:
+              payload.gender !== undefined
+                ? payload.gender.trim() || undefined
+                : editingPoint.gender,
           }
         : {
             id: pointId,

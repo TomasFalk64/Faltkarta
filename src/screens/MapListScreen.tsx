@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useLayoutEffect, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   Alert,
   FlatList,
@@ -88,6 +88,9 @@ export function MapListScreen({ navigation }: Props) {
   const [areaDescriptions, setAreaDescriptions] = useState<Record<string, string>>({});
   const [descriptionModalMap, setDescriptionModalMap] = useState<MapItem | null>(null);
   const [descriptionText, setDescriptionText] = useState("");
+  const [changeDateMap, setChangeDateMap] = useState<MapItem | null>(null);
+  const [changeDateText, setChangeDateText] = useState("");
+  const changeDateInputRef = useRef<TextInput | null>(null);
   const [showStartDisclosure, setShowStartDisclosure] = useState(false);
   const [startDisclosureDismissed, setStartDisclosureDismissed] = useState(false);
   const [mapSortMode, setMapSortMode] = useState<"LATEST" | "ALPHA" | "NEAREST">("ALPHA");
@@ -228,6 +231,14 @@ export function MapListScreen({ navigation }: Props) {
     }
   }, [foregroundPermissionGranted, foregroundPermissionKnown, startDisclosureDismissed]);
 
+  useEffect(() => {
+    if (!changeDateMap) return;
+    const timer = setTimeout(() => {
+      changeDateInputRef.current?.focus();
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [changeDateMap]);
+
   async function onImport() {
     try {
       const item = await pickAndImportGeoTiff(setShowMapBuildLoading);
@@ -350,6 +361,59 @@ export function MapListScreen({ navigation }: Props) {
     setRenameValue(item.title);
     setRenameMode("edit");
     setShowRenameHint(false);
+  }
+
+  function openChangeDate(mapItem: MapItem) {
+    setChangeDateMap(mapItem);
+    setChangeDateText(mapItem.createdAt.slice(0, 10));
+  }
+
+  function cancelChangeDate() {
+    setChangeDateMap(null);
+    setChangeDateText("");
+  }
+
+  async function confirmChangeDate() {
+    if (!changeDateMap) return;
+    const inputText = changeDateText.trim();
+    if (!inputText) {
+      Alert.alert("Fel", "Ange ett datum.");
+      return;
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(inputText)) {
+      Alert.alert("Fel", "Ogiltigt datumformat. Använd ÅAAA-MM-DD.");
+      return;
+    }
+
+    const [yearText, monthText, dayText] = inputText.split("-");
+    const year = Number(yearText);
+    const month = Number(monthText);
+    const day = Number(dayText);
+    const parsedDate = new Date(year, month - 1, day);
+
+    if (
+      !Number.isFinite(year) ||
+      !Number.isFinite(month) ||
+      !Number.isFinite(day) ||
+      parsedDate.getFullYear() !== year ||
+      parsedDate.getMonth() !== month - 1 ||
+      parsedDate.getDate() !== day
+    ) {
+      Alert.alert("Fel", "Ogiltigt datumformat. Använd ÅAAA-MM-DD.");
+      return;
+    }
+
+    try {
+      const updatedMap: MapItem = {
+        ...changeDateMap,
+        createdAt: parsedDate.toISOString(),
+      };
+      await upsertMap(updatedMap);
+      await refresh();
+      cancelChangeDate();
+    } catch (err) {
+      Alert.alert("Fel", "Kunde inte spara det nya datumet.");
+    }
   }
 
   async function confirmRename() {
@@ -1054,7 +1118,16 @@ export function MapListScreen({ navigation }: Props) {
               <Text style={styles.menuActionText}>Byt namn</Text>
             </Pressable>
 
-
+            <Pressable
+              style={styles.menuActionBtn}
+              onPress={() => {
+                if (!menuMap) return;
+                setMenuMap(null); // Stänger modalen
+                openChangeDate(menuMap); 
+              }}
+            >
+              <Text style={styles.menuActionText}>Ändra datum</Text>
+            </Pressable>
 
             <Pressable
               style={[styles.menuActionBtn, styles.menuDangerBtn]}
@@ -1131,6 +1204,47 @@ export function MapListScreen({ navigation }: Props) {
                 </Pressable>
                 <Pressable
                   onPress={saveDescription}
+                  style={[styles.modalBtn, styles.okBtn, styles.modalBtnShort]}
+                >
+                  <Text style={styles.modalBtnText}>Spara</Text>
+                </Pressable>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
+
+      <Modal transparent visible={!!changeDateMap} onRequestClose={cancelChangeDate} animationType="slide">
+        <View style={styles.modalBackdrop}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={cancelChangeDate} />
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : undefined}
+            style={styles.keyboardView}
+          >
+            <View style={[styles.modalCard, styles.changeDateModalCard]}>
+              <Text style={styles.modalTitle}>Ändra datum</Text>
+              <Text style={styles.helpText}>Ange nytt datum i formatet ÅÅÅÅ-MM-DD.</Text>
+              <TextInput
+                ref={changeDateInputRef}
+                value={changeDateText}
+                onChangeText={setChangeDateText}
+                placeholder="ÅÅÅÅ-MM-DD"
+                placeholderTextColor="#999"
+                style={styles.modalInput}
+                keyboardType="numbers-and-punctuation"
+                autoCapitalize="none"
+                autoCorrect={false}
+                autoFocus={true}
+              />
+              <View style={styles.modalActionsThree}>
+                <Pressable
+                  onPress={cancelChangeDate}
+                  style={[styles.modalBtn, styles.cancelBtn, styles.modalBtnShort]}
+                >
+                  <Text style={styles.modalBtnText}>Avbryt</Text>
+                </Pressable>
+                <Pressable
+                  onPress={confirmChangeDate}
                   style={[styles.modalBtn, styles.okBtn, styles.modalBtnShort]}
                 >
                   <Text style={styles.modalBtnText}>Spara</Text>
@@ -1651,6 +1765,15 @@ descriptionModalCard: {
   borderRadius: 12,
   justifyContent: "space-between",
 },
+changeDateModalCard: {
+  width: "90%",
+  maxHeight: 240,
+  padding: 15,
+  alignSelf: "center",
+  backgroundColor: "#fff",
+  borderRadius: 12,
+  justifyContent: "space-between",
+},
 modalScrollView: {
   flex: 1, 
   width: "100%",
@@ -1975,7 +2098,7 @@ settingsRowColumn: {
 // Själva huvudbalken (Bakgrunden)
 segmentedControlBg: {
   flexDirection: 'row',
-  backgroundColor: '#dcdcdf', 
+  backgroundColor: '#81c2c2', // #0a9396" '#dcdcdf'
   borderRadius: 25,
   padding: 3,               
   width: '90%',

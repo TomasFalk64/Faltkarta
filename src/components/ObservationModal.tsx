@@ -636,26 +636,27 @@ export function ObservationModal({
     try {
       const parsedAccuracy = Number.parseFloat(accuracyMeters.replace(",", "."));
       const rawVal = quantity.trim();
-      const quantityAsNumber = rawVal === "" ? undefined : Number(rawVal);
+      const quantityAsNumber = rawVal === "" ? 0 : Number(rawVal);
       const trimmedSpecies = species.trim();
       if (!isPolygon && addToSuggestions) {
         const next = await addUserSpecies(trimmedSpecies);
         setUserSpecies(next);
       }
+      const fallbackToEmptyString = (val: string) => val ? val.trim() : "";
       const shouldClose = await onSave({
-        species: isPolygon ? undefined : trimmedSpecies,
-        polygonName: isPolygon ? trimmedSpecies : undefined,
-        notes: notes.trim(),
+        species: isPolygon ? "" : trimmedSpecies,
+        polygonName: isPolygon ? trimmedSpecies : "",
+        notes: fallbackToEmptyString(notes),
         photoUris,
         photoAssetIds,
-        localName: localName.trim(),
-        quantity: quantityAsNumber,
-        unit: unit.trim(),
-        hostSpecies: hostSpecies.trim(),
-        activity: activity.trim(),
-        substrate: substrate.trim(),
-        stage: stage.trim(),
-        gender: gender.trim(),
+        localName: fallbackToEmptyString(localName),
+        quantity: quantityAsNumber, // Hanteras separat som nummer/null
+        unit: fallbackToEmptyString(unit),
+        hostSpecies: fallbackToEmptyString(hostSpecies),
+        activity: fallbackToEmptyString(activity),
+        substrate: fallbackToEmptyString(fallbackToEmptyString(substrate)),
+        stage: fallbackToEmptyString(stage),
+        gender: fallbackToEmptyString(gender),
         accuracyMeters:
           Number.isFinite(parsedAccuracy) && parsedAccuracy >= 0 ? Math.round(parsedAccuracy) : null,
         accuracyMetersWasModified,
@@ -812,7 +813,7 @@ export function ObservationModal({
                       setDeclinedSpeciesGroupPromptFor(null);
                       const group = findSpeciesGroup(item);
                       
-                      console.log("Aktuell artgrupp:", group);
+                      // console.log("Aktuell artgrupp:", group);
                       
                       setCurrentSelectedGroup(group ?? "Obestämd");
                       if (group) {
