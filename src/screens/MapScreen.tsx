@@ -200,6 +200,16 @@ export function MapScreen({ route, navigation }: Props) {
     };
   }
 
+  function isOutsideMapBounds(coord: LatLon): boolean {
+    if (!map?.bbox) return false;
+    return (
+      coord.lat < map.bbox.minLat ||
+      coord.lat > map.bbox.maxLat ||
+      coord.lon < map.bbox.minLon ||
+      coord.lon > map.bbox.maxLon
+    );
+  }
+
   function centerOnObservation(coord: LatLon) {
     setIsFollowing(false);
     setCenterCoord(clampToMapBounds(coord));
@@ -493,24 +503,69 @@ export function MapScreen({ route, navigation }: Props) {
   }
 
   function openNewPointModal() {
-    setEditingPoint(null);
-    setEditingPointPhotoPreviewUris([]);
-    setEditingPointPhotoPreviewAssetIds([]);
-    editingPhotoLookupRef.current = {};
-    editingMissingPhotosRef.current = [];
-    setFrozenPointCoord(crosshairPos);
-    setFrozenAccuracyMeters(displayAccuracyMeters ?? rawAccuracyMeters ?? null);
-    setPointModalInitialValues({
-      species: "",
-      notes: "",
-      photoUris: [],
-      photoAssetIds: [],
-      localName: map?.title ?? "",
-      accuracyMeters: displayAccuracyMeters ?? rawAccuracyMeters ?? null,
-    });
-    setPointModalInitialSpeciesGroup("");
-    setPointModalSession((v) => v + 1);
-    setShowPointModal(true);
+    const useCrosshair = () => {
+      setEditingPoint(null);
+      setEditingPointPhotoPreviewUris([]);
+      setEditingPointPhotoPreviewAssetIds([]);
+      editingPhotoLookupRef.current = {};
+      editingMissingPhotosRef.current = [];
+      setFrozenPointCoord(crosshairPos);
+      setFrozenAccuracyMeters(displayAccuracyMeters ?? rawAccuracyMeters ?? null);
+      setPointModalInitialValues({
+        species: "",
+        notes: "",
+        photoUris: [],
+        photoAssetIds: [],
+        localName: map?.title ?? "",
+        accuracyMeters: displayAccuracyMeters ?? rawAccuracyMeters ?? null,
+      });
+      setPointModalInitialSpeciesGroup("");
+      setPointModalSession((v) => v + 1);
+      setShowPointModal(true);
+    };
+
+    const useCurrentPosition = (coord: LatLon) => {
+      setEditingPoint(null);
+      setEditingPointPhotoPreviewUris([]);
+      setEditingPointPhotoPreviewAssetIds([]);
+      editingPhotoLookupRef.current = {};
+      editingMissingPhotosRef.current = [];
+      setFrozenPointCoord(coord);
+      setFrozenAccuracyMeters(displayAccuracyMeters ?? rawAccuracyMeters ?? null);
+      setPointModalInitialValues({
+        species: "",
+        notes: "",
+        photoUris: [],
+        photoAssetIds: [],
+        localName: map?.title ?? "",
+        accuracyMeters: displayAccuracyMeters ?? rawAccuracyMeters ?? null,
+      });
+      setPointModalInitialSpeciesGroup("");
+      setPointModalSession((v) => v + 1);
+      setShowPointModal(true);
+    };
+
+    if (map?.bbox && gpsPos && isOutsideMapBounds(gpsPos)) {
+      Alert.alert(
+        "Du är utanför kartan",
+        "Vill du använda din aktuella GPS-position eller hårkorsets placering?",
+        [
+          {
+            text: "   GPS-position   ",
+            onPress: () => useCurrentPosition(gpsPos),
+          },
+          {
+            text: "   Hårkors   ",
+            style: "cancel",
+            onPress: useCrosshair,
+          },
+        ],
+        { cancelable: true }
+      );
+      return;
+    }
+
+    useCrosshair();
   }
 
   function openCopiedPointModal(obs: PointObservation) {

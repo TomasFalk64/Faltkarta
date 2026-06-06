@@ -689,7 +689,7 @@ export function ObservationModal({
                   fill="none"
                 />
               </Svg>
-                          </Pressable>
+            </Pressable>
 
             <Text style={styles.title}>{title}</Text>
 
