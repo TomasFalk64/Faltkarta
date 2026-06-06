@@ -2,7 +2,7 @@
 import { Alert, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { RootStackParamList } from "../navigation/types";
-import { loadMaps, loadObservationsForMap, loadSettings } from "../storage/storage";
+import { loadMaps, loadObservationsForMap, loadSettings, loadAreaDescriptions } from "../storage/storage";
 import { Observation } from "../types/models";
 import {
   buildArtportalenTsv,
@@ -19,6 +19,7 @@ type Props = NativeStackScreenProps<RootStackParamList, "Export">;
 export function ExportScreen({ route }: Props) {
   const { mapId, mode } = route.params;
   const [mapName, setMapName] = useState("export");
+  const [mapNotes, setMapNotes] = useState("");
   const [mapFileUri, setMapFileUri] = useState<string | null>(null);
   const [observations, setObservations] = useState<Observation[]>([]);
   const [maxImageSizeMB, setMaxImageSizeMB] = useState(2);
@@ -26,18 +27,22 @@ export function ExportScreen({ route }: Props) {
   const [showExcelModal, setShowExcelModal] = useState(false);
   const [showArtportalenModal, setShowArtportalenModal] = useState(false);
   const [isCreatingZip, setIsCreatingZip] = useState(false);
+  const [coordinateSystem, setCoordinateSystem] = useState<"SWEREF99" | "WGS84">("SWEREF99");
 
   useEffect(() => {
     (async () => {
-      const [maps, obs, settings] = await Promise.all([loadMaps(), loadObservationsForMap(mapId), loadSettings()]);
+      const [maps, obs, settings, areaDescriptions] = await Promise.all([loadMaps(), loadObservationsForMap(mapId), loadSettings(), loadAreaDescriptions()]);
       const m = maps.find((item) => item.id === mapId);
       if (m) {
         setMapName(m.title);
+        const currentMapNotes = areaDescriptions && areaDescriptions[mapId] ? areaDescriptions[mapId] : "";
+        setMapNotes(currentMapNotes);
         setMapFileUri(getSafeUri(m.fileName, "map"));
       }
       setObservations(obs);
       setMaxImageSizeMB(settings.maxImageSizeMB ?? 2);
-      setPreview(buildArtportalenTsv(obs).slice(0, 600));
+      setCoordinateSystem(settings.coordinateSystem ?? "SWEREF99");
+      setPreview(buildArtportalenTsv(obs, settings.coordinateSystem ?? "SWEREF99").slice(0, 600));
     })().catch((e) => Alert.alert("Fel", String(e)));
   }, [mapId]);
 
@@ -65,7 +70,7 @@ export function ExportScreen({ route }: Props) {
   }
 
   async function onConfirmCopyArtportalen() {
-    const tsv = buildArtportalenTsv(observations);
+    const tsv = buildArtportalenTsv(observations, coordinateSystem);
     await copyTsvAndOpenArtportalen(tsv);
   }
 
@@ -74,7 +79,7 @@ export function ExportScreen({ route }: Props) {
       Alert.alert("Export", "Inga observationer att exportera.");
       return;
     }
-    const xlsx = buildXlsx(observations);
+    const xlsx = buildXlsx(observations, coordinateSystem);
     const result = await saveXlsxAndShare(mapName, xlsx);
     if (!result.shared) {
       Alert.alert("Export", `Delning ar inte tillganglig.\nFil sparades:\n${result.xlsxPath}`);
@@ -88,7 +93,7 @@ export function ExportScreen({ route }: Props) {
       Alert.alert("Export", "Inga observationer att exportera.");
       return;
     }
-    const xlsx = buildXlsx(observations);
+    const xlsx = buildXlsx(observations, coordinateSystem);
     if (Platform.OS === "ios") {
       const result = await saveXlsxAndShare(mapName, xlsx);
       if (!result.shared) {
@@ -96,7 +101,7 @@ export function ExportScreen({ route }: Props) {
       }
       return;
     }
-    const result = await saveXlsxGeoJsonAndMapAndComposeEmail(mapName, observations, xlsx, mapFileUri);
+    const result = await saveXlsxGeoJsonAndMapAndComposeEmail(mapName, mapNotes, observations, xlsx, mapFileUri);
     if (!result.opened) {
       Alert.alert("E-post", `E-post ar inte tillgangligt pa enheten.\nFiler sparades:\n${result.paths.join("\n")}`);
       return;
@@ -118,9 +123,9 @@ export function ExportScreen({ route }: Props) {
     }
     setIsCreatingZip(true);
     try {
-      const result = await saveZipBundleAndShare(mapName, observations, mapFileUri, maxImageSizeMB);
+      const result = await saveZipBundleAndShare(mapName, mapNotes, observations, mapFileUri, maxImageSizeMB, coordinateSystem);
       if (!result.shared) {
-        Alert.alert("Export", "Delning ar inte tillganglig pa enheten.");
+        Alert.alert("Export", "Delning ar inte tillganglig pa enheten."); 
         return;
       }
       Alert.alert("Sparad", "ZIP skapad och delad.");

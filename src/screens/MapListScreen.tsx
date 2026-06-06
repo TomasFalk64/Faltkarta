@@ -1001,7 +1001,7 @@ export function MapListScreen({ navigation }: Props) {
               >
                 {Platform.select({
                   ios: (
-                    /* iOS: Rent snyggt moln direkt (Ionicons fungerar utmärkt här) */
+                    /* iOS:  */
                     <Ionicons 
                       name={menuMap?.isBackedUp ? "cloud-done" : "cloud-offline-outline"} 
                       size={42} 
@@ -1034,9 +1034,9 @@ export function MapListScreen({ navigation }: Props) {
                   void toggleMapStatus(menuMap.id, 'isReportedToAP', !currentStatus);
                 }}
               >
-                <Text style={{ fontSize: 28, color: menuMap?.isReportedToAP ? "#4caf50" : "#999999" }}>
-  {menuMap?.isReportedToAP ? "✅" : "☑️"}
-</Text>
+                <Text style={{ fontSize: 26, color: menuMap?.isReportedToAP ? "#4caf50" : "#999999" }}>
+                  {menuMap?.isReportedToAP ? "✅" : "☑️"}
+                </Text>
               </Pressable>
             </View>
             
@@ -1888,7 +1888,7 @@ statusSectionTitle: {
   color: "#666",
   fontWeight: "600",
   textAlign: "center",
-  marginBottom: 8,
+  marginBottom: 1,
 },
 iconStatusRow: {
   flexDirection: "row",

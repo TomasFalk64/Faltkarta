@@ -16,6 +16,11 @@ import { exportDir } from "./files";
 import { buildPointPhotoFileName, guessImageExtension, resolvePointPhotoUri, sanitizeForFileName } from "./photos";
 import { speciesInfo } from "../data/species_info";
 
+
+function pad2(value: number): string {
+  return String(value).padStart(2, "0");
+}
+
 function observationToRepresentativeWgs84(obs: Observation): { lat: number; lon: number } {
   if (obs.kind === "point") {
     return obs.wgs84;
@@ -62,33 +67,48 @@ function toArtportalenNotes(obs: Observation): string {
   return parts.join(" | ").replace(/[\t\r\n]+/g, " ");
 }
 
-export function buildArtportalenTsv(observations: Observation[]): string {
-  const header = "Artnamn\tLokalnamn\tStartdatum\tStarttid\tOst\tNord\tNoggrannhet\tPublik kommentar\tAntal\tEnhet\tArt som substrat\tAktivitet\tSubstrat\tÅlder-Stadium\tKön";
+export function buildArtportalenTsv(
+  observations: Observation[], 
+  coordinateSystem: "SWEREF99" | "WGS84" = "SWEREF99"
+): string {
+  // Ändra rubrikerna för koordinaterna dynamiskt
+  const coordLabel1 = coordinateSystem === "WGS84" ? "Lat" : "Ost";
+  const coordLabel2 = coordinateSystem === "WGS84" ? "Lon" : "Nord";
+
+  const header = `Artnamn\tLokalnamn\tStartdatum\tStarttid\t${coordLabel1}\t${coordLabel2}\tNoggrannhet\tPublik kommentar\tAntal\tEnhet\tArt som substrat\tAktivitet\tSubstrat\tÅlder-Stadium\tKön`;
   
-  // 1. Filtrera bort allt som inte är en punkt
   const pointsOnly = observations.filter((obs) => obs.kind === "point");
 
-  // 2. Mappa endast de kvarvarande punkterna
   const rows = pointsOnly.map((obs) => {
     const coord = observationToRepresentativeWgs84(obs);
-    const sweref = wgs84ToSweref99tm(coord.lon, coord.lat);
+    
+    let val1 = "";
+    let val2 = "";
+
+    if (coordinateSystem === "WGS84") {
+      // Artportalen vill ha punkt-decimaler för WGS84 (t.ex. 59.123456)
+      val1 = coord.lat.toFixed(6);
+      val2 = coord.lon.toFixed(6);
+    } else {
+      const sweref = wgs84ToSweref99tm(coord.lon, coord.lat);
+      val1 = String(Math.round(sweref.x));
+      val2 = String(Math.round(sweref.y));
+    }
+
     const d = new Date(obs.dateISO);
     const date = `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
     const time = `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
     
-    // Vi vet nu att obs.kind är "point", så vi kan förenkla hämtningen
     const localName = obs.localName ?? "";
     const accuracy = obs.accuracyMeters !== null ? String(obs.accuracyMeters) : "";
-    const east = String(Math.round(sweref.x));
-    const north = String(Math.round(sweref.y));
     
     return [
       obs.species,
       localName,
       date,
       time,
-      east,
-      north,
+      val1,
+      val2,
       accuracy,
       obs.notes,
       (obs.quantity && obs.quantity !== 0) ? String(obs.quantity) : "", 
@@ -129,15 +149,22 @@ export async function copyTsvAndOpenArtportalen(tsv: string) {
   }
 }
 
-export function buildCsv(observations: Observation[]): string {
+export function buildCsv(
+  observations: Observation[], 
+  coordinateSystem: "SWEREF99" | "WGS84" = "SWEREF99"
+): string {
   const pointsOnly = observations.filter((obs) => obs.kind === "point");
+  
+  const coordLabel1 = coordinateSystem === "WGS84" ? "Lat" : "Ost";
+  const coordLabel2 = coordinateSystem === "WGS84" ? "Lon" : "Nord";
+
   const fields = [
     "Artnamn",
     "Antal",
     "Enhet",
     "Lokalnamn",
-    "Ost",
-    "Nord",
+    coordLabel1,
+    coordLabel2,
     "Noggrannhet",
     "Startdatum",
     "Starttid",
@@ -147,11 +174,23 @@ export function buildCsv(observations: Observation[]): string {
     "Substrat",
     "Substrat-beskrivning",
     "Aktivitet",
-    "Rödlistning",
+    // "Rödlistning",
   ];
+
   const data = pointsOnly.map((obs) => {
     const rep = observationToRepresentativeWgs84(obs);
-    const sweref = wgs84ToSweref99tm(rep.lon, rep.lat);
+    
+    let coordVal1 = "";
+    let coordVal2 = "";
+    if (coordinateSystem === "WGS84") {
+      coordVal1 = rep.lat.toFixed(6); // CSV hanterar oftast punkt bäst
+      coordVal2 = rep.lon.toFixed(6);
+    } else {
+      const sweref = wgs84ToSweref99tm(rep.lon, rep.lat);
+      coordVal1 = String(Math.round(sweref.x));
+      coordVal2 = String(Math.round(sweref.y));
+    }
+
     const d = new Date(obs.dateISO);
     const date = `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
     const time = `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
@@ -159,14 +198,15 @@ export function buildCsv(observations: Observation[]): string {
     const unit = obs.kind === "point" ? (obs.unit ?? "") : "";
     const species = obs.kind === "point" ? obs.species : "";
     const notes = obs.notes ?? "";
-    const redList = obs.kind === "point" ? getRedList(obs.species) : "";
+    // const redList = obs.kind === "point" ? getRedList(obs.species) : "";
+
     return [
       species,
       quantity,
       unit,
       pointLocalName(obs),
-      String(Math.round(sweref.x)),
-      String(Math.round(sweref.y)),
+      coordVal1,
+      coordVal2,
       pointAccuracy(obs),
       date,
       time,
@@ -176,33 +216,29 @@ export function buildCsv(observations: Observation[]): string {
       "",
       "",
       "",
-      redList,
+      // redList,
     ];
   });
+
   const csvBody = Papa.unparse(
-    {
-      fields,
-      data,
-    },
-    {
-      delimiter: ";",
-      newline: "\r\n",
-      quotes: false,
-      skipEmptyLines: false,
-    }
+    { fields, data },
+    { delimiter: ";", newline: "\r\n", quotes: false, skipEmptyLines: false }
   );
   return ensureUtf8Bom(`sep=;\r\n${csvBody}`);
 }
 
-export function buildXlsx(observations: Observation[]): string {
+export function buildXlsx(observations: Observation[], 
+  coordinateSystem: "SWEREF99" | "WGS84" = "SWEREF99"): string {
   const pointsOnly = observations.filter((obs) => obs.kind === "point");
+  const coordLabel1 = coordinateSystem === "WGS84" ? "Lat" : "Ost";
+  const coordLabel2 = coordinateSystem === "WGS84" ? "Lon" : "Nord";
   const fields = [
     "Artnamn",
     "Antal",
     "Enhet",
     "Lokalnamn",
-    "Ost",
-    "Nord",
+    coordLabel1, // Blir Lat eller Ost
+    coordLabel2,
     "Noggrannhet",
     "Startdatum",
     "Starttid",
@@ -214,11 +250,20 @@ export function buildXlsx(observations: Observation[]): string {
     "Aktivitet",
     "Ålder-Stadium",
     "Kön",
-    "Rödlistning",
+    //"Rödlistning",
   ];
   const data = pointsOnly.map((obs) => {
     const rep = observationToRepresentativeWgs84(obs);
-    const sweref = wgs84ToSweref99tm(rep.lon, rep.lat);
+    let coordVal1 = "";
+    let coordVal2 = "";
+    if (coordinateSystem === "WGS84") {
+      coordVal1 = formatNumberForExcel(rep.lat, 6);
+      coordVal2 = formatNumberForExcel(rep.lon, 6);
+    } else {
+      const sweref = wgs84ToSweref99tm(rep.lon, rep.lat);
+      coordVal1 = String(Math.round(sweref.x));
+      coordVal2 = String(Math.round(sweref.y));
+    }
     const d = new Date(obs.dateISO);
     const date = `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
     const time = `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
@@ -226,14 +271,14 @@ export function buildXlsx(observations: Observation[]): string {
     const unit = obs.kind === "point" ? (obs.unit ?? "") : "";
     const species = obs.kind === "point" ? obs.species : "";
     const notes = obs.notes ?? "";
-    const redList = obs.kind === "point" ? getRedList(obs.species) : "";
+    // const redList = obs.kind === "point" ? getRedList(obs.species) : "";
     return [
       species,
       quantity,
       unit,
       pointLocalName(obs),
-      String(Math.round(sweref.x)),
-      String(Math.round(sweref.y)),
+      coordVal1,
+      coordVal2,
       pointAccuracy(obs),
       date,
       time,
@@ -245,17 +290,13 @@ export function buildXlsx(observations: Observation[]): string {
       obs.activity ?? "",
       obs.stage ?? "",
       obs.gender ?? "",
-      redList,
+      // redList,
     ];
   });
   const worksheet = XLSX.utils.aoa_to_sheet([fields, ...data]);
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, "Export");
   return XLSX.write(workbook, { type: "base64", bookType: "xlsx" });
-}
-
-function pad2(value: number): string {
-  return String(value).padStart(2, "0");
 }
 
 export async function saveXlsxAndShare(
@@ -294,23 +335,25 @@ export async function saveXlsxAndComposeEmail(
 
 export async function saveXlsxGeoJsonAndMapAndComposeEmail(
   mapName: string,
+  mapNotes: string,
   observations: Observation[],
   xlsxBase64: string,
   mapFileUri?: string | null
 ): Promise<{ paths: string[]; opened: boolean }> {
   const xlsxPath = await saveXlsxFile(mapName, xlsxBase64);
+  const txtPath = await saveNotesTxtFile(mapName, mapNotes, observations);
   const canEmail = await MailComposer.isAvailableAsync();
   if (!canEmail) {
-    const fallbackBundlePath = await saveEmailBundleZip(mapName, observations, mapFileUri, exportDir());
+    const fallbackBundlePath = await saveEmailBundleZip(mapName, mapNotes, observations, mapFileUri, exportDir());
     return { paths: [xlsxPath, fallbackBundlePath], opened: false };
   }
   const tempDir = await createExportSessionDir();
   try {
-    const bundlePath = await saveEmailBundleZip(mapName, observations, mapFileUri, tempDir);
+    const bundlePath = await saveEmailBundleZip(mapName, mapNotes, observations, mapFileUri, tempDir);
     await MailComposer.composeAsync({
       subject: mapName,
-      body: `Export fran Faltkarta for kartan "${mapName}" (ZIP med Excel, GeoJSON och GeoTIFF).`,
-      attachments: [xlsxPath, bundlePath],
+      body: `Export fran Faltkarta for kartan "${mapName}" (Excel, Textfil, samt ZIP med GeoJSON och GeoTIFF).`,
+      attachments: [xlsxPath, txtPath, bundlePath],
     });
     return { paths: [xlsxPath, bundlePath], opened: true };
   } finally {
@@ -320,16 +363,19 @@ export async function saveXlsxGeoJsonAndMapAndComposeEmail(
 
 export async function saveZipBundleAndShare(
   mapName: string,
+  mapNotes: string,
   observations: Observation[],
   mapFileUri?: string | null,
-  maxImageSizeMB = 2
+  maxImageSizeMB = 2,
+  coordinateSystem: "SWEREF99" | "WGS84" = "SWEREF99"
 ): Promise<{ shared: boolean }> {
   const dir = await createExportSessionDir();
   const zip = new JSZip();
   const safeMapName = sanitizeForFileName(mapName);
-  const xlsx = buildXlsx(observations);
+  const xlsx = buildXlsx(observations, coordinateSystem);
   zip.file(`${safeMapName}.xlsx`, xlsx, { base64: true });
   zip.file(`${safeMapName}.geojson`, buildGeoJson(mapName, observations));
+  zip.file(`${safeMapName}_anteckningar.txt`, buildNotesTxt(mapName, mapNotes, observations));
   if (mapFileUri) {
     try {
       const mapBase64 = await FileSystem.readAsStringAsync(mapFileUri, {
@@ -411,6 +457,16 @@ async function saveXlsxFile(mapName: string, xlsxBase64: string): Promise<string
   return path;
 }
 
+async function saveNotesTxtFile(mapName: string, mapNotes: string, observations: Observation[]): Promise<string> {
+  const dir = exportDir();
+  const safeMapName = sanitizeForFileName(mapName);
+  const path = `${dir}/${safeMapName}_anteckningar.txt`;
+  await FileSystem.writeAsStringAsync(path, buildNotesTxt(mapName, mapNotes, observations), {
+    encoding: FileSystem.EncodingType.UTF8,
+  });
+  return path;
+}
+
 async function saveGeoJsonFile(mapName: string, observations: Observation[]): Promise<string> {
   const dir = exportDir();
   const dirInfo = await FileSystem.getInfoAsync(dir);
@@ -427,6 +483,7 @@ async function saveGeoJsonFile(mapName: string, observations: Observation[]): Pr
 
 async function saveEmailBundleZip(
   mapName: string,
+  mapNotes: string,
   observations: Observation[],
   mapFileUri: string | null | undefined,
   targetDir: string
@@ -440,7 +497,7 @@ async function saveEmailBundleZip(
   const xlsx = buildXlsx(observations);
   zip.file(`${safeMapName}.xlsx`, xlsx, { base64: true });
   zip.file(`${safeMapName}.geojson`, buildGeoJson(mapName, observations));
-
+  zip.file(`${safeMapName}_anteckningar.txt`, buildNotesTxt(mapName, mapNotes, observations));
   if (mapFileUri) {
     try {
       const mapBase64 = await FileSystem.readAsStringAsync(mapFileUri, {
@@ -693,4 +750,53 @@ function ensureUtf8Bom(value: string): string {
 
 function formatNumberForExcel(value: number, decimals: number): string {
   return value.toFixed(decimals).replace(".", ",");
+}
+
+export function buildNotesTxt(
+  mapTitle: string, 
+  mapNotes: string, // Vi lägger till kartans egna anteckning här!
+  observations: Observation[]
+): string {
+  const lines: string[] = [];
+  lines.push(`INFORMATION OCH ANTECKNINGAR FÖR KARTA: ${mapTitle}`);
+  lines.push(`Datum för export: ${new Date().toLocaleDateString("sv-SE")}`);
+  lines.push(`Antal observationer: ${observations.length}`);
+  lines.push(` `);
+  
+  // Här hamnar kartans övergripande anteckning, direkt i huvudet!
+  lines.push(`KARTANTECKNING:`);
+  lines.push(mapNotes.trim() || "(Ingen övergripande anteckning finns för denna karta)");
+  lines.push(` \n`);
+
+  // Objekt för att hålla reda på artstatistiken
+  const speciesSummary: Record<string, { observationsCount: number; totalQuantity: number; unit?: string }> = {};
+
+  // Loopa igenom för att samla ihop arterna till listan
+  observations.forEach((obs) => {
+    if (obs.kind === "point" && obs.species) {
+      if (!speciesSummary[obs.species]) {
+        speciesSummary[obs.species] = { observationsCount: 0, totalQuantity: 0, unit: obs.unit };
+      }
+      speciesSummary[obs.species].observationsCount += 1;
+      if (obs.quantity && obs.quantity > 0) {
+        speciesSummary[obs.species].totalQuantity += obs.quantity;
+      }
+    }
+  });
+
+  lines.push(`SAMMANSTÄLLNING: ANTAL PER ART`);
+
+  const speciesNames = Object.keys(speciesSummary).sort();
+  
+  if (speciesNames.length === 0) {
+    lines.push(`Inga artobservationer registrerade på denna karta.`);
+  } else {
+    speciesNames.forEach((species) => {
+      const stats = speciesSummary[species];
+      const paddedSpecies = species.padEnd(30, " ");
+      lines.push(`${paddedSpecies}: ${stats.observationsCount} st fyndplatser`);
+    });
+  }
+  
+  return lines.join("\r\n");
 }
