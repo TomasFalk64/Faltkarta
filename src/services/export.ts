@@ -759,7 +759,7 @@ export function buildNotesTxt(
 ): string {
   const lines: string[] = [];
   lines.push(`INFORMATION OCH ANTECKNINGAR FÖR KARTA: ${mapTitle}`);
-  lines.push(`Datum för export: ${new Date().toLocaleDateString("sv-SE")}`);
+  lines.push(`Datum: ${new Date().toLocaleDateString("sv-SE")}`);
   lines.push(`Antal observationer: ${observations.length}`);
   lines.push(` `);
   
