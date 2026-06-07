@@ -21,6 +21,7 @@ export function ExportScreen({ route }: Props) {
   const [mapName, setMapName] = useState("export");
   const [mapNotes, setMapNotes] = useState("");
   const [mapFileUri, setMapFileUri] = useState<string | null>(null);
+  const [mapDate, setMapDate] = useState<string | undefined>(undefined);
   const [observations, setObservations] = useState<Observation[]>([]);
   const [maxImageSizeMB, setMaxImageSizeMB] = useState(2);
   const [preview, setPreview] = useState("");
@@ -35,6 +36,7 @@ export function ExportScreen({ route }: Props) {
       const m = maps.find((item) => item.id === mapId);
       if (m) {
         setMapName(m.title);
+        setMapDate(m.createdAt);
         const currentMapNotes = areaDescriptions && areaDescriptions[mapId] ? areaDescriptions[mapId] : "";
         setMapNotes(currentMapNotes);
         setMapFileUri(getSafeUri(m.fileName, "map"));
@@ -95,7 +97,7 @@ export function ExportScreen({ route }: Props) {
     }
     const xlsx = buildXlsx(observations, coordinateSystem);
    
-    const result = await saveXlsxGeoJsonAndMapAndComposeEmail(mapName, mapNotes, observations, xlsx, mapFileUri);
+    const result = await saveXlsxGeoJsonAndMapAndComposeEmail(mapName, mapNotes, observations, xlsx, mapFileUri, mapDate);
     if (!result.opened) {
       Alert.alert("E-post", `E-post ar inte tillgangligt pa enheten.\nFiler sparades:\n${result.paths.join("\n")}`);
       return;
@@ -117,7 +119,7 @@ export function ExportScreen({ route }: Props) {
     }
     setIsCreatingZip(true);
     try {
-      const result = await saveZipBundleAndShare(mapName, mapNotes, observations, mapFileUri, maxImageSizeMB, coordinateSystem);
+      const result = await saveZipBundleAndShare(mapName, mapNotes, observations, mapFileUri, maxImageSizeMB, coordinateSystem, mapDate);
       if (!result.shared) {
         Alert.alert("Export", "Delning ar inte tillganglig pa enheten."); 
         return;

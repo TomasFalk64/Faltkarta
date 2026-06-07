@@ -338,18 +338,19 @@ export async function saveXlsxGeoJsonAndMapAndComposeEmail(
   mapNotes: string,
   observations: Observation[],
   xlsxBase64: string,
-  mapFileUri?: string | null
+  mapFileUri?: string | null,
+  mapDate?: string
 ): Promise<{ paths: string[]; opened: boolean }> {
   const xlsxPath = await saveXlsxFile(mapName, xlsxBase64);
-  const txtPath = await saveNotesTxtFile(mapName, mapNotes, observations);
+  const txtPath = await saveNotesTxtFile(mapName, mapNotes, observations, mapDate);
   const canEmail = await MailComposer.isAvailableAsync();
   if (!canEmail) {
-    const fallbackBundlePath = await saveEmailBundleZip(mapName, mapNotes, observations, mapFileUri, exportDir());
+    const fallbackBundlePath = await saveEmailBundleZip(mapName, mapNotes, observations, mapFileUri, exportDir(), mapDate);
     return { paths: [xlsxPath, fallbackBundlePath], opened: false };
   }
   const tempDir = await createExportSessionDir();
   try {
-    const bundlePath = await saveEmailBundleZip(mapName, mapNotes, observations, mapFileUri, tempDir);
+    const bundlePath = await saveEmailBundleZip(mapName, mapNotes, observations, mapFileUri, tempDir, mapDate);
     const emailAttachments = Platform.OS === "ios" 
       ? [bundlePath] 
       : [xlsxPath, txtPath, bundlePath];
@@ -372,7 +373,8 @@ export async function saveZipBundleAndShare(
   observations: Observation[],
   mapFileUri?: string | null,
   maxImageSizeMB = 2,
-  coordinateSystem: "SWEREF99" | "WGS84" = "SWEREF99"
+  coordinateSystem: "SWEREF99" | "WGS84" = "SWEREF99",
+  mapDate?: string
 ): Promise<{ shared: boolean }> {
   const dir = await createExportSessionDir();
   const zip = new JSZip();
@@ -380,7 +382,7 @@ export async function saveZipBundleAndShare(
   const xlsx = buildXlsx(observations, coordinateSystem);
   zip.file(`${safeMapName}.xlsx`, xlsx, { base64: true });
   zip.file(`${safeMapName}.geojson`, buildGeoJson(mapName, observations));
-  zip.file(`${safeMapName}_anteckningar.txt`, buildNotesTxt(mapName, mapNotes, observations));
+  zip.file(`${safeMapName}_anteckningar.txt`, buildNotesTxt(mapName, mapNotes, observations, mapDate));
   if (mapFileUri) {
     try {
       const mapBase64 = await FileSystem.readAsStringAsync(mapFileUri, {
@@ -462,11 +464,11 @@ async function saveXlsxFile(mapName: string, xlsxBase64: string): Promise<string
   return path;
 }
 
-async function saveNotesTxtFile(mapName: string, mapNotes: string, observations: Observation[]): Promise<string> {
+async function saveNotesTxtFile(mapName: string, mapNotes: string, observations: Observation[], mapDate?: string): Promise<string> {
   const dir = exportDir();
   const safeMapName = sanitizeForFileName(mapName);
   const path = `${dir}/${safeMapName}_anteckningar.txt`;
-  await FileSystem.writeAsStringAsync(path, buildNotesTxt(mapName, mapNotes, observations), {
+  await FileSystem.writeAsStringAsync(path, buildNotesTxt(mapName, mapNotes, observations, mapDate), {
     encoding: FileSystem.EncodingType.UTF8,
   });
   return path;
@@ -491,7 +493,8 @@ async function saveEmailBundleZip(
   mapNotes: string,
   observations: Observation[],
   mapFileUri: string | null | undefined,
-  targetDir: string
+  targetDir: string,
+  mapDate?: string
 ): Promise<string> {
   const dirInfo = await FileSystem.getInfoAsync(targetDir);
   if (!dirInfo.exists) {
@@ -502,7 +505,7 @@ async function saveEmailBundleZip(
   const xlsx = buildXlsx(observations);
   zip.file(`${safeMapName}.xlsx`, xlsx, { base64: true });
   zip.file(`${safeMapName}.geojson`, buildGeoJson(mapName, observations));
-  zip.file(`${safeMapName}_anteckningar.txt`, buildNotesTxt(mapName, mapNotes, observations));
+  zip.file(`${safeMapName}_anteckningar.txt`, buildNotesTxt(mapName, mapNotes, observations, mapDate));
   if (mapFileUri) {
     try {
       const mapBase64 = await FileSystem.readAsStringAsync(mapFileUri, {
@@ -759,12 +762,14 @@ function formatNumberForExcel(value: number, decimals: number): string {
 
 export function buildNotesTxt(
   mapTitle: string, 
-  mapNotes: string, // Vi lägger till kartans egna anteckning här!
-  observations: Observation[]
+  mapNotes: string, 
+  observations: Observation[],
+  mapDate?: string
 ): string {
   const lines: string[] = [];
   lines.push(`INFORMATION OCH ANTECKNINGAR FÖR KARTA: ${mapTitle}`);
-  lines.push(`Datum: ${new Date().toLocaleDateString("sv-SE")}`);
+  const dateToDisplay = mapDate ? new Date(mapDate).toLocaleDateString("sv-SE") : "";
+  lines.push(`Datum: ${dateToDisplay}`);
   lines.push(`Antal observationer: ${observations.length}`);
   lines.push(` `);
   

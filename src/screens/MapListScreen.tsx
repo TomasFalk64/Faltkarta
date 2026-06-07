@@ -83,6 +83,9 @@ export function MapListScreen({ navigation }: Props) {
   const [deleteMap, setDeleteMap] = useState<MapItem | null>(null);
   const [showImportMenu, setShowImportMenu] = useState(false);
   const [showMapBuildLoading, setShowMapBuildLoading] = useState(false);
+  // When true we intend to open the rename modal once the loading modal is fully dismissed.
+  const [openRenameAfterLoading, setOpenRenameAfterLoading] = useState(false);
+  const [pendingRenameMap, setPendingRenameMap] = useState<MapItem | null>(null);
   const [importPolygonMap, setImportPolygonMap] = useState<MapItem | null>(null);
   const [showBackgroundDisclosure, setShowBackgroundDisclosure] = useState(false);
   const [areaDescriptions, setAreaDescriptions] = useState<Record<string, string>>({});
@@ -250,20 +253,32 @@ export function MapListScreen({ navigation }: Props) {
     return () => clearTimeout(timer);
   }, [changeDateMap]);
 
+  // Fallback flow for Android (and any platform that doesn't reliably call onDismiss):
+  // when the loading modal is hidden and we previously requested opening the rename
+  // modal, do it now.
+  useEffect(() => {
+    if (Platform.OS === "ios") return; // iOS will use onDismiss for exact timing
+    if (!showMapBuildLoading && openRenameAfterLoading && pendingRenameMap) {
+      setOpenRenameAfterLoading(false);
+      setRenameMap(pendingRenameMap);
+      setPendingRenameMap(null);
+      setShowRenameHint(true);
+    }
+  }, [showMapBuildLoading, openRenameAfterLoading, pendingRenameMap]);
+
   async function onImport() {
     try {
       const item = await pickAndImportGeoTiff(setShowMapBuildLoading);
       if (!item) return;
       const next = await upsertMap(item);
       setMaps(sortMaps(next, mapSortMode, mapSortAnchor));
-      /*
-    setTimeout(() => {
-      setRenameMap(item);
+
+      // Schedule opening of the rename modal after the "Bygger karta" loading modal
+      // has been fully dismissed on iOS (onDismiss) or when loading becomes false on Android.
+      setPendingRenameMap(item);
       setRenameValue(item.title.toLowerCase().includes("skogsmonitor") ? "" : item.title);
       setRenameMode("import");
-      setShowRenameHint(true);
-    }, 300);
-    */
+      setOpenRenameAfterLoading(true);
     } catch (error) {
       Alert.alert("Importfel", String(error));
     }
@@ -1468,6 +1483,15 @@ export function MapListScreen({ navigation }: Props) {
         transparent
         visible={showMapBuildLoading}
         onRequestClose={hideMapBuildLoading}
+        onDismiss={() => {
+          // onDismiss is iOS-only and fires when the modal is fully dismissed.
+          if (openRenameAfterLoading && pendingRenameMap) {
+            setOpenRenameAfterLoading(false);
+            setRenameMap(pendingRenameMap);
+            setPendingRenameMap(null);
+            setShowRenameHint(true);
+          }
+        }}
         animationType="fade"
       >
         <View style={styles.modalBackdrop}>
