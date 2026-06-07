@@ -138,7 +138,18 @@ export function MapListScreen({ navigation }: Props) {
       });
       return copy;
     }
-    copy.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    copy.sort((a, b) => {
+      const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      if (timeB !== timeA) {
+        return timeB - timeA;
+      }
+      const titleCompare = a.title.localeCompare(b.title, "sv");
+      if (titleCompare !== 0) {
+        return titleCompare;
+      }
+      return a.id.localeCompare(b.id);
+    });
     return copy;
   }
 
@@ -245,12 +256,14 @@ export function MapListScreen({ navigation }: Props) {
       if (!item) return;
       const next = await upsertMap(item);
       setMaps(sortMaps(next, mapSortMode, mapSortAnchor));
-      setTimeout(() => {
-        setRenameMap(item);
-        setRenameValue(item.title.toLowerCase().includes("skogsmonitor") ? "" : item.title);
-        setRenameMode("import");
-        setShowRenameHint(true);
-      }, 300);
+      /*
+    setTimeout(() => {
+      setRenameMap(item);
+      setRenameValue(item.title.toLowerCase().includes("skogsmonitor") ? "" : item.title);
+      setRenameMode("import");
+      setShowRenameHint(true);
+    }, 300);
+    */
     } catch (error) {
       Alert.alert("Importfel", String(error));
     }
@@ -1824,6 +1837,7 @@ descriptionInputIOS: {
     justifyContent: "center",
     alignItems: "center",
     elevation: 4,
+    zIndex: 1000,
   },
   fabText: {
     color: "#fff",
@@ -1843,6 +1857,7 @@ descriptionInputIOS: {
     backgroundColor: "#fff",
     justifyContent: "center",
     alignItems: "center",
+    zIndex: 1000,
   },
   infoFabText: {
     color: "#005f73",
