@@ -834,13 +834,11 @@ export function MapListScreen({ navigation }: Props) {
      <Pressable style={styles.infoFab} onPress={() => setShowSettings(true)}>
         {Platform.select({
           ios: (
-            /* iOS: Rent och snyggt Ionicons-kugghjul */
             <Text style={styles.iosGearEmoji}>
               ⚙️
             </Text>
           ),
           android: (
-            /* Android: Stabil system-emoji som aldrig buggar bort */
             <Text style={styles.androidGearEmoji}>
               ⚙️
             </Text>
@@ -1414,7 +1412,7 @@ export function MapListScreen({ navigation }: Props) {
                           if (Platform.OS === "ios") {
                             Alert.alert(
                               "Kort guide",
-                              "Importera karta som GeoTIFF från Skogsmonitor. Du kan ha flera kartor.\n\nByt namn på kartan, namnet används som förslag på lokalnamn.\n\nÖppna kartan och registrera punkter eller polygoner.\n\nExportera direkt till Artportalen eller skicka med epost.\n\nSWEREF99 TM används vid export till Excel och Artportalen"
+                              "Importera karta som GeoTIFF från Skogsmonitor. Du kan ha flera kartor.\n\nByt namn på kartan, namnet används som förslag på lokalnamn.\n\nÖppna kartan och registrera punkter eller polygoner.\n\nExportera direkt till Artportalen eller skicka med epost.\n\nObs, du behöver välja samma koordinatsystem i appen och i Artportalen.\n\nDu hittar mer information på projektets hemsida https://Fältkarta.se/."
                             );
                             return;
                           }
@@ -1428,7 +1426,7 @@ export function MapListScreen({ navigation }: Props) {
                         style={styles.copyrightBtn}
                         onPress={() => Alert.alert(
                           "Licens",
-                          "Appen är öppen källkod och licensierad under MIT-licensen. Du hittar mer information på projektets hemsida."
+                          "Appen är öppen källkod och licensierad under MIT-licensen. Du hittar mer information på projektets hemsida https://Fältkarta.se/."
                         )}
                       >
                         <Text style={styles.copyrightText}>©</Text>
@@ -1469,8 +1467,9 @@ export function MapListScreen({ navigation }: Props) {
               </Text>
               <Text style={styles.helpText}>Byt namn på kartan, namnet används som förslag på lokalnamn.</Text>
               <Text style={styles.helpText}>Öppna kartan och registrera punkter eller polygoner.</Text>
-              <Text style={styles.helpText}>Exportera direkt till Artportalen eller skicka med epost.</Text>
-              <Text style={styles.helpText}>SWEREF99 TM används vid export till Excel och Artportalen</Text>
+              <Text style={styles.helpText}>Exportera direkt till Artportalen, skicka med epost eller dela.</Text>
+              <Text style={styles.helpText}>Obs, du behöver välja samma koordinatsystem i appen och i Artportalen.</Text>
+              <Text style={styles.helpText}>Du hittar mer information på projektets hemsida https://Fältkarta.se/.</Text>
             </View>
             <View style={styles.guideActions}>
               <Pressable style={styles.okBtn} onPress={() => setShowGuide(false)}>
