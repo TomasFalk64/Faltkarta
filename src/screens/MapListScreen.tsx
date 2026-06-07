@@ -765,71 +765,65 @@ export function MapListScreen({ navigation }: Props) {
           <Text style={styles.emptyText}>{"Inga kartor \u00e4nnu. Tryck + f\u00f6r import."}</Text>
         }
         renderItem={({ item }) => (
-          <Pressable style={styles.mapRow} onPress={() => onOpenMap(item)}>
-            {item.previewFileName ? (
-              <Image source={{ uri: getSafeUri(item.previewFileName, "preview") }} style={styles.thumb} />
-            ) : (
-              <View style={[styles.thumb, styles.thumbPlaceholder]}>
-                <Text style={styles.thumbText}>TIFF</Text>
-              </View>
-            )}
-            <View style={styles.mapMeta}>
-              <Text style={styles.mapName} numberOfLines={1}>
-                {item.title}
-              </Text>
-              <View style={styles.mapStatusRow}>
-                {/* 📝 ANTECKNINGS-IKON - Visas endast om det finns text i beskrivningen/anteckningen */}
-                {areaDescriptions[item.id] && areaDescriptions[item.id].trim() !== "" ? (
-                  <View style={[styles.listIconBox, { backgroundColor: "#838181" }]}> 
-                    {/*  📝📄📋  */}
-                    <Text style={styles.listEmojiInsideBox}>
-                      📝
-                    </Text>
-                  </View>
-                ) : null}
-                  
-
-                {/* ☁️ MOLN-STATUS - Visas endast om item.isBackedUp är sant */}
-                {item.isBackedUp ? Platform.select({
-                  ios: (
-                    <Ionicons 
-                      name="cloud-done" 
-                      size={22} 
-                      color="#2196f3" 
-                      style={styles.mapStatusIcon} 
-                    />
-                  ),
-                  android: (
-                    <View style={[styles.listIconBox, { backgroundColor: "#2196f3" }]}>
-                      <Text style={styles.listEmojiInsideBox}>
-                        ☁️
-                      </Text>
+          <View style={styles.mapRow}>
+            <Pressable style={styles.mapClickableArea} onPress={() => onOpenMap(item)}>
+              {item.previewFileName ? (
+                <Image source={{ uri: getSafeUri(item.previewFileName, "preview") }} style={styles.thumb} />
+              ) : (
+                <View style={[styles.thumb, styles.thumbPlaceholder]}>
+                  <Text style={styles.thumbText}>TIFF</Text>
+                </View>
+              )}
+              <View style={styles.mapMeta}>
+                <Text style={styles.mapName} numberOfLines={1}>
+                  {item.title}
+                </Text>
+                <View style={styles.mapStatusRow}>
+                  {/* 📝 ANTECKNINGS-IKON - Visas endast om det finns text i beskrivningen/anteckningen */}
+                  {areaDescriptions[item.id] && areaDescriptions[item.id].trim() !== "" ? (
+                    <View style={[styles.listIconBox, { backgroundColor: "#838181" }]}> 
+                      <Text style={styles.listEmojiInsideBox}>📝</Text>
                     </View>
-                  )
-                }) : null}
-                
-                {item.isReportedToAP ? (
-                  <Text style={styles.listEmojiIcon}>
-                    ✅
-                  </Text>
-                ) : null}
-                <Text style={styles.mapDate}>{new Date(item.createdAt).toLocaleDateString()}</Text>
+                  ) : null}
+
+                  {/* ☁️ MOLN-STATUS - Visas endast om item.isBackedUp är sant */}
+                  {item.isBackedUp ? Platform.select({
+                    ios: (
+                      <Ionicons 
+                        name="cloud-done" 
+                        size={22} 
+                        color="#2196f3" 
+                        style={styles.mapStatusIcon} 
+                      />
+                    ),
+                    android: (
+                      <View style={[styles.listIconBox, { backgroundColor: "#2196f3" }]}>
+                        <Text style={styles.listEmojiInsideBox}>☁️</Text>
+                      </View>
+                    )
+                  }) : null}
+                  {item.isReportedToAP ? <Text style={styles.listEmojiIcon}>✅</Text> : null}
+                  <Text style={styles.mapDate}>{new Date(item.createdAt).toLocaleDateString()}</Text>
+                </View>
               </View>
-            </View>
+            </Pressable>
+
             <View style={styles.mapActionsContainer}>
               {(observationCounts[item.id] ?? 0) > 0 ? (
-              <Pressable 
-                style={styles.exportBtn} 
-                onPress={() => navigation.navigate("Export", { mapId: item.id })} 
-              >
-                <Ionicons name="share-outline" size={25} color="#005f73" />
-              </Pressable>
+                <Pressable 
+                  style={styles.exportBtn} 
+                  onPress={() => navigation.navigate("Export", { mapId: item.id })}
+                  hitSlop={{ top: 8, bottom: 0, left: 12, right: 8 }}
+                >
+                  <Ionicons name="share-outline" size={25} color="#005f73" />
+                </Pressable>
               ) : null}
-              <Pressable style={styles.menuBtn} onPress={() => onOpenMenu(item)}>
+              <Pressable style={styles.menuBtn} onPress={() => onOpenMenu(item)} 
+                hitSlop={{ top: 0, bottom: 8, left: 12, right: 8 }}>
                 <Text style={styles.menuText}>...</Text>
               </Pressable>
             </View>
-          </Pressable>
+          </View>
         )}
       />
 
@@ -1687,6 +1681,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "#fff",
     borderRadius: 12,
+    // padding moved to clickable area to allow action buttons outside main pressable
+  },
+  mapClickableArea: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
     padding: 10,
   },
   thumb: {
@@ -1723,6 +1723,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     alignSelf: "center",
+    paddingRight: 5,
     gap: 1,
   },
   mapStatusRow: {
@@ -1739,14 +1740,15 @@ const styles = StyleSheet.create({
     paddingVertical: 0,
   },
   exportBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 0,
-   
+    paddingHorizontal: 6,
+    paddingTop: 8,
+    marginBottom: 1,
   },
   menuBtn: {
-    paddingHorizontal: 12,
+    paddingHorizontal: 8,
     paddingVertical: 0,
-    marginTop: -6,
+    marginTop: -2,
+    marginBottom: 5,
   },
   keyboardView: {
   flex: 1,
