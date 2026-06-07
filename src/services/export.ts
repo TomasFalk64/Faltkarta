@@ -72,8 +72,8 @@ export function buildArtportalenTsv(
   coordinateSystem: "SWEREF99" | "WGS84" = "SWEREF99"
 ): string {
   // Ändra rubrikerna för koordinaterna dynamiskt
-  const coordLabel1 = coordinateSystem === "WGS84" ? "Lat" : "Ost";
-  const coordLabel2 = coordinateSystem === "WGS84" ? "Lon" : "Nord";
+  const coordLabel1 = coordinateSystem === "WGS84" ? "Ost" : "Ost";
+  const coordLabel2 = coordinateSystem === "WGS84" ? "Nord" : "Nord";
 
   const header = `Artnamn\tLokalnamn\tStartdatum\tStarttid\t${coordLabel1}\t${coordLabel2}\tNoggrannhet\tPublik kommentar\tAntal\tEnhet\tArt som substrat\tAktivitet\tSubstrat\tÅlder-Stadium\tKön`;
   
@@ -87,8 +87,8 @@ export function buildArtportalenTsv(
 
     if (coordinateSystem === "WGS84") {
       // Artportalen vill ha punkt-decimaler för WGS84 (t.ex. 59.123456)
-      val1 = coord.lat.toFixed(6);
-      val2 = coord.lon.toFixed(6);
+      val2 = coord.lat.toFixed(6);
+      val1 = coord.lon.toFixed(6);
     } else {
       const sweref = wgs84ToSweref99tm(coord.lon, coord.lat);
       val1 = String(Math.round(sweref.x));
@@ -155,8 +155,8 @@ export function buildCsv(
 ): string {
   const pointsOnly = observations.filter((obs) => obs.kind === "point");
   
-  const coordLabel1 = coordinateSystem === "WGS84" ? "Lat" : "Ost";
-  const coordLabel2 = coordinateSystem === "WGS84" ? "Lon" : "Nord";
+  const coordLabel1 = coordinateSystem === "WGS84" ? "Ost" : "Ost";
+  const coordLabel2 = coordinateSystem === "WGS84" ? "Nord" : "Nord";
 
   const fields = [
     "Artnamn",
@@ -183,8 +183,8 @@ export function buildCsv(
     let coordVal1 = "";
     let coordVal2 = "";
     if (coordinateSystem === "WGS84") {
-      coordVal1 = rep.lat.toFixed(6); // CSV hanterar oftast punkt bäst
-      coordVal2 = rep.lon.toFixed(6);
+      coordVal2 = rep.lat.toFixed(6); // CSV hanterar oftast punkt bäst
+      coordVal1 = rep.lon.toFixed(6);
     } else {
       const sweref = wgs84ToSweref99tm(rep.lon, rep.lat);
       coordVal1 = String(Math.round(sweref.x));
@@ -230,8 +230,8 @@ export function buildCsv(
 export function buildXlsx(observations: Observation[], 
   coordinateSystem: "SWEREF99" | "WGS84" = "SWEREF99"): string {
   const pointsOnly = observations.filter((obs) => obs.kind === "point");
-  const coordLabel1 = coordinateSystem === "WGS84" ? "Lat" : "Ost";
-  const coordLabel2 = coordinateSystem === "WGS84" ? "Lon" : "Nord";
+  const coordLabel1 = coordinateSystem === "WGS84" ? "Ost" : "Ost";
+  const coordLabel2 = coordinateSystem === "WGS84" ? "Nord" : "Nord";
   const fields = [
     "Artnamn",
     "Antal",
@@ -257,8 +257,8 @@ export function buildXlsx(observations: Observation[],
     let coordVal1 = "";
     let coordVal2 = "";
     if (coordinateSystem === "WGS84") {
-      coordVal1 = formatNumberForExcel(rep.lat, 6);
-      coordVal2 = formatNumberForExcel(rep.lon, 6);
+      coordVal2 = formatNumberForExcel(rep.lat, 6);
+      coordVal1 = formatNumberForExcel(rep.lon, 6);
     } else {
       const sweref = wgs84ToSweref99tm(rep.lon, rep.lat);
       coordVal1 = String(Math.round(sweref.x));
