@@ -187,7 +187,7 @@ export async function loadSettings(): Promise<AppSettings> {
       backgroundGPS: false,
       autoFollow: false,
       coordinateSystem: "SWEREF99",
-      mapSortMode: "ALPHA",
+      mapSortMode: "LATEST",
       mapSortAnchor: undefined,
     };
   }
@@ -208,7 +208,9 @@ export async function loadSettings(): Promise<AppSettings> {
     autoFollow: parsed.autoFollow ?? false,
     coordinateSystem: parsed.coordinateSystem === "WGS84" ? "WGS84" : "SWEREF99",
     mapSortMode:
-      parsed.mapSortMode === "ALPHA" || parsed.mapSortMode === "NEAREST" ? parsed.mapSortMode : "ALPHA",
+      parsed.mapSortMode === "ALPHA" || parsed.mapSortMode === "NEAREST" || parsed.mapSortMode === "LATEST"
+        ? parsed.mapSortMode
+        : "LATEST",
     mapSortAnchor:
       parsed.mapSortAnchor &&
       Number.isFinite(parsed.mapSortAnchor.lat) &&
