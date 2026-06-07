@@ -1039,6 +1039,15 @@ export function MapListScreen({ navigation }: Props) {
             >
               <Text style={styles.menuActionText}>Importera polygon</Text>
             </Pressable>
+            <Pressable
+              style={styles.menuActionBtn}
+              onPress={() => {
+                setMenuMap(null);
+                navigation.navigate("Export", { mapId: menuMap?.id ?? "" });
+              }}
+            >
+              <Text style={styles.menuActionText}>Exportera</Text>
+            </Pressable>
 
             {/* ─── STATUSSEKTION ─── */}
             <View style={styles.menuDivider} />

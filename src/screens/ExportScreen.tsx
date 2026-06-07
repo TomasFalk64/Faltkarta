@@ -85,7 +85,7 @@ export function ExportScreen({ route }: Props) {
       Alert.alert("Export", `Delning ar inte tillganglig.\nFil sparades:\n${result.xlsxPath}`);
       return;
     }
-    Alert.alert("Sparad", `Fil skapad:\n${result.xlsxPath}`);
+    //Alert.alert("Sparad", `Fil skickad`);
   }
 
   async function onEmailCsv() {
@@ -138,14 +138,14 @@ export function ExportScreen({ route }: Props) {
     <View style={styles.container}>
       <Text style={styles.title}>Exportera observationer</Text>
       <Text style={styles.subtitle}>
-        {observations.length} observationer på kartan {mapName}
+        {observations.length} observationer på kartan <Text style={{ fontWeight: "bold" }}>{mapName}</Text>
       </Text>
 
       <Pressable style={styles.primaryBtn} onPress={onCopyArtportalen}>
         <Text style={styles.primaryText}>Kopiera till Artportalen</Text>
       </Pressable>
       <Pressable style={[styles.primaryBtn, styles.altBtn]} onPress={onExportCsv}>
-        <Text style={styles.primaryText}>Exportera Excelfil</Text>
+        <Text style={styles.primaryText}>Skicka Excelfil</Text>
       </Pressable>
       <Pressable style={[styles.primaryBtn, styles.zipBtn]} onPress={onExportZip}>
         <Text style={styles.primaryText}>Exportera ZIP med bilder och GeoJSON</Text>
@@ -240,24 +240,24 @@ const styles = StyleSheet.create({
     padding: 14,
   },
   title: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: "800",
     color: "#172121",
   },
   subtitle: {
     marginTop: 6,
-    marginBottom: 16,
+    marginBottom: 20,
     color: "#44515b",
   },
   primaryBtn: {
-    backgroundColor: "#005f73",
+    backgroundColor: "#006673",
     borderRadius: 10,
     paddingVertical: 14,
     paddingHorizontal: 12,
     marginBottom: 10,
   },
   altBtn: {
-    backgroundColor: "#ca6702",
+    backgroundColor: "#be742a",
   },
   zipBtn: {
     backgroundColor: "#6a4c93",
