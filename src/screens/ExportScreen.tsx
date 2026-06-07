@@ -94,13 +94,7 @@ export function ExportScreen({ route }: Props) {
       return;
     }
     const xlsx = buildXlsx(observations, coordinateSystem);
-    if (Platform.OS === "ios") {
-      const result = await saveXlsxAndShare(mapName, xlsx);
-      if (!result.shared) {
-        Alert.alert("Export", `Delning ar inte tillganglig.\nFil sparades:\n${result.xlsxPath}`);
-      }
-      return;
-    }
+   
     const result = await saveXlsxGeoJsonAndMapAndComposeEmail(mapName, mapNotes, observations, xlsx, mapFileUri);
     if (!result.opened) {
       Alert.alert("E-post", `E-post ar inte tillgangligt pa enheten.\nFiler sparades:\n${result.paths.join("\n")}`);
@@ -110,7 +104,7 @@ export function ExportScreen({ route }: Props) {
 
   function onExportCsv() {
     if (Platform.OS === "ios") {
-      void onSaveCsv();
+      void onEmailCsv();
       return;
     }
     setShowExcelModal(true);

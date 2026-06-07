@@ -245,10 +245,12 @@ export function MapListScreen({ navigation }: Props) {
       if (!item) return;
       const next = await upsertMap(item);
       setMaps(sortMaps(next, mapSortMode, mapSortAnchor));
-      setRenameMap(item);
-      setRenameValue(item.title.toLowerCase().includes("skogsmonitor") ? "" : item.title);
-      setRenameMode("import");
-      setShowRenameHint(true);
+      setTimeout(() => {
+        setRenameMap(item);
+        setRenameValue(item.title.toLowerCase().includes("skogsmonitor") ? "" : item.title);
+        setRenameMode("import");
+        setShowRenameHint(true);
+      }, 300);
     } catch (error) {
       Alert.alert("Importfel", String(error));
     }

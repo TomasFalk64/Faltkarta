@@ -350,10 +350,15 @@ export async function saveXlsxGeoJsonAndMapAndComposeEmail(
   const tempDir = await createExportSessionDir();
   try {
     const bundlePath = await saveEmailBundleZip(mapName, mapNotes, observations, mapFileUri, tempDir);
+    const emailAttachments = Platform.OS === "ios" 
+      ? [bundlePath] 
+      : [xlsxPath, txtPath, bundlePath];
     await MailComposer.composeAsync({
       subject: mapName,
-      body: `Export fran Faltkarta for kartan "${mapName}" (Excel, Textfil, samt ZIP med GeoJSON och GeoTIFF).`,
-      attachments: [xlsxPath, txtPath, bundlePath],
+      body: Platform.OS === "ios"
+        ? `Export från Fältkarta för kartan "${mapName}". Excelfil, GeoJSON, Textfil och Karta har paketerats i bifogad ZIP-fil.`
+        : `Export från Fältkarta för kartan "${mapName}" Excel, Textfil, samt ZIP med Excelfil, GeoJSON, Textfil och Karta.`,
+      attachments: emailAttachments,
     });
     return { paths: [xlsxPath, bundlePath], opened: true };
   } finally {
@@ -765,7 +770,7 @@ export function buildNotesTxt(
   
   // Här hamnar kartans övergripande anteckning, direkt i huvudet!
   lines.push(`KARTANTECKNING:`);
-  lines.push(mapNotes.trim() || "(Ingen övergripande anteckning finns för denna karta)");
+  lines.push(mapNotes.trim() || "Ingen anteckning finns för denna karta");
   lines.push(` \n`);
 
   // Objekt för att hålla reda på artstatistiken
