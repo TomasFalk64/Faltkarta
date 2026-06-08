@@ -2,7 +2,7 @@
   "expo": {
     "name": "Fältkarta",
     "slug": "faltkarta",
-    "version": "3.2",
+    "version": "3.3",
     "icon": "./assets/icon.png",
     "splash": {
       "image": "./assets/splash.png",
@@ -54,7 +54,7 @@
         "backgroundColor": "#ffffff"
       },
       "package": "com.tf64.faltkarta",
-      "versionCode": 21,
+      "versionCode": 23,
       "softwareKeyboardLayoutMode": "resize"
     },
     "web": {

@@ -1254,14 +1254,19 @@ export function MapListScreen({ navigation }: Props) {
       </Modal>
 
       <Modal transparent visible={!!changeDateMap} onRequestClose={cancelChangeDate} animationType="slide">
-        <View style={styles.modalBackdrop}>
+        <View style={[styles.modalBackdrop, { justifyContent: "flex-start" }]}>
           <Pressable style={StyleSheet.absoluteFill} onPress={cancelChangeDate} />
           <KeyboardAvoidingView
-            behavior={Platform.OS === "ios" ? "padding" : undefined}
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
             style={styles.keyboardView}
           >
-            <View style={[styles.modalCard, styles.changeDateModalCard]}>
-              <Text style={styles.modalTitle}>Ändra datum</Text>
+            <View style={[styles.modalCard, styles.changeDateModalCard, { marginTop: 30 }]}>
+              <Pressable
+                onPress={Keyboard.dismiss}
+                hitSlop={10}
+              >
+                <Text style={styles.modalTitle}>Ändra datum</Text>
+              </Pressable>
               <Text style={styles.helpText}>Ange nytt datum i formatet ÅÅÅÅ-MM-DD.</Text>
               <TextInput
                 ref={changeDateInputRef}
@@ -1525,7 +1530,16 @@ export function MapListScreen({ navigation }: Props) {
               <Text style={styles.helpText}>Öppna kartan och registrera punkter eller polygoner.</Text>
               <Text style={styles.helpText}>Exportera direkt till Artportalen, skicka med epost eller dela.</Text>
               <Text style={styles.helpText}>Obs, du behöver välja samma koordinatsystem i appen och i Artportalen.</Text>
-              <Text style={styles.helpText}>Du hittar mer information på projektets hemsida https://Fältkarta.se/.</Text>
+              <Text style={styles.helpText}>
+                Mer information finns på{" "}
+                <Text
+                  style={styles.linkText}
+                  onPress={() => void Linking.openURL("https://xn--fltkarta-0za.se/")}
+                >
+                  Fältkarta.se
+                </Text>
+                .
+              </Text>
             </View>
             <View style={styles.guideActions}>
               <Pressable style={styles.okBtn} onPress={() => setShowGuide(false)}>
