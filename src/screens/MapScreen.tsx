@@ -201,7 +201,12 @@ export function MapScreen({ route, navigation }: Props) {
   }
 
   function handleManualMapInteraction() {
-    setIsFollowing(false);
+    setIsFollowing(false); // Stäng av följning eftersom användaren rör skärmen
+    triggerFollowCountdown();
+  }
+
+  // Körs när en modal stängs
+  function triggerFollowCountdown() {
     clearFollowTimeout();
     followTimeoutRef.current = setTimeout(() => {
       followTimeoutRef.current = null;
@@ -881,6 +886,7 @@ export function MapScreen({ route, navigation }: Props) {
           setFrozenPointCoord(null);
           setFrozenAccuracyMeters(null);
           setPointModalInitialSpeciesGroup("");
+          triggerFollowCountdown();
         }}
         onSave={onAddPoint}
         onDelete={editingPoint ? onDeletePoint : undefined}

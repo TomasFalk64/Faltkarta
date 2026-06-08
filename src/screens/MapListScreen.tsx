@@ -1003,14 +1003,14 @@ export function MapListScreen({ navigation }: Props) {
 
       <Modal transparent visible={!!renameMap} onRequestClose={() => { void cancelRename(); }} animationType="fade">
         <View style={[styles.modalBackdrop, { justifyContent: 'flex-start' }]}>
-          <View style={[styles.modalCard, { marginTop: 60, maxHeight: '80%' }]}>
+          <View style={[styles.modalCard, { marginTop: 30, maxHeight: '85%' }]}>
             <ScrollView keyboardShouldPersistTaps="handled">
               <Text style={styles.modalTitle}>Byt kartnamn</Text>
               <Text style={styles.renameHint}>
                 Kartans namn används som förslag till lokalnamn vid punktobservationer.
               </Text>
               <Text style={styles.renameHint}>
-                Namnbyte ändrar ev. punkter vars lokalnamn matchar det gamla kartnamnet.
+                Namnbyte ändrar även redan registrerade punkter.
               </Text>
               <TextInput value={renameValue} onChangeText={setRenameValue} style={styles.modalInput} placeholder="Skriv nytt kartnamn..." placeholderTextColor="#999"/>
               <View style={styles.modalActions}>
@@ -1181,15 +1181,20 @@ export function MapListScreen({ navigation }: Props) {
         onRequestClose={saveDescription}
         animationType="slide"
       >
-        <View style={styles.modalBackdrop}>
+        <View style={[styles.modalBackdrop, { justifyContent: 'flex-start' }]}>
           <Pressable style={StyleSheet.absoluteFill} onPress={saveDescription} />
           
           <KeyboardAvoidingView 
-            behavior={Platform.OS === "ios" ? "padding" : undefined}
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
             style={styles.keyboardView}
           >
-            <View style={[styles.modalCard, styles.descriptionModalCard]}>
-              <Text style={styles.modalTitle}>Anteckningar</Text>
+            <View style={[styles.modalCard, styles.descriptionModalCard, { marginTop: 30}]}>
+              <Pressable
+                onPress={Keyboard.dismiss}
+                hitSlop={10}
+              >
+                <Text style={styles.modalTitle}>Anteckningar</Text>
+              </Pressable>
               
               {Platform.OS === "android" ? (
                 <ScrollView 
