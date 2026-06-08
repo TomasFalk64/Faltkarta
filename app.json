@@ -80,7 +80,8 @@
             "allowBackup": false
           }
         }
-      ]
+      ],
+      "./withAndroidAllowBackupFix.js"
     ],
     "extra": {
       "eas": {
