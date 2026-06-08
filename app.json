@@ -71,7 +71,16 @@
         }
       ],
       "expo-media-library",
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-font",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "allowBackup": false
+          }
+        }
+      ]
     ],
     "extra": {
       "eas": {
