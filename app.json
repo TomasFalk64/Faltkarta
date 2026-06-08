@@ -54,7 +54,7 @@
         "backgroundColor": "#ffffff"
       },
       "package": "com.tf64.faltkarta",
-      "versionCode": 18,
+      "versionCode": 21,
       "softwareKeyboardLayoutMode": "resize"
     },
     "web": {
