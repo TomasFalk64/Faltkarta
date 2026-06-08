@@ -1057,6 +1057,9 @@ export function MapListScreen({ navigation }: Props) {
             >
               <Text style={styles.menuActionText}>Anteckningar</Text>
             </Pressable>
+
+            <View style={[styles.menuDivider, { marginBottom: 4 }]} />
+
             <Pressable
               style={styles.menuActionBtn}
               onPress={async () => {
