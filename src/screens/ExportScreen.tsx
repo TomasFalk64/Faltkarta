@@ -29,6 +29,7 @@ export function ExportScreen({ route }: Props) {
   const [showArtportalenModal, setShowArtportalenModal] = useState(false);
   const [isCreatingZip, setIsCreatingZip] = useState(false);
   const [coordinateSystem, setCoordinateSystem] = useState<"SWEREF99" | "WGS84">("SWEREF99");
+  const [artportalenTimeEnabled, setArtportalenTimeEnabled] = useState(true);
 
   useEffect(() => {
     (async () => {
@@ -44,7 +45,8 @@ export function ExportScreen({ route }: Props) {
       setObservations(obs);
       setMaxImageSizeMB(settings.maxImageSizeMB ?? 2);
       setCoordinateSystem(settings.coordinateSystem ?? "SWEREF99");
-      setPreview(buildArtportalenTsv(obs, settings.coordinateSystem ?? "SWEREF99").slice(0, 600));
+      setArtportalenTimeEnabled(settings.artportalenTimeEnabled ?? true);
+      setPreview(buildArtportalenTsv(obs, settings.coordinateSystem ?? "SWEREF99", settings.artportalenTimeEnabled ?? true).slice(0, 600));
     })().catch((e) => Alert.alert("Fel", String(e)));
   }, [mapId]);
 
@@ -72,7 +74,7 @@ export function ExportScreen({ route }: Props) {
   }
 
   async function onConfirmCopyArtportalen() {
-    const tsv = buildArtportalenTsv(observations, coordinateSystem);
+    const tsv = buildArtportalenTsv(observations, coordinateSystem, artportalenTimeEnabled);
     await copyTsvAndOpenArtportalen(tsv);
   }
 

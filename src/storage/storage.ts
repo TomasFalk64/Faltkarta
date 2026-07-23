@@ -186,6 +186,7 @@ export async function loadSettings(): Promise<AppSettings> {
       maxImageSizeMB: 3,
       backgroundGPS: false,
       autoFollow: false,
+      artportalenTimeEnabled: true,
       coordinateSystem: "SWEREF99",
       mapSortMode: "LATEST",
       mapSortAnchor: undefined,
@@ -206,6 +207,7 @@ export async function loadSettings(): Promise<AppSettings> {
     maxImageSizeMB: parsed.maxImageSizeMB ?? 2,
     backgroundGPS: parsed.backgroundGPS ?? false,
     autoFollow: parsed.autoFollow ?? false,
+    artportalenTimeEnabled: parsed.artportalenTimeEnabled ?? true,
     coordinateSystem: parsed.coordinateSystem === "WGS84" ? "WGS84" : "SWEREF99",
     mapSortMode:
       parsed.mapSortMode === "ALPHA" || parsed.mapSortMode === "NEAREST" || parsed.mapSortMode === "LATEST"

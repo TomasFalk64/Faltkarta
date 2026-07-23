@@ -51,6 +51,7 @@ type Props = NativeStackScreenProps<RootStackParamList, "MapList">;
 export function MapListScreen({ navigation }: Props) {
   const [maps, setMaps] = useState<MapItem[]>([]);
   const [autoFollow, setAutoFollow] = useState(true);
+  const [artportalenTimeEnabled, setArtportalenTimeEnabled] = useState(true);
   const [gpsPingSeconds, setGpsPingSeconds] = useState("2");
   const { gpsPos, gpsOptions, setGpsOptions, foregroundPermissionKnown, foregroundPermissionGranted, requestForegroundPermission } = useGpsContext();
   const [visibleFields, setVisibleFields] = useState<VisibleFields>({
@@ -189,6 +190,7 @@ export function MapListScreen({ navigation }: Props) {
     setMapSortAnchor(settings.mapSortAnchor);
     setMaps(sortMaps(allMaps, mode, settings.mapSortAnchor));
     setAutoFollow(settings.autoFollow ?? false);
+    setArtportalenTimeEnabled(settings.artportalenTimeEnabled ?? true);
     setGpsPingSeconds("2"); // setGpsPingSeconds(String(settings.gpsPingSeconds));
     setGpsOptions({ pingSeconds: settings.gpsPingSeconds, backgroundGPS: gpsOptions.backgroundGPS });
     setVisibleFields(settings.visibleFields ?? {
@@ -497,6 +499,7 @@ export function MapListScreen({ navigation }: Props) {
         maxImageSizeMB: maxSizeValue,
         backgroundGPS: gpsOptions.backgroundGPS,
         autoFollow: autoFollow,
+        artportalenTimeEnabled: artportalenTimeEnabled,
         coordinateSystem: coordinateSystem,
         mapSortMode: mapSortMode,
         mapSortAnchor: mapSortAnchor,
@@ -535,6 +538,7 @@ export function MapListScreen({ navigation }: Props) {
         visibleFields: visibleFields,
         maxImageSizeMB: Number.parseFloat(maxImageSizeMB.replace(",", ".")) || 3,
         autoFollow: autoFollow,
+        artportalenTimeEnabled: artportalenTimeEnabled,
         coordinateSystem: coordinateSystem,
         mapSortMode: mapSortMode,
         mapSortAnchor: mapSortAnchor,
@@ -1364,7 +1368,19 @@ export function MapListScreen({ navigation }: Props) {
                     </View>
 
                     <Pressable
-                      style={[styles.settingsRow, { marginVertical: 6, alignItems: "center" }]}
+                      style={[styles.settingsRow, { marginVertical: 3, alignItems: "center" }]}
+                      onPress={() => setArtportalenTimeEnabled((prev) => !prev)}
+                    >
+                      <Text style={styles.settingsTitle}>Ange tidpunkt i Artportalen</Text>
+                      <Ionicons
+                        name={artportalenTimeEnabled ? checkboxName : squareOutlineName}
+                        size={24}
+                        color={artportalenTimeEnabled ? "#0a9396" : "#767577"}
+                      />
+                    </Pressable>
+
+                    <Pressable
+                      style={[styles.settingsRow, { marginVertical: 3, alignItems: "center" }]}
                       onPress={() => setAutoFollow((prev) => !prev)}
                     >
                       <Text style={styles.settingsTitle}>Följ min position vid centrering</Text>
@@ -1376,7 +1392,7 @@ export function MapListScreen({ navigation }: Props) {
                     </Pressable>
 
                     <View style={styles.settingsRow}>
-                      <Text style={styles.settingsTitle}>Max bildstorlek vid export (MB)</Text>
+                      <Text style={styles.settingsTitle}>Max bildstorlek (MB)</Text>
                       <TextInput
                         value={maxImageSizeMB}
                         onChangeText={setMaxImageSizeMB}
@@ -1631,7 +1647,7 @@ const styles = StyleSheet.create({
   },
   settingsTitle: {
     fontWeight: "700",
-    marginBottom: 8,
+    marginBottom: 3,
     flex: 1,
   },
   helpBox: {
@@ -1657,10 +1673,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    marginBottom: 10,
+    marginBottom: 5,
   },
   settingsCompactRow: {
-    marginBottom: 4,
+    marginBottom: 3,
   },
   settingsInfoText: {
     color: "#292c30",
@@ -1672,20 +1688,24 @@ const styles = StyleSheet.create({
     borderColor: "#b9c1c8",
     borderWidth: 1,
     borderRadius: 8,
-    paddingHorizontal: 5,
-    paddingVertical: 2,
-    minWidth: 54,
+    paddingHorizontal: 6,
+    paddingVertical: 0,
+    width: 64,
+    height: 26,
     textAlign: "center",
+    fontSize: 14,
   },
   maxSideInput: {
     backgroundColor: "#fff",
     borderColor: "#b9c1c8",
     borderWidth: 1,
     borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    width: 72,
+    paddingHorizontal: 6,
+    paddingVertical: 0,
+    width: 64,
+    height: 26,
     textAlign: "center",
+    fontSize: 14,
   },
   infoIconBtn: {
     width: 24,

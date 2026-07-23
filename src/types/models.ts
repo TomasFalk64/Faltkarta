@@ -89,6 +89,7 @@ export type AppSettings = {
   maxImageSizeMB: number;
   backgroundGPS: boolean;
   autoFollow: boolean;
+  artportalenTimeEnabled: boolean;
   coordinateSystem: "SWEREF99" | "WGS84";
   mapSortMode: "LATEST" | "ALPHA" | "NEAREST";
   mapSortAnchor?: LatLon;

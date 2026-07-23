@@ -120,7 +120,7 @@ export const speciesInfo: Record<string, { redList: string, speciesInfo: string 
   "Kärrvaxskinn": { redList: "NT", speciesInfo: "" },
   "Kötticka": { redList: "NT", speciesInfo: "" },
   "Lammticka": { redList: "VU", speciesInfo: "" },
-  "Lappraununkel": { redList: "LC", speciesInfo: "" },
+  "Lappranunkel": { redList: "LC", speciesInfo: "" },
   "Lappticka": { redList: "VU", speciesInfo: "Barklös granlåga. 5-10 cm bred konsolformad. \nMjuk, ovansida luden. Porer fläckas vid tryck" },
   "Lateritticka": { redList: "VU", speciesInfo: "" },
   "Laxporing": { redList: "VU", speciesInfo: "" },

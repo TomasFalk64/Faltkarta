@@ -69,13 +69,30 @@ function toArtportalenNotes(obs: Observation): string {
 
 export function buildArtportalenTsv(
   observations: Observation[], 
-  coordinateSystem: "SWEREF99" | "WGS84" = "SWEREF99"
+  coordinateSystem: "SWEREF99" | "WGS84" = "SWEREF99",
+  includeTime: boolean = true
 ): string {
   // Ändra rubrikerna för koordinaterna dynamiskt
   const coordLabel1 = coordinateSystem === "WGS84" ? "Ost" : "Ost";
   const coordLabel2 = coordinateSystem === "WGS84" ? "Nord" : "Nord";
 
-  const header = `Artnamn\tLokalnamn\tStartdatum\tStarttid\t${coordLabel1}\t${coordLabel2}\tNoggrannhet\tPublik kommentar\tAntal\tEnhet\tArt som substrat\tAktivitet\tSubstrat\tÅlder-Stadium\tKön`;
+  const header = [
+    "Artnamn",
+    "Lokalnamn",
+    "Startdatum",
+    ...(includeTime ? ["Starttid"] : []),
+    coordLabel1,
+    coordLabel2,
+    "Noggrannhet",
+    "Publik kommentar",
+    "Antal",
+    "Enhet",
+    "Art som substrat",
+    "Aktivitet",
+    "Substrat",
+    "Ålder-Stadium",
+    "Kön",
+  ].join("\t");
   
   const pointsOnly = observations.filter((obs) => obs.kind === "point");
 
@@ -106,7 +123,7 @@ export function buildArtportalenTsv(
       obs.species,
       localName,
       date,
-      time,
+      ...(includeTime ? [time] : []),
       val1,
       val2,
       accuracy,
