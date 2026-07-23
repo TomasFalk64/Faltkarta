@@ -1,6 +1,8 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { AppSettings, MapItem, Observation } from "../types/models";
+import { AppSettings, MapItem, Observation, ObservationPhoto } from "../types/models";
 import { getSafeUri, toStoredMapPath } from "../services/mapPaths";
+import { buildPhotoFileName } from "../services/photoUtils";
+import { deleteLocalPhotoFiles, guessImageExtension, isMapPhotoUri, removeMapPhotosDir } from "../services/photos";
 
 const MAPS_KEY = "maps:v1";
 const OBS_KEY = "observations:v1";
@@ -74,6 +76,7 @@ export async function removeMap(mapId: string): Promise<MapItem[]> {
   delete byMap[mapId];
   await saveObservationsByMapId(byMap);
   await removeAreaDescription(mapId);
+  await removeMapPhotosDir(mapId);
   return next;
 }
 
@@ -118,7 +121,10 @@ export async function loadObservationsByMapId(): Promise<Record<string, Observat
 }
 
 export async function saveObservationsByMapId(value: Record<string, Observation[]>) {
-  await AsyncStorage.setItem(OBS_KEY, JSON.stringify(value));
+  const normalized = Object.fromEntries(
+    Object.entries(value).map(([mapId, list]) => [mapId, list.map(normalizeObservation)])
+  );
+  await AsyncStorage.setItem(OBS_KEY, JSON.stringify(normalized));
 }
 
 export async function loadObservationsForMap(mapId: string): Promise<Observation[]> {
@@ -139,33 +145,115 @@ export async function updateObservation(updated: Observation): Promise<Observati
   const byMap = await loadObservationsByMapId();
   const list = byMap[updated.mapId] ?? [];
   const normalizedUpdated = normalizeObservation(updated);
+  const previous = list.find((obs) => obs.id === updated.id);
   const next = list.map((obs) => (obs.id === updated.id ? normalizedUpdated : normalizeObservation(obs)));
   byMap[updated.mapId] = next;
   await saveObservationsByMapId(byMap);
+  if (previous?.photos?.length) {
+    const nextLocalUris = new Set(normalizedUpdated.photos?.map((photo) => photo.localUri).filter(Boolean));
+    const removed = previous.photos.filter((photo) => photo.localUri && !nextLocalUris.has(photo.localUri));
+    await deleteLocalPhotoFiles(removed.filter((photo) => !isPhotoReferenced(byMap, photo.localUri)));
+  }
   return next;
 }
 
 export async function deleteObservation(mapId: string, observationId: string): Promise<Observation[]> {
   const byMap = await loadObservationsByMapId();
   const list = byMap[mapId] ?? [];
+  const deleted = list.find((obs) => obs.id === observationId);
   const next = list.filter((obs) => obs.id !== observationId);
   byMap[mapId] = next;
   await saveObservationsByMapId(byMap);
+  if (deleted?.photos?.length) {
+    await deleteLocalPhotoFiles(deleted.photos.filter((photo) => !isPhotoReferenced(byMap, photo.localUri)));
+  }
   return next;
 }
 
 function normalizeObservation(obs: Observation): Observation {
-  if (obs.kind !== "point") return obs;
   const photoNames = (obs.photoUris ?? []).map((value) => String(value ?? ""));
-  const photoAssetIds = (obs.photoAssetIds ?? []).map((value) => String(value ?? ""));
+  const photoAssetIds = obs.kind === "point"
+    ? (obs.photoAssetIds ?? []).map((value) => String(value ?? ""))
+    : [];
+  const photos = normalizeObservationPhotos(obs, photoNames, photoAssetIds);
+  const syncedPhotoUris = photos.map((photo) => photo.localUri ?? photo.originalUri ?? "");
+  if (obs.kind !== "point") {
+    return {
+      ...obs,
+      photos,
+      photoUris: syncedPhotoUris,
+    };
+  }
   return {
     ...obs,
-    photoUris: photoNames,
+    photos,
+    photoUris: syncedPhotoUris,
     pointNumber: typeof obs.pointNumber === "number" && Number.isFinite(obs.pointNumber) ? obs.pointNumber : undefined,
     localName: obs.localName ?? "",
     accuracyMeters: obs.accuracyMeters ?? null,
     photoAssetIds: photoAssetIds.length ? photoAssetIds : undefined,
   };
+}
+
+function normalizeObservationPhotos(
+  obs: Observation,
+  photoUris: string[],
+  photoAssetIds: string[]
+): ObservationPhoto[] {
+  const rawPhotos = Array.isArray((obs as { photos?: unknown }).photos)
+    ? ((obs as { photos?: Partial<ObservationPhoto>[] }).photos ?? [])
+    : [];
+  if (rawPhotos.length) {
+    return rawPhotos
+      .map((photo, index) => normalizePhoto(obs, photo, photoUris[index], photoAssetIds[index], index))
+      .filter((photo) => Boolean(photo.localUri || photo.originalUri || photo.assetId));
+  }
+  return photoUris
+    .map((uri, index) => normalizePhoto(obs, undefined, uri, photoAssetIds[index], index))
+    .filter((photo) => Boolean(photo.localUri || photo.originalUri || photo.assetId));
+}
+
+function normalizePhoto(
+  obs: Observation,
+  photo: Partial<ObservationPhoto> | undefined,
+  legacyUri: string | undefined,
+  legacyAssetId: string | undefined,
+  index: number
+): ObservationPhoto {
+  const localUri = String(photo?.localUri ?? "").trim();
+  const originalUri = String(photo?.originalUri ?? legacyUri ?? "").trim();
+  const assetId = String(photo?.assetId ?? legacyAssetId ?? "").trim();
+  const fallbackRef = localUri || originalUri;
+  const extension = guessImageExtension(photo?.fileName ?? fallbackRef);
+  const status =
+    photo?.status === "ready" || photo?.status === "pending" || photo?.status === "failed"
+      ? photo.status
+      : localUri || isMapPhotoUri(originalUri, obs.mapId)
+        ? "ready"
+        : "failed";
+  const resolvedLocalUri = localUri || (isMapPhotoUri(originalUri, obs.mapId) ? originalUri : undefined);
+  const resolvedOriginalUri = resolvedLocalUri === originalUri ? undefined : originalUri || undefined;
+  return {
+    localUri: resolvedLocalUri,
+    originalUri: resolvedOriginalUri,
+    assetId: assetId || undefined,
+    status,
+    fileName: String(photo?.fileName ?? "").trim() || buildPhotoFileName({
+      observationId: obs.id,
+      label: obs.kind === "point" ? String(obs.pointNumber ?? obs.id) : obs.polygonName || obs.id,
+      name: obs.kind === "point" ? obs.species : obs.polygonName || `Polygon${index + 1}`,
+      dateISO: obs.dateISO,
+      index,
+      extension: extension === "jpg" || extension === "jpeg" ? "jpg" : "jpg",
+    }),
+  };
+}
+
+function isPhotoReferenced(byMap: Record<string, Observation[]>, localUri?: string): boolean {
+  if (!localUri) return false;
+  return Object.values(byMap).some((list) =>
+    list.some((obs) => obs.photos?.some((photo) => photo.localUri === localUri))
+  );
 }
 
 export async function loadSettings(): Promise<AppSettings> {

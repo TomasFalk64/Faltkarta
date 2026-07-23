@@ -10,10 +10,11 @@ import * as XLSX from "xlsx";
 import Papa from "papaparse";
 import piexif from "piexifjs";
 import { Alert, Image, Linking, Platform } from "react-native";
-import { Observation, PointObservation } from "../types/models";
+import { Observation, ObservationPhoto, PointObservation } from "../types/models";
 import { averageLatLon, wgs84ToSweref99tm } from "./coords";
 import { exportDir } from "./files";
-import { buildPointPhotoFileName, guessImageExtension, resolvePointPhotoUri, sanitizeForFileName } from "./photos";
+import { getFileSize, guessImageExtension, resolvePointPhotoUri, sanitizeForFileName } from "./photos";
+import { buildPhotoFileName as buildSharedPhotoFileName, maxPhotoSideForSetting } from "./photoUtils";
 import { speciesInfo } from "../data/species_info";
 
 
@@ -391,7 +392,8 @@ export async function saveZipBundleAndShare(
   mapFileUri?: string | null,
   maxImageSizeMB = 2,
   coordinateSystem: "SWEREF99" | "WGS84" = "SWEREF99",
-  mapDate?: string
+  mapDate?: string,
+  onProgress?: (message: string) => void
 ): Promise<{ shared: boolean }> {
   const dir = await createExportSessionDir();
   const zip = new JSZip();
@@ -413,26 +415,33 @@ export async function saveZipBundleAndShare(
   }
 
   let polygonCounter = 0;
+  const photoCount = observations.reduce((sum, obs) => sum + (obs.photos?.length ?? 0), 0);
+  let processedPhotos = 0;
+  const usedPhotoFileNames = new Set<string>();
   for (const obs of observations) {
     if (obs.kind === "polygon") polygonCounter += 1;
     const label = observationLabel(obs, polygonCounter);
     const name = observationName(obs, polygonCounter);
-    for (let index = 0; index < obs.photoUris.length; index++) {
-      const ref = String(obs.photoUris[index] ?? "").trim();
-      if (!ref) continue;
+    for (let index = 0; index < obs.photos.length; index++) {
+      const photo = obs.photos[index];
+      processedPhotos += 1;
+      onProgress?.(`Lägger till bild ${processedPhotos} av ${photoCount}`);
       try {
-        const assetId = obs.kind === "point" ? obs.photoAssetIds?.[index] : undefined;
-        const optimized = await optimizePhotoForZip(ref, assetId, obs.dateISO, maxImageSizeMB);
-        if (!optimized) continue;
-        const fileName = buildPhotoFileName(label, name, optimized.dateISO, index, optimized.extension);
-        zip.file(`bilder/${fileName}`, optimized.base64, { base64: true });
+        const zipPhoto = await photoToZipEntry(photo, obs, index, maxImageSizeMB);
+        if (!zipPhoto) continue;
+        const fileName = makeUniqueFileName(
+          buildPhotoFileName(obs, label, name, obs.dateISO, index, zipPhoto.extension),
+          usedPhotoFileNames
+        );
+        zip.file(`bilder/${fileName}`, zipPhoto.base64, { base64: true, compression: "STORE" });
       } catch {
         // Continue even if a specific image no longer exists.
       }
     }
   }
 
-  const zipBase64 = await zip.generateAsync({ type: "base64" });
+  onProgress?.("Skapar ZIP-fil...");
+  const zipBase64 = await zip.generateAsync({ type: "base64", compression: "STORE" });
   const path = `${dir}${safeMapName}.zip`;
   let shared = false;
   try {
@@ -552,13 +561,67 @@ function observationLabel(obs: Observation, polygonIndex: number): string {
 }
 
 function buildPhotoFileName(
+  obs: Observation,
   label: string,
   name: string,
   dateISO: string,
   index: number,
   extension: string
 ): string {
-  return buildPointPhotoFileName(label, name, dateISO, index + 1, extension);
+  return buildSharedPhotoFileName({
+    observationId: obs.id,
+    label,
+    name,
+    dateISO,
+    index,
+    extension,
+  });
+}
+
+function makeUniqueFileName(fileName: string, used: Set<string>): string {
+  if (!used.has(fileName)) {
+    used.add(fileName);
+    return fileName;
+  }
+  const dot = fileName.lastIndexOf(".");
+  const base = dot >= 0 ? fileName.slice(0, dot) : fileName;
+  const ext = dot >= 0 ? fileName.slice(dot) : "";
+  let counter = 2;
+  let candidate = `${base}_${counter}${ext}`;
+  while (used.has(candidate)) {
+    counter += 1;
+    candidate = `${base}_${counter}${ext}`;
+  }
+  used.add(candidate);
+  return candidate;
+}
+
+async function photoToZipEntry(
+  photo: ObservationPhoto,
+  obs: Observation,
+  index: number,
+  maxImageSizeMB: number
+): Promise<{ base64: string; extension: string; dateISO: string } | null> {
+  const maxBytes = Math.max(0.2, maxImageSizeMB) * 1024 * 1024;
+  if (photo.status === "ready" && photo.localUri) {
+    const size = await getFileSize(photo.localUri);
+    if (size !== null && size <= maxBytes * 1.5) {
+      const base64 = await FileSystem.readAsStringAsync(photo.localUri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+      return {
+        base64,
+        extension: guessImageExtension(photo.localUri),
+        dateISO: obs.dateISO,
+      };
+    }
+    const optimizedReady = await optimizePhotoForZip(photo.localUri, photo.assetId, obs.dateISO, maxImageSizeMB);
+    if (optimizedReady) return optimizedReady;
+  }
+
+  const fallbackRef = photo.originalUri ?? photo.localUri ?? "";
+  if (!fallbackRef && !photo.assetId) return null;
+  return await optimizePhotoForZip(fallbackRef, photo.assetId, obs.dateISO, maxImageSizeMB);
 }
 
 async function createExportSessionDir(): Promise<string> {
@@ -603,11 +666,12 @@ async function optimizePhotoForZip(
   const size = await getImageSizeSafe(uri);
   const maxSide = size ? Math.max(size.width, size.height) : null;
   const actions: ImageManipulator.Action[] = [];
-  if (maxSide && maxSide > 2000) {
+  const configuredMaxSide = maxPhotoSideForSetting(maxImageSizeMB);
+  if (maxSide && maxSide > configuredMaxSide) {
     if (size && size.width >= size.height) {
-      actions.push({ resize: { width: 2000 } });
+      actions.push({ resize: { width: configuredMaxSide } });
     } else {
-      actions.push({ resize: { height: 2000 } });
+      actions.push({ resize: { height: configuredMaxSide } });
     }
   }
   const needsCompression = originalBytes !== null ? originalBytes > maxBytes : false;

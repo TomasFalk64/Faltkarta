@@ -1,6 +1,16 @@
 import * as FileSystem from "expo-file-system/legacy";
+import * as ImageManipulator from "expo-image-manipulator";
 import * as MediaLibrary from "expo-media-library";
+import { Image } from "react-native";
+import { ObservationPhoto } from "../types/models";
 import { makeId } from "../utils/id";
+import {
+  buildPointPhotoFileName,
+  maxPhotoSideForSetting,
+  sanitizeForFileName,
+} from "./photoUtils";
+
+export { buildPointPhotoFileName, sanitizeForFileName } from "./photoUtils";
 
 const TEMP_PREFIX = "faltkarta_pending_";
 
@@ -76,14 +86,6 @@ export function photoFileNameFromRef(value: string): string {
   return chunks[chunks.length - 1] ?? normalized;
 }
 
-export function sanitizeForFileName(value: string): string {
-  const normalized = toAscii(value)
-    .replace(/[^A-Za-z0-9._-]+/g, "_")
-    .replace(/_+/g, "_")
-    .replace(/^[_\-.]+|[_\-.]+$/g, "");
-  return normalized || "okand";
-}
-
 export async function createPendingPhotoCopy(sourceUri: string): Promise<string> {
   const extension = guessImageExtension(sourceUri);
   const target = `${FileSystem.cacheDirectory}${TEMP_PREFIX}${makeId("tmp")}.${extension}`;
@@ -114,29 +116,6 @@ export async function cleanupAllPendingPhotoCopies(): Promise<void> {
   }
 }
 
-export function buildPointPhotoFileName(
-  pointNumber: string,
-  species: string,
-  dateISO: string,
-  sequence: number,
-  extension: string
-): string {
-  const point = sanitizeForFileName(pointNumber);
-  const art = sanitizeForFileName(species);
-  const ts = formatDateForFileName(dateISO);
-  return `${point}_${art}_${ts}_${sequence}.${extension}`;
-}
-
-function formatDateForFileName(dateISO: string): string {
-  const date = new Date(dateISO);
-  const yyyy = date.getFullYear();
-  const mm = pad2(date.getMonth() + 1);
-  const dd = pad2(date.getDate());
-  const hh = pad2(date.getHours());
-  const min = pad2(date.getMinutes());
-  return `${yyyy}-${mm}-${dd}_${hh}-${min}`;
-}
-
 export function guessImageExtension(uri: string): string {
   const clean = uri.split("?")[0];
   const match = clean.match(/\.([A-Za-z0-9]+)$/);
@@ -145,6 +124,90 @@ export function guessImageExtension(uri: string): string {
   if (ext === "jpeg") return "jpg";
   if (["jpg", "png", "webp", "heic", "heif"].includes(ext)) return ext;
   return "jpg";
+}
+
+export function mapPhotosDir(mapId: string): string {
+  const base = FileSystem.documentDirectory ?? "";
+  return `${base}maps/${sanitizeForFileName(mapId)}/photos/`;
+}
+
+export async function ensureMapPhotosDir(mapId: string): Promise<string> {
+  const dir = mapPhotosDir(mapId);
+  const info = await FileSystem.getInfoAsync(dir);
+  if (!info.exists) {
+    await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
+  }
+  return dir;
+}
+
+export function isMapPhotoUri(uri: string, mapId: string): boolean {
+  return String(uri ?? "").startsWith(mapPhotosDir(mapId));
+}
+
+export async function deleteLocalPhotoFiles(photos: ObservationPhoto[]): Promise<void> {
+  await Promise.all(
+    photos
+      .map((photo) => photo.localUri)
+      .filter((uri): uri is string => !!uri)
+      .map((uri) => deleteIfExists(uri))
+  );
+}
+
+export async function removeMapPhotosDir(mapId: string): Promise<void> {
+  await deleteIfExists(mapPhotosDir(mapId));
+}
+
+export async function getFileSize(uri: string): Promise<number | null> {
+  const info = await FileSystem.getInfoAsync(uri, { size: true } as any);
+  if (info && "size" in info && typeof (info as { size?: number }).size === "number") {
+    return (info as { size?: number }).size ?? null;
+  }
+  return null;
+}
+
+export async function compressPhotoToAppFile(options: {
+  sourceRef?: string;
+  assetId?: string;
+  targetUri: string;
+  maxImageSizeMB: number;
+}): Promise<string | null> {
+  const source = options.sourceRef
+    ? await resolvePointPhotoUri(options.sourceRef, options.assetId)
+    : options.assetId
+      ? await resolvePointPhotoUri("", options.assetId)
+      : null;
+  if (!source) return null;
+
+  await ensureParentDir(options.targetUri);
+  const size = await getImageSizeSafe(source);
+  const maxSide = maxPhotoSideForSetting(options.maxImageSizeMB);
+  const actions: ImageManipulator.Action[] = [];
+  if (size && Math.max(size.width, size.height) > maxSide) {
+    if (size.width >= size.height) {
+      actions.push({ resize: { width: maxSide } });
+    } else {
+      actions.push({ resize: { height: maxSide } });
+    }
+  }
+
+  const originalBytes = await getFileSize(source);
+  const maxBytes = Math.max(0.2, options.maxImageSizeMB) * 1024 * 1024;
+  const compress = originalBytes && originalBytes > maxBytes
+    ? Math.min(0.95, Math.max(0.2, maxBytes / originalBytes))
+    : 0.9;
+
+  const result = await ImageManipulator.manipulateAsync(source, actions, {
+    compress,
+    format: ImageManipulator.SaveFormat.JPEG,
+    base64: false,
+  });
+  if (!result.uri) return null;
+  await deleteIfExists(options.targetUri);
+  await FileSystem.copyAsync({ from: result.uri, to: options.targetUri });
+  if (result.uri !== source) {
+    await deleteIfExists(result.uri);
+  }
+  return options.targetUri;
 }
 
 async function findAssetUriByFilename(fileName: string): Promise<string | null> {
@@ -168,6 +231,16 @@ async function findAssetUriByFilename(fileName: string): Promise<string | null> 
   return null;
 }
 
+async function ensureParentDir(uri: string): Promise<void> {
+  const idx = uri.lastIndexOf("/");
+  if (idx < 0) return;
+  const dir = uri.slice(0, idx + 1);
+  const info = await FileSystem.getInfoAsync(dir);
+  if (!info.exists) {
+    await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
+  }
+}
+
 async function deleteIfExists(uri: string): Promise<void> {
   try {
     const info = await FileSystem.getInfoAsync(uri);
@@ -179,18 +252,30 @@ async function deleteIfExists(uri: string): Promise<void> {
   }
 }
 
-function toAscii(value: string): string {
-  return value
-    .replace(/[åä]/gi, "a")
-    .replace(/[ö]/gi, "o")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
+function getImageSizeSafe(uri: string): Promise<{ width: number; height: number } | null> {
+  return new Promise((resolve) => {
+    Image.getSize(
+      uri,
+      (width, height) => resolve({ width, height }),
+      async () => {
+        try {
+          const fallback = await ImageManipulator.manipulateAsync(uri, [], {
+            compress: 1,
+            format: ImageManipulator.SaveFormat.JPEG,
+            base64: false,
+          });
+          if (fallback.uri && fallback.uri !== uri) {
+            await deleteIfExists(fallback.uri);
+          }
+          resolve({ width: fallback.width, height: fallback.height });
+        } catch {
+          resolve(null);
+        }
+      }
+    );
+  });
 }
 
 function looksLikeUri(value: string): boolean {
   return value.startsWith("file://") || value.startsWith("content://") || value.startsWith("ph://");
-}
-
-function pad2(value: number): string {
-  return String(value).padStart(2, "0");
 }

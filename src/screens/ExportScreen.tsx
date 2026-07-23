@@ -28,6 +28,7 @@ export function ExportScreen({ route }: Props) {
   const [showExcelModal, setShowExcelModal] = useState(false);
   const [showArtportalenModal, setShowArtportalenModal] = useState(false);
   const [isCreatingZip, setIsCreatingZip] = useState(false);
+  const [zipProgress, setZipProgress] = useState("Komprimerar bilder");
   const [coordinateSystem, setCoordinateSystem] = useState<"SWEREF99" | "WGS84">("SWEREF99");
   const [artportalenTimeEnabled, setArtportalenTimeEnabled] = useState(true);
 
@@ -119,14 +120,36 @@ export function ExportScreen({ route }: Props) {
       Alert.alert("Export", "Inga observationer att exportera.");
       return;
     }
+    const pendingCount = observations.reduce(
+      (sum, obs) => sum + (obs.photos?.filter((photo) => photo.status === "pending").length ?? 0),
+      0
+    );
+    if (pendingCount > 0) {
+      Alert.alert("Export", "Vissa bilder bearbetas fortfarande. Exporten försöker använda originalbilder för dem.");
+    }
     setIsCreatingZip(true);
+    setZipProgress("Förbereder ZIP-export...");
     try {
-      const result = await saveZipBundleAndShare(mapName, mapNotes, observations, mapFileUri, maxImageSizeMB, coordinateSystem, mapDate);
+      const settings = await loadSettings();
+      const freshMaxImageSizeMB = settings.maxImageSizeMB ?? maxImageSizeMB;
+      setMaxImageSizeMB(freshMaxImageSizeMB);
+      const result = await saveZipBundleAndShare(
+        mapName,
+        mapNotes,
+        observations,
+        mapFileUri,
+        freshMaxImageSizeMB,
+        coordinateSystem,
+        mapDate,
+        setZipProgress
+      );
       if (!result.shared) {
         Alert.alert("Export", "Delning ar inte tillganglig pa enheten."); 
         return;
       }
       Alert.alert("Sparad", "ZIP skapad och delad.");
+    } catch (error) {
+      Alert.alert("Export misslyckades", String(error));
     } finally {
       setIsCreatingZip(false);
     }
@@ -223,7 +246,7 @@ export function ExportScreen({ route }: Props) {
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Komprimerar bilder</Text>
-            <Text style={styles.modalBody}>Snart klar, ta det lugnt. </Text>
+            <Text style={styles.modalBody}>{zipProgress}</Text>
           </View>
         </View>
       </Modal>

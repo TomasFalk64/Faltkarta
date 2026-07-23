@@ -710,6 +710,7 @@ export function MapListScreen({ navigation }: Props) {
             polygonName,
             count: 1,
             notes,
+            photos: [],
             photoUris: [],
             dateISO: now,
             wgs84: clipped,

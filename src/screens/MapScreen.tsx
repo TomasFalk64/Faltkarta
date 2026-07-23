@@ -18,12 +18,14 @@ import {
   updateObservation,
 } from "../storage/storage";
 import { speciesGroups } from "../data/speciesGroups";
-import { LatLon, MapItem, Observation, PolygonObservation, PointObservation, VisibleFields } from "../types/models";
+import { LatLon, MapItem, Observation, ObservationPhoto, PolygonObservation, PointObservation, VisibleFields } from "../types/models";
 import { makeId } from "../utils/id";
 import { ensureMapGeorefBounds } from "../services/files";
 import { resolvePointPhotoUri } from "../services/photos";
 import { distanceMeters } from "../services/coords";
 import { getSafeUri } from "../services/mapPaths";
+import { buildPhotoFileName } from "../services/photoUtils";
+import { queuePendingPhotoProcessing, queuePendingPhotoProcessingForMap } from "../services/photoProcessing";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Map">;
 
@@ -98,8 +100,8 @@ export function MapScreen({ route, navigation }: Props) {
     rawAccuracyMeters,
     error: gpsError,
   } = useGpsContext();
-  const editingPhotoLookupRef = useRef<Record<string, { ref: string; assetId?: string }>>({});
-  const editingMissingPhotosRef = useRef<Array<{ ref: string; assetId?: string }>>([]);
+  const editingPhotoLookupRef = useRef<Record<string, { ref: string; assetId?: string; photo?: ObservationPhoto }>>({});
+  const editingMissingPhotosRef = useRef<Array<{ ref: string; assetId?: string; photo?: ObservationPhoto }>>([]);
   const followTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const speciesGroupsByLower = useMemo(() => {
@@ -133,6 +135,7 @@ export function MapScreen({ route, navigation }: Props) {
         await upsertMap(hydrated);
       }
       setObservations(obs);
+      queuePendingPhotoProcessingForMap(mapId);
       setOwnSpeciesGroups(groups);
       setAutoFollow(settings.autoFollow ?? false);
       setGpsPingSeconds(settings.gpsPingSeconds);
@@ -297,6 +300,57 @@ export function MapScreen({ route, navigation }: Props) {
     return idx >= 0 ? idx + 1 : getNextPointNumber();
   }
 
+  function photoDisplayRef(photo: ObservationPhoto): string {
+    return photo.localUri ?? photo.originalUri ?? "";
+  }
+
+  function makePendingPhoto(options: {
+    observationId: string;
+    label: string;
+    name: string;
+    dateISO: string;
+    index: number;
+    uri: string;
+    assetId?: string;
+  }): ObservationPhoto {
+    return {
+      originalUri: options.uri,
+      assetId: options.assetId?.trim() || undefined,
+      status: "pending",
+      fileName: buildPhotoFileName({
+        observationId: options.observationId,
+        label: options.label,
+        name: options.name,
+        dateISO: options.dateISO,
+        index: options.index,
+        extension: "jpg",
+      }),
+    };
+  }
+
+  function syncLegacyPhotoFields<T extends Observation>(obs: T): T {
+    const photoUris = obs.photos.map(photoDisplayRef);
+    if (obs.kind === "point") {
+      const photoAssetIds = obs.photos.map((photo) => photo.assetId ?? "");
+      const hasAnyAssetId = photoAssetIds.some((id) => id.trim().length > 0);
+      return {
+        ...obs,
+        photoUris,
+        photoAssetIds: hasAnyAssetId ? photoAssetIds : undefined,
+      } as T;
+    }
+    return { ...obs, photoUris } as T;
+  }
+
+  function currentPolygonPhotoLookup(obs: PolygonObservation): Record<string, ObservationPhoto> {
+    const lookup: Record<string, ObservationPhoto> = {};
+    obs.photos.forEach((photo) => {
+      const ref = photoDisplayRef(photo);
+      if (ref) lookup[ref] = photo;
+    });
+    return lookup;
+  }
+
   async function onAddPoint(payload: {
     species?: string;
     notes: string;
@@ -327,21 +381,43 @@ export function MapScreen({ route, navigation }: Props) {
       const missingExisting = editingMissingPhotosRef.current;
       const ordered = payload.photoUris.map((uri, index) => {
         const existing = currentLookup[uri];
-        if (existing) return { ref: existing.ref, assetId: existing.assetId };
+        if (existing?.photo) return existing.photo;
+        if (existing) {
+          return makePendingPhoto({
+            observationId: pointId,
+            label: String(pointNumber),
+            name: species,
+            dateISO,
+            index,
+            uri: existing.ref,
+            assetId: existing.assetId,
+          });
+        }
         const payloadAssetId = String(payload.photoAssetIds?.[index] ?? "");
-        return { ref: uri, assetId: payloadAssetId };
+        return makePendingPhoto({
+          observationId: pointId,
+          label: String(pointNumber),
+          name: species,
+          dateISO,
+          index,
+          uri,
+          assetId: payloadAssetId,
+        });
       });
-      const photoUris = [...ordered.map((p) => p.ref), ...missingExisting.map((p) => p.ref)];
-      const photoAssetIds = [...ordered.map((p) => p.assetId ?? ""), ...missingExisting.map((p) => p.assetId ?? "")];
-      const hasAnyAssetId = photoAssetIds.some((id) => String(id ?? "").trim().length > 0);
+      const photos = [
+        ...ordered,
+        ...missingExisting
+          .map((item) => item.photo)
+          .filter((photo): photo is ObservationPhoto => !!photo),
+      ];
 
       const obs: PointObservation = editingPoint
         ? {
             ...editingPoint,
             species,
             notes: payload.notes,
-            photoUris,
-            photoAssetIds: hasAnyAssetId ? photoAssetIds : undefined,
+            photos,
+            photoUris: [],
             pointNumber,
             localName: payload.localName?.trim() || map.title,
             accuracyMeters: payload.accuracyMetersWasModified
@@ -377,8 +453,8 @@ export function MapScreen({ route, navigation }: Props) {
             species,
             count: 1,
             notes: payload.notes,
-            photoUris,
-            photoAssetIds: hasAnyAssetId ? photoAssetIds : undefined,
+            photos,
+            photoUris: [],
             pointNumber,
             localName: payload.localName?.trim() || map.title,
             accuracyMeters: clampAccuracy(
@@ -395,8 +471,12 @@ export function MapScreen({ route, navigation }: Props) {
             wgs84: frozenPointCoord || crosshairPos,
           };
 
-      const next = editingPoint ? await updateObservation(obs) : await addObservation(obs);
+      const normalizedObs = syncLegacyPhotoFields(obs);
+      const next = editingPoint ? await updateObservation(normalizedObs) : await addObservation(normalizedObs);
       setObservations(next);
+      if (photos.some((photo) => photo.status === "pending")) {
+        queuePendingPhotoProcessing(map.id, pointId);
+      }
       setEditingPoint(null);
       setEditingPointPhotoPreviewUris([]);
       setEditingPointPhotoPreviewAssetIds([]);
@@ -443,14 +523,31 @@ export function MapScreen({ route, navigation }: Props) {
       return;
     }
     if (editingPolygon) {
+      const polygonPhotos = payload.photoUris.map((uri, index) => {
+        const existing = currentPolygonPhotoLookup(editingPolygon)[uri];
+        if (existing) return existing;
+        return makePendingPhoto({
+          observationId: editingPolygon.id,
+          label: editingPolygon.polygonName || editingPolygon.id,
+          name: polygonName,
+          dateISO: editingPolygon.dateISO,
+          index,
+          uri,
+        });
+      });
       const obs: PolygonObservation = {
         ...editingPolygon,
         polygonName,
         notes: payload.notes,
-        photoUris: payload.photoUris,
+        photos: polygonPhotos,
+        photoUris: [],
       };
-      const next = await updateObservation(obs);
+      const normalizedObs = syncLegacyPhotoFields(obs);
+      const next = await updateObservation(normalizedObs);
       setObservations(next);
+      if (polygonPhotos.some((photo) => photo.status === "pending")) {
+        queuePendingPhotoProcessing(map.id, editingPolygon.id);
+      }
       setEditingPolygon(null);
       showToast("Polygon uppdaterad");
       return;
@@ -459,19 +556,36 @@ export function MapScreen({ route, navigation }: Props) {
       Alert.alert("Polygon", "Minst 2 punkter kravs.");
       return;
     }
+    const polygonId = makeId("obs");
+    const dateISO = new Date().toISOString();
+    const photos = payload.photoUris.map((uri, index) =>
+      makePendingPhoto({
+        observationId: polygonId,
+        label: polygonName,
+        name: polygonName,
+        dateISO,
+        index,
+        uri,
+      })
+    );
     const obs: PolygonObservation = {
-      id: makeId("obs"),
+      id: polygonId,
       mapId: map.id,
       kind: "polygon",
       polygonName,
       count: 1,
       notes: payload.notes,
-      photoUris: payload.photoUris,
-      dateISO: new Date().toISOString(),
+      photos,
+      photoUris: [],
+      dateISO,
       wgs84: draftPolygon,
     };
-    const next = await addObservation(obs);
+    const normalizedObs = syncLegacyPhotoFields(obs);
+    const next = await addObservation(normalizedObs);
     setObservations(next);
+    if (photos.some((photo) => photo.status === "pending")) {
+      queuePendingPhotoProcessing(map.id, polygonId);
+    }
     setDraftPolygon([]);
     setPolygonMode(false);
     showToast("Polygon sparad");
@@ -483,9 +597,10 @@ export function MapScreen({ route, navigation }: Props) {
 
   async function openPointEditor(obs: PointObservation) {
     centerOnObservation(obs.wgs84);
-    const existing = obs.photoUris.map((ref, index) => ({
-      ref: String(ref ?? ""),
-      assetId: obs.photoAssetIds?.[index],
+    const existing = obs.photos.map((photo, index) => ({
+      ref: photoDisplayRef(photo),
+      assetId: photo.assetId ?? obs.photoAssetIds?.[index],
+      photo,
     }));
     const resolved = await Promise.all(
       existing.map(async (item) => ({
@@ -493,17 +608,17 @@ export function MapScreen({ route, navigation }: Props) {
         uri: await resolvePointPhotoUri(item.ref, item.assetId),
       }))
     );
-    const previewLookup: Record<string, { ref: string; assetId?: string }> = {};
+    const previewLookup: Record<string, { ref: string; assetId?: string; photo?: ObservationPhoto }> = {};
     const previewUris: string[] = [];
     const previewAssetIds: string[] = [];
-    const missing: Array<{ ref: string; assetId?: string }> = [];
+    const missing: Array<{ ref: string; assetId?: string; photo?: ObservationPhoto }> = [];
     resolved.forEach((item) => {
       if (item.uri) {
-        previewLookup[item.uri] = { ref: item.ref, assetId: item.assetId };
+        previewLookup[item.uri] = { ref: item.ref, assetId: item.assetId, photo: item.photo };
         previewUris.push(item.uri);
         previewAssetIds.push(String(item.assetId ?? ""));
       } else {
-        missing.push({ ref: item.ref, assetId: item.assetId });
+        missing.push({ ref: item.ref, assetId: item.assetId, photo: item.photo });
       }
     });
     editingPhotoLookupRef.current = previewLookup;

@@ -45,6 +45,17 @@ export type ObservationBase = {
   notes: string;
   dateISO: string;
   photoUris: string[];
+  photos: ObservationPhoto[];
+};
+
+export type ObservationPhotoStatus = "pending" | "ready" | "failed";
+
+export type ObservationPhoto = {
+  localUri?: string;
+  originalUri?: string;
+  assetId?: string;
+  status: ObservationPhotoStatus;
+  fileName: string;
 };
 
 export type PointObservation = ObservationBase & {
