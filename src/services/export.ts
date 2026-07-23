@@ -441,6 +441,7 @@ export async function saveZipBundleAndShare(
   }
 
   onProgress?.("Skapar ZIP-fil...");
+  await new Promise((resolve) => setTimeout(resolve, 50));
   const zipBase64 = await zip.generateAsync({ type: "base64", compression: "STORE" });
   const path = `${dir}${safeMapName}.zip`;
   let shared = false;
