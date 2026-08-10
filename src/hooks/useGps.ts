@@ -32,6 +32,7 @@ const STACK_MAX_AGE_MS = 30_000;
 const MEMORY_DEPTH = 2;
 const MAX_SPEED_MPS = 50;
 const MAX_GOOD_ACCURACY = 100;
+const JUMP_FILTER_RESET_MS = 20_000;
 const DEBUG_GPS = false;
 const HEADING_MIN_INTERVAL_MS = 50;
 const HEADING_MIN_DELTA_DEG = 0.8;
@@ -118,11 +119,14 @@ export function useGps({ pingSeconds, backgroundGPS, headingEnabled, headingSusp
     }
     if (lastSampleRef.current?.timestamp === sample.timestamp) return;
     if (!Number.isFinite(sample.rawAccuracy)) return;
+    setRawAccuracyMeters(sample.rawAccuracy);
     if (sample.rawAccuracy > MAX_GOOD_ACCURACY) return;
 
     if (lastSampleRef.current) {
-      const dtSec = (sample.timestamp - lastSampleRef.current.timestamp) / 1000;
-      if (dtSec > 0) {
+      const dtMs = sample.timestamp - lastSampleRef.current.timestamp;
+      const shouldRunJumpFilter = dtMs > 0 && dtMs <= JUMP_FILTER_RESET_MS;
+      if (shouldRunJumpFilter) {
+        const dtSec = dtMs / 1000;
         const jump = distanceMeters(
           { lat: lastSampleRef.current.lat, lon: lastSampleRef.current.lon },
           { lat: sample.lat, lon: sample.lon }
@@ -188,7 +192,6 @@ export function useGps({ pingSeconds, backgroundGPS, headingEnabled, headingSusp
       lat: latSum / weightSum,
       lon: lonSum / weightSum,
     });
-    setRawAccuracyMeters(sample.rawAccuracy);
     setDisplayAccuracyMeters(weightedAccuracy);
     setError(null);
   }, []);

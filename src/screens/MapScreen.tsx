@@ -305,8 +305,9 @@ export function MapScreen({ route, navigation }: Props) {
     setCenterCoord(clampToMapBounds(gpsPos));
   }
 
-  const combinedRaw = displayAccuracyMeters ?? rawAccuracyMeters ?? 0;
-  const displayCombined = combinedRaw > 0 ? Math.min(99, Math.max(5, combinedRaw)) : 0;
+  const combinedRaw = rawAccuracyMeters ?? displayAccuracyMeters ?? 0;
+  const displayCombined = combinedRaw > 0 && combinedRaw <= 99 ? Math.min(99, Math.max(5, combinedRaw)) : 0;
+  const accuracyText = displayCombined > 0 ? String(displayCombined) : "...";
   const clampAccuracy = (value?: number | null): number | null => {
     if (value === null || value === undefined) return null;
     if (!Number.isFinite(value) || value <= 0) return null;
@@ -862,13 +863,13 @@ export function MapScreen({ route, navigation }: Props) {
       <Pressable
         style={[
           styles.accuracyPill,
-          displayCombined > 15 ? styles.accuracyPillBad : undefined,
+          !displayCombined || displayCombined > 15 ? styles.accuracyPillBad : undefined,
         ]}
         onPress={() => {
           setShowAccuracyHelp(true);
         }}
       >
-        <Text style={styles.accuracyPillText}>{displayCombined > 0 ? String(displayCombined) : "..."}</Text>
+        <Text style={styles.accuracyPillText}>{accuracyText}</Text>
       </Pressable>
 
       <View style={styles.controls}>
