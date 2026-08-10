@@ -24,13 +24,13 @@ import {
   getMaxSideSetting,
   loadAreaDescriptions,
   loadMaps,
-  loadObservationsByMapId,
+  loadObservationCounts,
   loadSettings,
+  prependObservationsForMap,
   removeMap,
   renameMapAndSyncPointLocalNames,
   saveAreaDescription,
   saveMaxSideSetting,
-  saveObservationsByMapId,
   saveSettings,
   upsertMap,
 } from "../storage/storage";
@@ -207,12 +207,7 @@ export function MapListScreen({ navigation }: Props) {
     setCoordinateSystem(settings.coordinateSystem ?? "SWEREF99");
     const descriptions = await loadAreaDescriptions();
     setAreaDescriptions(descriptions);
-    const byMap = await loadObservationsByMapId();
-    const counts: Record<string, number> = {};
-    for (const mapId in byMap) {
-      counts[mapId] = byMap[mapId]?.length ?? 0;
-    }
-    setObservationCounts(counts);
+    setObservationCounts(await loadObservationCounts());
   }, [gpsOptions.backgroundGPS, setGpsOptions]);
 
   useEffect(() => {
@@ -484,6 +479,7 @@ export function MapListScreen({ navigation }: Props) {
       setMaps(sortMaps(next, mapSortMode, mapSortAnchor));
     }
   }
+
   const onSaveSettings = async () => {
     try {
       //const parsedPing = Number.parseInt(gpsPingSeconds, 10);
@@ -723,10 +719,8 @@ export function MapListScreen({ navigation }: Props) {
         return;
       }
 
-      const byMap = await loadObservationsByMapId();
-      const current = byMap[map.id] ?? [];
-      byMap[map.id] = [...nextPolygons, ...current];
-      await saveObservationsByMapId(byMap);
+      const next = await prependObservationsForMap(map.id, nextPolygons);
+      setObservationCounts((prev) => ({ ...prev, [map.id]: next.length }));
 
       Alert.alert("Import klar", `Tillagda polygoner: ${nextPolygons.length}`);
     } catch (error) {

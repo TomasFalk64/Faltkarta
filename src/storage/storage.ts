@@ -6,12 +6,26 @@ import { deleteLocalPhotoFiles, guessImageExtension, isMapPhotoUri, removeMapPho
 
 const MAPS_KEY = "maps:v1";
 const OBS_KEY = "observations:v1";
+const OBS_MIGRATION_KEY = "observations:perMapMigration:v1";
+const OBS_MAP_KEY_PREFIX = "observations:map:v1:";
+const OBS_COUNTS_KEY = "observationCounts:v1";
 const SETTINGS_KEY = "settings:v1";
 const USER_SPECIES_KEY = "userSpecies.json";
 const USER_SPECIES_GROUPS_KEY = "ownSpeciesGroups:v1";
 const AREA_DESCRIPTION_KEY = "mapAreaDescriptions:v1";
 const MAX_SIDE_SETTING_KEY = "maxSideSetting:v1";
+const OBS_SIZE_WARNINGS_KEY = "observationSizeWarnings:v1";
 const DEFAULT_MAX_SIDE = 1400;
+const OBS_SIZE_FIRST_WARNING_BYTES = 750 * 1024;
+const OBS_SIZE_SECOND_WARNING_BYTES = 1024 * 1024;
+
+export type ObservationSizeWarning = {
+  level: 1 | 2;
+  sizeBytes: number;
+  observationCount: number;
+};
+
+let observationMigrationPromise: Promise<void> | null = null;
 
 export async function loadMaps(): Promise<MapItem[]> {
   const raw = await AsyncStorage.getItem(MAPS_KEY);
@@ -44,12 +58,11 @@ export async function renameMapAndSyncPointLocalNames(
   previousName: string
 ): Promise<MapItem[]> {
   const nextMaps = await upsertMap(item);
-  const byMap = await loadObservationsByMapId();
-  const list = byMap[item.id] ?? [];
+  const list = await loadObservationsForMap(item.id);
   let didChange = false;
   const normalizedPreviousName = previousName.trim().toLowerCase();
 
-  byMap[item.id] = list.map((obs) => {
+  const nextObservations = list.map((obs) => {
     const normalizedLocalName = obs.kind === "point" ? obs.localName.trim().toLowerCase() : "";
     if (obs.kind !== "point" || normalizedLocalName !== normalizedPreviousName) {
       return obs;
@@ -62,7 +75,7 @@ export async function renameMapAndSyncPointLocalNames(
   });
 
   if (didChange) {
-    await saveObservationsByMapId(byMap);
+    await saveObservationsForMap(item.id, nextObservations);
   }
 
   return nextMaps;
@@ -72,9 +85,7 @@ export async function removeMap(mapId: string): Promise<MapItem[]> {
   const all = await loadMaps();
   const next = all.filter((m) => m.id !== mapId);
   await saveMaps(next);
-  const byMap = await loadObservationsByMapId();
-  delete byMap[mapId];
-  await saveObservationsByMapId(byMap);
+  await removeObservationsForMap(mapId);
   await removeAreaDescription(mapId);
   await removeMapPhotosDir(mapId);
   return next;
@@ -110,64 +121,279 @@ export async function removeAreaDescription(mapId: string): Promise<Record<strin
 }
 
 export async function loadObservationsByMapId(): Promise<Record<string, Observation[]>> {
-  const raw = await AsyncStorage.getItem(OBS_KEY);
-  if (!raw) {
-    return {};
-  }
-  const parsed = JSON.parse(raw) as Record<string, Observation[]>;
+  await ensureObservationStorageMigrated();
+  const keys = await observationMapKeys();
+  if (!keys.length) return {};
+  const pairs = await AsyncStorage.multiGet(keys);
   return Object.fromEntries(
-    Object.entries(parsed).map(([mapId, list]) => [mapId, list.map(normalizeObservation)])
+    pairs
+      .map(([key, raw]) => [mapIdFromObservationMapKey(key), parseObservationList(raw)] as const)
+      .filter(([mapId]) => mapId.length > 0)
   );
 }
 
 export async function saveObservationsByMapId(value: Record<string, Observation[]>) {
-  const normalized = Object.fromEntries(
-    Object.entries(value).map(([mapId, list]) => [mapId, list.map(normalizeObservation)])
-  );
-  await AsyncStorage.setItem(OBS_KEY, JSON.stringify(normalized));
+  await ensureObservationStorageMigrated();
+  const normalizedEntries = Object.entries(value).map(([mapId, list]) => [
+    observationMapKey(mapId),
+    JSON.stringify(list.map(normalizeObservation)),
+  ] as const);
+  const keys = await observationMapKeys();
+  const incomingKeys = new Set(normalizedEntries.map(([key]) => key));
+  const keysToRemove = keys.filter((key) => !incomingKeys.has(key));
+  if (normalizedEntries.length) {
+    await AsyncStorage.multiSet(normalizedEntries);
+  }
+  if (keysToRemove.length) {
+    await AsyncStorage.multiRemove(keysToRemove);
+  }
+  await saveObservationCountsFromEntries(value);
 }
 
 export async function loadObservationsForMap(mapId: string): Promise<Observation[]> {
-  const byMap = await loadObservationsByMapId();
-  return (byMap[mapId] ?? []).map(normalizeObservation);
+  await ensureObservationStorageMigrated();
+  const raw = await AsyncStorage.getItem(observationMapKey(mapId));
+  return parseObservationList(raw);
+}
+
+export async function loadObservationCounts(): Promise<Record<string, number>> {
+  await ensureObservationStorageMigrated();
+  const raw = await AsyncStorage.getItem(OBS_COUNTS_KEY);
+  if (!raw) {
+    const byMap = await loadObservationsByMapId();
+    const counts = countsFromObservationsByMap(byMap);
+    await AsyncStorage.setItem(OBS_COUNTS_KEY, JSON.stringify(counts));
+    return counts;
+  }
+  try {
+    const parsed = JSON.parse(raw) as Record<string, number>;
+    const entries: Array<[string, number]> = Object.entries(parsed)
+      .map(([mapId, count]) => [String(mapId), Number(count)]);
+    return Object.fromEntries(
+      entries.filter(([mapId, count]) => mapId.length > 0 && Number.isFinite(count))
+    );
+  } catch {
+    return {};
+  }
 }
 
 export async function addObservation(obs: Observation): Promise<Observation[]> {
-  const byMap = await loadObservationsByMapId();
-  const list = byMap[obs.mapId] ?? [];
+  const list = await loadObservationsForMap(obs.mapId);
   const next = [normalizeObservation(obs), ...list.map(normalizeObservation)];
-  byMap[obs.mapId] = next;
-  await saveObservationsByMapId(byMap);
+  await saveObservationsForMap(obs.mapId, next);
   return next;
 }
 
 export async function updateObservation(updated: Observation): Promise<Observation[]> {
-  const byMap = await loadObservationsByMapId();
-  const list = byMap[updated.mapId] ?? [];
+  const list = await loadObservationsForMap(updated.mapId);
   const normalizedUpdated = normalizeObservation(updated);
   const previous = list.find((obs) => obs.id === updated.id);
   const next = list.map((obs) => (obs.id === updated.id ? normalizedUpdated : normalizeObservation(obs)));
-  byMap[updated.mapId] = next;
-  await saveObservationsByMapId(byMap);
+  await saveObservationsForMap(updated.mapId, next);
   if (previous?.photos?.length) {
     const nextLocalUris = new Set(normalizedUpdated.photos?.map((photo) => photo.localUri).filter(Boolean));
     const removed = previous.photos.filter((photo) => photo.localUri && !nextLocalUris.has(photo.localUri));
+    const byMap = await loadObservationsByMapId();
     await deleteLocalPhotoFiles(removed.filter((photo) => !isPhotoReferenced(byMap, photo.localUri)));
   }
   return next;
 }
 
 export async function deleteObservation(mapId: string, observationId: string): Promise<Observation[]> {
-  const byMap = await loadObservationsByMapId();
-  const list = byMap[mapId] ?? [];
+  const list = await loadObservationsForMap(mapId);
   const deleted = list.find((obs) => obs.id === observationId);
   const next = list.filter((obs) => obs.id !== observationId);
-  byMap[mapId] = next;
-  await saveObservationsByMapId(byMap);
+  await saveObservationsForMap(mapId, next);
   if (deleted?.photos?.length) {
+    const byMap = await loadObservationsByMapId();
     await deleteLocalPhotoFiles(deleted.photos.filter((photo) => !isPhotoReferenced(byMap, photo.localUri)));
   }
   return next;
+}
+
+export async function prependObservationsForMap(mapId: string, observations: Observation[]): Promise<Observation[]> {
+  const current = await loadObservationsForMap(mapId);
+  const next = [...observations.map(normalizeObservation), ...current];
+  await saveObservationsForMap(mapId, next);
+  return next;
+}
+
+export async function consumeObservationSizeWarning(
+  mapId: string,
+  observations: Observation[]
+): Promise<ObservationSizeWarning | null> {
+  const normalized = observations.map(normalizeObservation);
+  const sizeBytes = utf8ByteLength(JSON.stringify(normalized));
+  const level = sizeBytes >= OBS_SIZE_SECOND_WARNING_BYTES
+    ? 2
+    : sizeBytes >= OBS_SIZE_FIRST_WARNING_BYTES
+      ? 1
+      : 0;
+  if (level === 0) return null;
+
+  const shown = await loadObservationSizeWarnings();
+  const previousLevel = shown[mapId] ?? 0;
+  if (previousLevel >= level) return null;
+
+  await saveObservationSizeWarnings({
+    ...shown,
+    [mapId]: level,
+  });
+  return {
+    level,
+    sizeBytes,
+    observationCount: normalized.length,
+  };
+}
+
+async function saveObservationsForMap(mapId: string, observations: Observation[]): Promise<void> {
+  await ensureObservationStorageMigrated();
+  const normalized = observations.map(normalizeObservation);
+  await AsyncStorage.setItem(observationMapKey(mapId), JSON.stringify(normalized));
+  await updateObservationCount(mapId, normalized.length);
+}
+
+async function removeObservationsForMap(mapId: string): Promise<void> {
+  await ensureObservationStorageMigrated();
+  await AsyncStorage.removeItem(observationMapKey(mapId));
+  await updateObservationCount(mapId, 0);
+  const warnings = await loadObservationSizeWarnings();
+  if (warnings[mapId] !== undefined) {
+    const next = { ...warnings };
+    delete next[mapId];
+    await saveObservationSizeWarnings(next);
+  }
+}
+
+async function ensureObservationStorageMigrated(): Promise<void> {
+  if (observationMigrationPromise) {
+    return observationMigrationPromise;
+  }
+  observationMigrationPromise = migrateObservationStorageIfNeeded().finally(() => {
+    observationMigrationPromise = null;
+  });
+  return observationMigrationPromise;
+}
+
+async function migrateObservationStorageIfNeeded(): Promise<void> {
+  const migrated = await AsyncStorage.getItem(OBS_MIGRATION_KEY);
+  if (migrated === "true") return;
+
+  const raw = await AsyncStorage.getItem(OBS_KEY);
+  if (!raw) {
+    await AsyncStorage.multiSet([
+      [OBS_COUNTS_KEY, JSON.stringify({})],
+      [OBS_MIGRATION_KEY, "true"],
+    ]);
+    return;
+  }
+
+  const parsed = JSON.parse(raw) as Record<string, Observation[]>;
+  const byMap = Object.fromEntries(
+    Object.entries(parsed).map(([mapId, list]) => [
+      String(mapId),
+      Array.isArray(list) ? list.map(normalizeObservation) : [],
+    ])
+  );
+  const entries = Object.entries(byMap);
+  if (entries.length) {
+    await AsyncStorage.multiSet(
+      entries.map(([mapId, list]) => [observationMapKey(mapId), JSON.stringify(list)])
+    );
+  }
+
+  const verifyPairs = entries.length
+    ? await AsyncStorage.multiGet(entries.map(([mapId]) => observationMapKey(mapId)))
+    : [];
+  for (const [index, [, expectedList]] of entries.entries()) {
+    const actualList = parseObservationList(verifyPairs[index]?.[1] ?? null);
+    if (actualList.length !== expectedList.length) {
+      throw new Error("Migrering av observationer kunde inte verifieras.");
+    }
+  }
+
+  await AsyncStorage.multiSet([
+    [OBS_COUNTS_KEY, JSON.stringify(countsFromObservationsByMap(byMap))],
+    [OBS_MIGRATION_KEY, "true"],
+  ]);
+}
+
+async function observationMapKeys(): Promise<string[]> {
+  const keys = await AsyncStorage.getAllKeys();
+  return keys.filter((key) => key.startsWith(OBS_MAP_KEY_PREFIX));
+}
+
+function observationMapKey(mapId: string): string {
+  return `${OBS_MAP_KEY_PREFIX}${mapId}`;
+}
+
+function mapIdFromObservationMapKey(key: string): string {
+  return key.startsWith(OBS_MAP_KEY_PREFIX) ? key.slice(OBS_MAP_KEY_PREFIX.length) : "";
+}
+
+function parseObservationList(raw: string | null): Observation[] {
+  if (!raw) return [];
+  const parsed = JSON.parse(raw) as Observation[];
+  return Array.isArray(parsed) ? parsed.map(normalizeObservation) : [];
+}
+
+async function updateObservationCount(mapId: string, count: number): Promise<void> {
+  const raw = await AsyncStorage.getItem(OBS_COUNTS_KEY);
+  const current = raw ? JSON.parse(raw) as Record<string, number> : {};
+  const next = { ...current };
+  if (count > 0) {
+    next[mapId] = count;
+  } else {
+    delete next[mapId];
+  }
+  await AsyncStorage.setItem(OBS_COUNTS_KEY, JSON.stringify(next));
+}
+
+async function saveObservationCountsFromEntries(value: Record<string, Observation[]>): Promise<void> {
+  await AsyncStorage.setItem(OBS_COUNTS_KEY, JSON.stringify(countsFromObservationsByMap(value)));
+}
+
+function countsFromObservationsByMap(value: Record<string, Observation[]>): Record<string, number> {
+  const entries: Array<[string, number]> = Object.entries(value)
+    .map(([mapId, list]) => [mapId, Array.isArray(list) ? list.length : 0]);
+  return Object.fromEntries(entries.filter(([, count]) => count > 0));
+}
+
+async function loadObservationSizeWarnings(): Promise<Record<string, number>> {
+  const raw = await AsyncStorage.getItem(OBS_SIZE_WARNINGS_KEY);
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw) as Record<string, number>;
+    return Object.fromEntries(
+      Object.entries(parsed)
+        .map(([mapId, level]) => [String(mapId), Number(level)] as const)
+        .filter(([mapId, level]) => mapId.length > 0 && (level === 1 || level === 2))
+    );
+  } catch {
+    return {};
+  }
+}
+
+async function saveObservationSizeWarnings(value: Record<string, number>): Promise<void> {
+  await AsyncStorage.setItem(OBS_SIZE_WARNINGS_KEY, JSON.stringify(value));
+}
+
+function utf8ByteLength(value: string): number {
+  let bytes = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    if (code < 0x80) {
+      bytes += 1;
+    } else if (code < 0x800) {
+      bytes += 2;
+    } else if (code >= 0xd800 && code <= 0xdbff) {
+      bytes += 4;
+      index += 1;
+    } else {
+      bytes += 3;
+    }
+  }
+  return bytes;
 }
 
 function normalizeObservation(obs: Observation): Observation {

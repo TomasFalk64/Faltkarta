@@ -23,6 +23,8 @@
         "NSLocationWhenInUseUsageDescription": "Fältkarta behöver GPS för att visa din position på kartan och så att du kan registrera artobservationer med koordinater.",
         "NSPhotoLibraryUsageDescription": "Fältkarta behover åtkomst till bilder för att bifoga foton till observationerna.",
         "NSPhotoLibraryAddUsageDescription": "Fältkarta behöver spara kopior av observationsbilder i ditt galleri så att du kan spara dom och dela med andra.",
+        "UIFileSharingEnabled": true,
+        "LSSupportsOpeningDocumentsInPlace": true,
         "UIBackgroundModes": [
           "location"
         ],

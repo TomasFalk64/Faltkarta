@@ -16,6 +16,7 @@ import { exportDir } from "./files";
 import { getFileSize, guessImageExtension, resolvePointPhotoUri, sanitizeForFileName } from "./photos";
 import { buildPhotoFileName as buildSharedPhotoFileName, maxPhotoSideForSetting } from "./photoUtils";
 import { speciesInfo } from "../data/species_info";
+import { redlist2025, Redlist2025Entry } from "../data/redlist_2025";
 
 
 function pad2(value: number): string {
@@ -47,15 +48,45 @@ function observationName(obs: Observation, polygonIndex: number): string {
 
 function getRedList(species: string): string {
   if (!species) return "";
-  const direct = speciesInfo[species];
-  if (direct?.redList) return String(direct.redList).trim();
   const lower = species.toLowerCase();
-  for (const [name, info] of Object.entries(speciesInfo)) {
-    if (name.toLowerCase() === lower && info?.redList) {
-      return String(info.redList).trim();
+  const redlisted = redlistByLower.get(lower);
+  if (redlisted) return redlisted;
+  if (speciesInfo[species]) return "LC";
+  for (const name of Object.keys(speciesInfo)) {
+    if (name.toLowerCase() === lower) {
+      return "LC";
     }
   }
   return "";
+}
+
+const redlistByLower = buildRedlistByLower();
+
+function buildRedlistByLower(): Map<string, string> {
+  const map = new Map<string, string>();
+  redlist2025.forEach((entry) => {
+    const category = redlistCategory(entry);
+    if (!category) return;
+    const swedishName = String(entry.Svenskt_namn ?? "").trim();
+    const scientificName = String(entry.Vetenskapligt_namn ?? "").trim();
+    if (swedishName) map.set(swedishName.toLowerCase(), category);
+    if (scientificName) map.set(scientificName.toLowerCase(), category);
+  });
+  return map;
+}
+
+function redlistCategory(entry: Redlist2025Entry): string {
+  const raw =
+    (entry as unknown as { Rödlistning?: string | null }).Rödlistning ??
+    (entry as unknown as { ["RÃ¶dlistning"]?: string | null })["RÃ¶dlistning"] ??
+    "";
+  return normalizeRedlistCategory(raw);
+}
+
+function normalizeRedlistCategory(value: string | null | undefined): string {
+  return String(value ?? "")
+    .toUpperCase()
+    .replace(/[\s\u00A0]+/g, "");
 }
 
 function toArtportalenNotes(obs: Observation): string {

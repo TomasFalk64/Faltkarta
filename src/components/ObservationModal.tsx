@@ -16,6 +16,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Circle, Path } from "react-native-svg";
 import * as ImagePicker from "expo-image-picker";
 import { speciesInfo } from "../data/species_info";
+import { redlist2025, Redlist2025Entry } from "../data/redlist_2025";
 import { speciesGroups } from "../data/speciesGroups";
 import { ARTGRUPP_OPTIONS, DEFAULT_OPTIONS } from "../data/dropdownOptionsGroups";
 import {
@@ -274,6 +275,19 @@ export function ObservationModal({
     return map;
   }, []);
 
+  const redlistByLower = useMemo(() => {
+    const map = new Map<string, string>();
+    redlist2025.forEach((entry) => {
+      const category = redlistCategory(entry);
+      if (!category) return;
+      const swedishName = String(entry.Svenskt_namn ?? "").trim();
+      const scientificName = String(entry.Vetenskapligt_namn ?? "").trim();
+      if (swedishName) map.set(swedishName.toLowerCase(), category);
+      if (scientificName) map.set(scientificName.toLowerCase(), category);
+    });
+    return map;
+  }, []);
+
   const speciesGroupsByLower = useMemo(() => {
     const map = new Map<string, string>();
     Object.entries(speciesGroups).forEach(([name, group]) => {
@@ -298,16 +312,22 @@ export function ObservationModal({
     return speciesInfoByLower.get(species.toLowerCase()) ?? null;
   }, [species, speciesInfoByLower]);
 
-  const selectedRedList = (selectedInfo?.redList ?? "")
-    .toUpperCase()
-    .replace(/[\s\u00A0]+/g, "");
+  const selectedRedList = useMemo(() => {
+    const key = species.trim().toLowerCase();
+    if (!key) return "";
+    const redlisted = redlistByLower.get(key);
+    if (redlisted) return normalizeRedlistCategory(redlisted);
+    return selectedInfo ? "LC" : "";
+  }, [redlistByLower, selectedInfo, species]);
   const redListColors: Record<string, string> = {
+    RE: "#111827",
     CR: "#8b0000",
     EN: "#c1121f",
     VU: "#d24d25",
     NT: "#e76f00",
     DD: "#6b7280",
-    LC: "#172121",
+    NE: "#6b7280",
+    LC: "#1b5e3a",
   };
   const selectedSpeciesInfo = selectedInfo?.speciesInfo ?? "";
 
@@ -779,13 +799,7 @@ export function ObservationModal({
                   styles.redListBadge,
                   {
                     backgroundColor: selectedRedList
-                      ? selectedRedList === "LC"
-                        ? "#1b5e3a"
-                        : selectedRedList === "NT"
-                          ? "#d97706"
-                          : selectedRedList === "VU"
-                            ? "#c2410c"
-                            : "#b91c1c"
+                      ? redListColors[selectedRedList] ?? "#b91c1c"
                       : "#e3e6ea",
                   },
                 ]}
@@ -1062,6 +1076,20 @@ export function ObservationModal({
       </View>
     </Modal>
   );
+}
+
+function redlistCategory(entry: Redlist2025Entry): string {
+  const raw =
+    (entry as unknown as { Rödlistning?: string | null }).Rödlistning ??
+    (entry as unknown as { ["RÃ¶dlistning"]?: string | null })["RÃ¶dlistning"] ??
+    "";
+  return normalizeRedlistCategory(raw);
+}
+
+function normalizeRedlistCategory(value: string | null | undefined): string {
+  return String(value ?? "")
+    .toUpperCase()
+    .replace(/[\s\u00A0]+/g, "");
 }
 
 const styles = StyleSheet.create({

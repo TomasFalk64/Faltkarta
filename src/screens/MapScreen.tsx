@@ -9,6 +9,7 @@ import { ObservationModal } from "../components/ObservationModal";
 import { useGpsContext } from "../contexts/GpsContext";
 import {
   addObservation,
+  consumeObservationSizeWarning,
   deleteObservation,
   loadMaps,
   loadObservationsForMap,
@@ -16,6 +17,7 @@ import {
   loadUserSpeciesGroups,
   upsertMap,
   updateObservation,
+  ObservationSizeWarning,
 } from "../storage/storage";
 import { speciesGroups } from "../data/speciesGroups";
 import { LatLon, MapItem, Observation, ObservationPhoto, PolygonObservation, PointObservation, VisibleFields } from "../types/models";
@@ -89,6 +91,7 @@ export function MapScreen({ route, navigation }: Props) {
   const [showAccuracyHelp, setShowAccuracyHelp] = useState(false);
   const [frozenPointCoord, setFrozenPointCoord] = useState<LatLon | null>(null);
   const [frozenAccuracyMeters, setFrozenAccuracyMeters] = useState<number | null>(null);
+  const [pendingSizeWarning, setPendingSizeWarning] = useState<ObservationSizeWarning | null>(null);
 
   const {
     gpsPos,
@@ -182,6 +185,18 @@ export function MapScreen({ route, navigation }: Props) {
     setCenterCoord(nextTarget);
   }, [centerCoord, gpsPos, isFollowing, map]);
 
+  useEffect(() => {
+    if (!pendingSizeWarning || showPointModal || showPolygonModal) return;
+    const warning = pendingSizeWarning;
+    setPendingSizeWarning(null);
+    Alert.alert(
+      warning.level === 2 ? "Kartan börjar bli stor" : "Många observationer på kartan",
+      warning.level === 2
+        ? `Den här kartans observationer tar nu ungefär ${formatStorageSize(warning.sizeBytes)} (${warning.observationCount} observationer). För att appen ska fortsätta vara snabb och stabil rekommenderas att du börjar på en ny karta inför nästa inventeringspass.`
+        : `Den här kartan börjar få många observationer (${warning.observationCount} st). Om du ska fortsätta inventera länge kan det vara klokt att börja på en ny karta inför nästa pass.`
+    );
+  }, [pendingSizeWarning, showPointModal, showPolygonModal]);
+
   const crosshairPos = centerCoord;
   const pointList = useMemo(
     () =>
@@ -194,6 +209,22 @@ export function MapScreen({ route, navigation }: Props) {
   function showToast(message: string) {
     setToast(message);
     setTimeout(() => setToast(null), 1500);
+  }
+
+  function formatStorageSize(bytes: number): string {
+    return `${(bytes / (1024 * 1024)).toFixed(1).replace(".", ",")} MB`;
+  }
+
+  async function queueSizeWarningIfNeeded(next: Observation[]) {
+    if (!map) return;
+    try {
+      const warning = await consumeObservationSizeWarning(map.id, next);
+      if (warning) {
+        setPendingSizeWarning(warning);
+      }
+    } catch {
+      // Size warnings should never block field work.
+    }
   }
 
   function clearFollowTimeout() {
@@ -474,6 +505,7 @@ export function MapScreen({ route, navigation }: Props) {
       const normalizedObs = syncLegacyPhotoFields(obs);
       const next = editingPoint ? await updateObservation(normalizedObs) : await addObservation(normalizedObs);
       setObservations(next);
+      void queueSizeWarningIfNeeded(next);
       if (photos.some((photo) => photo.status === "pending")) {
         queuePendingPhotoProcessing(map.id, pointId);
       }
@@ -545,6 +577,7 @@ export function MapScreen({ route, navigation }: Props) {
       const normalizedObs = syncLegacyPhotoFields(obs);
       const next = await updateObservation(normalizedObs);
       setObservations(next);
+      void queueSizeWarningIfNeeded(next);
       if (polygonPhotos.some((photo) => photo.status === "pending")) {
         queuePendingPhotoProcessing(map.id, editingPolygon.id);
       }
@@ -583,6 +616,7 @@ export function MapScreen({ route, navigation }: Props) {
     const normalizedObs = syncLegacyPhotoFields(obs);
     const next = await addObservation(normalizedObs);
     setObservations(next);
+    void queueSizeWarningIfNeeded(next);
     if (photos.some((photo) => photo.status === "pending")) {
       queuePendingPhotoProcessing(map.id, polygonId);
     }
