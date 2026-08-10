@@ -1,8 +1,17 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { AppSettings, MapItem, Observation, ObservationPhoto } from "../types/models";
 import { getSafeUri, toStoredMapPath } from "../services/mapPaths";
-import { buildPhotoFileName } from "../services/photoUtils";
-import { deleteLocalPhotoFiles, guessImageExtension, isMapPhotoUri, removeMapPhotosDir } from "../services/photos";
+import { buildPhotoFileName, buildPointPhotoFileName } from "../services/photoUtils";
+import {
+  deleteLocalPhotoFiles,
+  getFileSize,
+  guessImageExtension,
+  isMapPhotoUri,
+  mapPhotosDir,
+  photoFileNameFromRef,
+  removeMapPhotosDir,
+  resolvePointPhotoUri,
+} from "../services/photos";
 
 const MAPS_KEY = "maps:v1";
 const OBS_KEY = "observations:v1";
@@ -289,12 +298,13 @@ async function migrateObservationStorageIfNeeded(): Promise<void> {
   }
 
   const parsed = JSON.parse(raw) as Record<string, Observation[]>;
-  const byMap = Object.fromEntries(
-    Object.entries(parsed).map(([mapId, list]) => [
-      String(mapId),
-      Array.isArray(list) ? list.map(normalizeObservation) : [],
-    ])
-  );
+  const byMap: Record<string, Observation[]> = {};
+  for (const [mapId, list] of Object.entries(parsed)) {
+    const normalizedMapId = String(mapId);
+    byMap[normalizedMapId] = Array.isArray(list)
+      ? await Promise.all(list.map((obs) => normalizeObservationForMigration(obs)))
+      : [];
+  }
   const entries = Object.entries(byMap);
   if (entries.length) {
     await AsyncStorage.multiSet(
@@ -335,6 +345,132 @@ function parseObservationList(raw: string | null): Observation[] {
   if (!raw) return [];
   const parsed = JSON.parse(raw) as Observation[];
   return Array.isArray(parsed) ? parsed.map(normalizeObservation) : [];
+}
+
+async function normalizeObservationForMigration(obs: Observation): Promise<Observation> {
+  const normalized = normalizeObservation(obs);
+  const photos = await Promise.all(
+    (normalized.photos ?? []).map((photo) => normalizePhotoForMigration(normalized, photo))
+  );
+  const photoUris = photos.map((photo) => photo.localUri ?? photo.originalUri ?? "");
+  if (normalized.kind !== "point") {
+    return {
+      ...normalized,
+      photos,
+      photoUris,
+    };
+  }
+  const photoAssetIds = photos.map((photo) => photo.assetId ?? "");
+  const hasAnyAssetId = photoAssetIds.some((id) => id.trim().length > 0);
+  return {
+    ...normalized,
+    photos,
+    photoUris,
+    photoAssetIds: hasAnyAssetId ? photoAssetIds : undefined,
+  };
+}
+
+async function normalizePhotoForMigration(
+  obs: Observation,
+  photo: ObservationPhoto
+): Promise<ObservationPhoto> {
+  const existingLocal = await firstExistingFile([photo.localUri]);
+  if (existingLocal) {
+    return {
+      ...photo,
+      localUri: existingLocal,
+      status: "ready",
+    };
+  }
+
+  const migratedLocal = await firstExistingFile(buildMigratedPhotoCandidates(obs, photo));
+  if (migratedLocal) {
+    return {
+      ...photo,
+      localUri: migratedLocal,
+      originalUri: photo.originalUri || photo.localUri,
+      status: "ready",
+    };
+  }
+
+  const assetUri = await resolvePhotoAssetUri(photo);
+  if (assetUri) {
+    return {
+      ...photo,
+      localUri: assetUri,
+      originalUri: photo.originalUri || photo.localUri,
+      status: "ready",
+    };
+  }
+
+  return {
+    ...photo,
+    status: "failed",
+  };
+}
+
+function buildMigratedPhotoCandidates(obs: Observation, photo: ObservationPhoto): string[] {
+  const dir = mapPhotosDir(obs.mapId);
+  const names = uniqueStrings([
+    photo.fileName,
+    photoFileNameFromRef(photo.localUri ?? ""),
+    photoFileNameFromRef(photo.originalUri ?? ""),
+    ...buildLegacyPointPhotoNames(obs, photo),
+  ]);
+  return uniqueStrings(
+    names.flatMap((name) => {
+      const jpgName = name.replace(/\.[A-Za-z0-9]+$/, ".jpg");
+      return [`${dir}${name}`, `${dir}${jpgName}`];
+    })
+  );
+}
+
+function buildLegacyPointPhotoNames(obs: Observation, photo: ObservationPhoto): string[] {
+  if (obs.kind !== "point") return [];
+  const index = photoIndexFromFileName(photo.fileName);
+  const pointNumber = String(obs.pointNumber ?? obs.id);
+  return [
+    buildPointPhotoFileName(pointNumber, obs.species, obs.dateISO, index, "jpg"),
+  ];
+}
+
+function photoIndexFromFileName(fileName: string): number {
+  const match = String(fileName ?? "").match(/_(\d+)\.[A-Za-z0-9]+$/);
+  const parsed = match ? Number(match[1]) : 1;
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+}
+
+async function firstExistingFile(values: Array<string | undefined>): Promise<string | null> {
+  for (const value of values) {
+    const uri = String(value ?? "").trim();
+    if (!uri) continue;
+    if (await getFileSize(uri) !== null) {
+      return uri;
+    }
+  }
+  return null;
+}
+
+async function resolvePhotoAssetUri(photo: ObservationPhoto): Promise<string | null> {
+  if (photo.assetId) {
+    const byAssetId = await resolvePointPhotoUri("", photo.assetId);
+    if (byAssetId) return byAssetId;
+  }
+  if (photo.fileName) {
+    return await resolvePointPhotoUri(photo.fileName, photo.assetId);
+  }
+  return null;
+}
+
+function uniqueStrings(values: Array<string | undefined>): string[] {
+  const seen = new Set<string>();
+  return values
+    .map((value) => String(value ?? "").trim())
+    .filter((value) => {
+      if (!value || seen.has(value)) return false;
+      seen.add(value);
+      return true;
+    });
 }
 
 async function updateObservationCount(mapId: string, count: number): Promise<void> {
