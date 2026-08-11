@@ -1,8 +1,9 @@
 import * as FileSystem from "expo-file-system/legacy";
+import { File as ExpoFile } from "expo-file-system";
 import * as DocumentPicker from "expo-document-picker";
 import { requireOptionalNativeModule } from "expo-modules-core";
-import { Alert } from "react-native";
-import { fromByteArray, toByteArray } from "base64-js";
+import { Alert, Platform } from "react-native";
+import { fromByteArray } from "base64-js";
 import * as UTIF from "utif";
 import UPNG from "upng-js";
 import proj4 from "proj4";
@@ -299,10 +300,7 @@ function buildImportedMapItem(
 
 async function readGeoTiff(geoTiffUri: string): Promise<DecodedGeoTiff | null> {
   try {
-    const base64 = await FileSystem.readAsStringAsync(geoTiffUri, {
-      encoding: FileSystem.EncodingType.Base64,
-    });
-    const tiffBytes = toByteArray(base64);
+    const tiffBytes = await new ExpoFile(geoTiffUri).bytes();
     const buffer = toArrayBuffer(tiffBytes);
     const ifds = UTIF.decode(buffer);
     if (!ifds.length) {
@@ -318,6 +316,9 @@ async function generatePreviewWithNativeModule(
   geoTiffUri: string,
   mapId: string
 ): Promise<NativeGeoTiffPreviewResult | null> {
+  if (Platform.OS === "android") {
+    return null;
+  }
   const module = requireOptionalNativeModule<NativeGeoTiffPreviewModule>("FaltkartaGeoTiffPreview");
   if (!module?.generatePreview) {
     return null;

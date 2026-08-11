@@ -1,9 +1,6 @@
 {
-  "platforms": ["apple", "android"],
+  "platforms": ["apple"],
   "apple": {
     "modules": ["FaltkartaGeoTiffPreviewModule"]
-  },
-  "android": {
-    "modules": ["com.tf64.faltkarta.geotiffpreview.FaltkartaGeoTiffPreviewModule"]
   }
 }
