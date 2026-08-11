@@ -28,7 +28,8 @@ export function buildPointPhotoFileName(
 }
 
 export function maxPhotoSideForSetting(maxImageSizeMB: number): number {
-  return maxImageSizeMB < 2 ? 1400 : 2000;
+  if (maxImageSizeMB >= 1.5 && maxImageSizeMB < 2) return 1700;
+  return maxImageSizeMB < 2 ? 1500 : 2000;
 }
 
 export function sanitizeForFileName(value: string): string {

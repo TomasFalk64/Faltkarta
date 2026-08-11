@@ -64,7 +64,8 @@ export async function resolvePointPhotoUri(
   photoAssetId?: string
 ): Promise<string | null> {
   if (looksLikeUri(photoName)) {
-    return photoName;
+    if (!photoName.startsWith("file://")) return photoName;
+    if (await getFileSize(photoName) !== null) return photoName;
   }
   if (photoAssetId) {
     try {

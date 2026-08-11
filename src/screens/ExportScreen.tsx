@@ -2,7 +2,13 @@
 import { Alert, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { RootStackParamList } from "../navigation/types";
-import { loadMaps, loadObservationsForMap, loadSettings, loadAreaDescriptions } from "../storage/storage";
+import {
+  discardExportedCompressedPhotos,
+  loadAreaDescriptions,
+  loadMaps,
+  loadObservationsForMap,
+  loadSettings,
+} from "../storage/storage";
 import { Observation } from "../types/models";
 import {
   buildArtportalenTsv,
@@ -147,12 +153,22 @@ export function ExportScreen({ route }: Props) {
         Alert.alert("Export", "Delning ar inte tillganglig pa enheten."); 
         return;
       }
+      const cleanedObservations = await discardExportedCompressedPhotos(mapId);
+      setObservations(cleanedObservations);
       Alert.alert("Sparad", "ZIP skapad och delad.");
     } catch (error) {
-      Alert.alert("Export misslyckades", String(error));
+      Alert.alert("Export misslyckades", formatExportError(error));
     } finally {
       setIsCreatingZip(false);
     }
+  }
+
+  function formatExportError(error: unknown): string {
+    const message = String(error);
+    if (/OutOfMemoryError|Failed to allocate/i.test(message)) {
+      return "Enheten fick slut på minne när ZIP-filen skulle skapas. Prova lägre maxstorlek för bilder eller färre bilder i samma export.";
+    }
+    return message;
   }
 
   return (
@@ -245,7 +261,7 @@ export function ExportScreen({ route }: Props) {
       <Modal transparent visible={isCreatingZip} animationType="fade">
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Komprimerar bilder</Text>
+            <Text style={styles.modalTitle}>Exporterar ZIP</Text>
             <Text style={styles.modalBody}>{zipProgress}</Text>
           </View>
         </View>

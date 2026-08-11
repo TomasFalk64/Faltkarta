@@ -220,6 +220,48 @@ export async function deleteObservation(mapId: string, observationId: string): P
   return next;
 }
 
+export async function discardExportedCompressedPhotos(mapId: string): Promise<Observation[]> {
+  const list = await loadObservationsForMap(mapId);
+  const photosToDelete: ObservationPhoto[] = [];
+  let didChange = false;
+  const next = list.map((obs) => {
+    const photos = (obs.photos ?? []).map((photo) => {
+      const localUri = String(photo.localUri ?? "").trim();
+      if (!localUri || !isMapPhotoUri(localUri, mapId) || !hasPhotoRebuildSource(photo, mapId)) {
+        return photo;
+      }
+      didChange = true;
+      photosToDelete.push(photo);
+      return {
+        ...photo,
+        localUri: undefined,
+        status: "failed" as const,
+      };
+    });
+    if (photos === obs.photos) return obs;
+    const photoUris = photos.map((photo) => photo.localUri ?? photo.originalUri ?? "");
+    if (obs.kind !== "point") {
+      return {
+        ...obs,
+        photos,
+        photoUris,
+      };
+    }
+    const photoAssetIds = photos.map((photo) => photo.assetId ?? "");
+    const hasAnyAssetId = photoAssetIds.some((id) => id.trim().length > 0);
+    return {
+      ...obs,
+      photos,
+      photoUris,
+      photoAssetIds: hasAnyAssetId ? photoAssetIds : undefined,
+    };
+  });
+  if (!didChange) return list;
+  await saveObservationsForMap(mapId, next);
+  await deleteLocalPhotoFiles(photosToDelete.filter((photo) => !isPhotoReferenced({ [mapId]: next }, photo.localUri)));
+  return next;
+}
+
 export async function prependObservationsForMap(mapId: string, observations: Observation[]): Promise<Observation[]> {
   const current = await loadObservationsForMap(mapId);
   const next = [...observations.map(normalizeObservation), ...current];
@@ -618,6 +660,11 @@ function isPhotoReferenced(byMap: Record<string, Observation[]>, localUri?: stri
   );
 }
 
+function hasPhotoRebuildSource(photo: ObservationPhoto, mapId: string): boolean {
+  const originalUri = String(photo.originalUri ?? "").trim();
+  return Boolean(photo.assetId || (originalUri && !isMapPhotoUri(originalUri, mapId)));
+}
+
 export async function loadSettings(): Promise<AppSettings> {
   const raw = await AsyncStorage.getItem(SETTINGS_KEY);
   if (!raw) {
@@ -654,7 +701,7 @@ export async function loadSettings(): Promise<AppSettings> {
       stage: false,
       gender: false,
     },
-    maxImageSizeMB: parsed.maxImageSizeMB ?? 2,
+    maxImageSizeMB: clampMaxImageSizeSetting(parsed.maxImageSizeMB ?? 2),
     backgroundGPS: parsed.backgroundGPS ?? false,
     autoFollow: parsed.autoFollow ?? false,
     artportalenTimeEnabled: parsed.artportalenTimeEnabled ?? true,
@@ -670,6 +717,10 @@ export async function loadSettings(): Promise<AppSettings> {
         ? parsed.mapSortAnchor
         : undefined,
   };
+}
+
+function clampMaxImageSizeSetting(value: number): number {
+  return Number.isFinite(value) ? Math.min(3, Math.max(1, value)) : 2;
 }
 
 function normalizeMapForStorage(item: MapItem): MapItem {

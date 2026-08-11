@@ -167,7 +167,7 @@ export function MapListScreen({ navigation }: Props) {
   function clampMaxImageSize(value: string): string {
     const parsed = Number.parseFloat(value.replace(",", "."));
     if (!Number.isFinite(parsed)) return "2";
-    const clamped = Math.min(9, Math.max(1, parsed));
+    const clamped = Math.min(3, Math.max(1, parsed));
     return String(clamped);
   }
 
@@ -485,8 +485,7 @@ export function MapListScreen({ navigation }: Props) {
       //const parsedPing = Number.parseInt(gpsPingSeconds, 10);
       //const rawPing = Number.isFinite(parsedPing) ? parsedPing : 3;
       const pingValue = 2; // Math.min(20, Math.max(2, rawPing));
-      const parsedMaxSize = Number.parseFloat(maxImageSizeMB.replace(",", "."));
-      const maxSizeValue = Number.isFinite(parsedMaxSize) && parsedMaxSize > 0 ? parsedMaxSize : 2;
+      const maxSizeValue = Number.parseFloat(clampMaxImageSize(maxImageSizeMB).replace(",", "."));
       const maxSideValue = Number.parseInt(clampMaxSideInput(maxSide), 10);
 
       const newSettings: AppSettings = {
@@ -532,7 +531,7 @@ export function MapListScreen({ navigation }: Props) {
         gpsPingSeconds: pingValue,
         backgroundGPS: nextState,
         visibleFields: visibleFields,
-        maxImageSizeMB: Number.parseFloat(maxImageSizeMB.replace(",", ".")) || 3,
+        maxImageSizeMB: Number.parseFloat(clampMaxImageSize(maxImageSizeMB).replace(",", ".")) || 3,
         autoFollow: autoFollow,
         artportalenTimeEnabled: artportalenTimeEnabled,
         coordinateSystem: coordinateSystem,

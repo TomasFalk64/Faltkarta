@@ -1,4 +1,5 @@
 import * as Clipboard from "expo-clipboard";
+import { File as ExpoFile } from "expo-file-system";
 import * as FileSystem from "expo-file-system/legacy";
 import * as ImageManipulator from "expo-image-manipulator";
 import * as MailComposer from "expo-mail-composer";
@@ -18,6 +19,7 @@ import { buildPhotoFileName as buildSharedPhotoFileName, maxPhotoSideForSetting 
 import { speciesInfo } from "../data/species_info";
 import { redlist2025, Redlist2025Entry } from "../data/redlist_2025";
 
+const MAX_ZIP_PHOTOS = 40;
 
 function pad2(value: number): string {
   return String(value).padStart(2, "0");
@@ -445,43 +447,55 @@ export async function saveZipBundleAndShare(
     }
   }
 
-  let polygonCounter = 0;
   const photoCount = observations.reduce((sum, obs) => sum + (obs.photos?.length ?? 0), 0);
-  let processedPhotos = 0;
+  const exportPolicy = zipPhotoExportPolicy(photoCount, maxImageSizeMB);
+  if (photoCount > MAX_ZIP_PHOTOS) {
+    onProgress?.(`Tar bara med ${MAX_ZIP_PHOTOS} bilder på grund av minneshantering.`);
+    await delay(1200);
+  }
+  if (exportPolicy.maxImageSizeMB < maxImageSizeMB) {
+    onProgress?.(`Använder max ${formatMb(exportPolicy.maxImageSizeMB)} MB per bild på grund av antal bilder.`);
+    await delay(900);
+  }
+
+  let polygonCounter = 0;
+  let includedPhotos = 0;
   const usedPhotoFileNames = new Set<string>();
   for (const obs of observations) {
     if (obs.kind === "polygon") polygonCounter += 1;
     const label = observationLabel(obs, polygonCounter);
     const name = observationName(obs, polygonCounter);
     for (let index = 0; index < obs.photos.length; index++) {
+      if (includedPhotos >= MAX_ZIP_PHOTOS) break;
       const photo = obs.photos[index];
-      processedPhotos += 1;
-      onProgress?.(`Lägger till bild ${processedPhotos} av ${photoCount}`);
+      includedPhotos += 1;
+      onProgress?.(`Lägger till bild ${includedPhotos} av ${exportPolicy.includedPhotoCount}`);
       try {
-        const zipPhoto = await photoToZipEntry(photo, obs, index, maxImageSizeMB);
+        const zipPhoto = await photoToZipEntry(photo, obs, index, exportPolicy.maxImageSizeMB);
         if (!zipPhoto) continue;
         const fileName = makeUniqueFileName(
           buildPhotoFileName(obs, label, name, obs.dateISO, index, zipPhoto.extension),
           usedPhotoFileNames
         );
-        zip.file(`bilder/${fileName}`, zipPhoto.base64, { base64: true, compression: "STORE" });
+        zip.file(`bilder/${fileName}`, zipPhoto.content, { base64: zipPhoto.base64, compression: "STORE" });
       } catch {
         // Continue even if a specific image no longer exists.
       }
     }
+    if (includedPhotos >= MAX_ZIP_PHOTOS) break;
   }
 
-  onProgress?.("Skapar ZIP-fil...");
+  onProgress?.("Bygger ZIP-fil...");
   await new Promise((resolve) => setTimeout(resolve, 50));
-  const zipBase64 = await zip.generateAsync({ type: "base64", compression: "STORE" });
+  const zipBytes = await zip.generateAsync({ type: "uint8array", compression: "STORE" });
   const path = `${dir}${safeMapName}.zip`;
   let shared = false;
   try {
-    await FileSystem.writeAsStringAsync(path, zipBase64, {
-      encoding: FileSystem.EncodingType.Base64,
-    });
+    onProgress?.("Skriver ZIP-fil...");
+    writeBytesToFile(path, zipBytes);
     const canShare = await Sharing.isAvailableAsync();
     if (canShare) {
+      onProgress?.("Öppnar delning...");
       await Sharing.shareAsync(path, {
         mimeType: "application/zip",
         dialogTitle: "Dela ZIP-export",
@@ -493,6 +507,41 @@ export async function saveZipBundleAndShare(
   } finally {
     await cleanupExportSessionDir(dir);
   }
+}
+
+function zipPhotoExportPolicy(photoCount: number, requestedMaxImageSizeMB: number): {
+  includedPhotoCount: number;
+  maxImageSizeMB: number;
+} {
+  const requested = Math.min(3, Math.max(1, requestedMaxImageSizeMB));
+  const cappedByCount = photoCount > 20
+    ? 1
+    : photoCount > 15
+      ? 1.5
+      : photoCount > 10
+        ? 2
+        : requested;
+  return {
+    includedPhotoCount: Math.min(photoCount, MAX_ZIP_PHOTOS),
+    maxImageSizeMB: Math.min(requested, cappedByCount),
+  };
+}
+
+function formatMb(value: number): string {
+  return Number.isInteger(value) ? String(value) : String(value).replace(".", ",");
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function writeBytesToFile(path: string, bytes: Uint8Array): void {
+  const file = new ExpoFile(path);
+  if (file.exists) {
+    file.delete();
+  }
+  file.create({ intermediates: true, overwrite: true });
+  file.write(bytes);
 }
 
 async function saveCsvFile(mapName: string, csv: string): Promise<string> {
@@ -633,16 +682,14 @@ async function photoToZipEntry(
   obs: Observation,
   index: number,
   maxImageSizeMB: number
-): Promise<{ base64: string; extension: string; dateISO: string } | null> {
+): Promise<{ content: string | Uint8Array; base64: boolean; extension: string; dateISO: string } | null> {
   const maxBytes = Math.max(0.2, maxImageSizeMB) * 1024 * 1024;
   if (photo.status === "ready" && photo.localUri) {
     const size = await getFileSize(photo.localUri);
     if (size !== null && size <= maxBytes * 1.5) {
-      const base64 = await FileSystem.readAsStringAsync(photo.localUri, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
       return {
-        base64,
+        content: new ExpoFile(photo.localUri).bytesSync(),
+        base64: false,
         extension: guessImageExtension(photo.localUri),
         dateISO: obs.dateISO,
       };
@@ -678,7 +725,7 @@ async function optimizePhotoForZip(
   assetId: string | undefined,
   fallbackDateISO: string,
   maxImageSizeMB: number
-): Promise<{ base64: string; extension: string; dateISO: string } | null> {
+): Promise<{ content: string; base64: true; extension: string; dateISO: string } | null> {
   const uri = await resolvePointPhotoUri(ref, assetId);
   if (!uri) return null;
   const originalExt = guessImageExtension(uri);
@@ -718,7 +765,7 @@ async function optimizePhotoForZip(
   });
   if (!result.base64) return null;
   const withExif = shouldCopyExif ? copyExifIntoJpeg(originalBase64, result.base64) : result.base64;
-  return { base64: withExif, extension: "jpg", dateISO };
+  return { content: withExif, base64: true, extension: "jpg", dateISO };
 }
 
 function copyExifIntoJpeg(originalBase64: string, resizedBase64: string): string {
