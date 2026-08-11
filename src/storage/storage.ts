@@ -435,16 +435,6 @@ async function normalizePhotoForMigration(
     };
   }
 
-  const assetUri = await resolvePhotoAssetUri(photo);
-  if (assetUri) {
-    return {
-      ...photo,
-      localUri: assetUri,
-      originalUri: photo.originalUri || photo.localUri,
-      status: "ready",
-    };
-  }
-
   return {
     ...photo,
     status: "failed",
@@ -489,17 +479,6 @@ async function firstExistingFile(values: Array<string | undefined>): Promise<str
     if (await getFileSize(uri) !== null) {
       return uri;
     }
-  }
-  return null;
-}
-
-async function resolvePhotoAssetUri(photo: ObservationPhoto): Promise<string | null> {
-  if (photo.assetId) {
-    const byAssetId = await resolvePointPhotoUri("", photo.assetId);
-    if (byAssetId) return byAssetId;
-  }
-  if (photo.fileName) {
-    return await resolvePointPhotoUri(photo.fileName, photo.assetId);
   }
   return null;
 }

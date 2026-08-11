@@ -457,8 +457,6 @@ export function ObservationModal({
   async function addPhoto() {
     const remaining = Math.max(0, 3 - photoUris.length);
     if (remaining <= 0) return;
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) return;
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ["images"],
       quality: 0.7,
@@ -470,7 +468,7 @@ export function ObservationModal({
       const selected = result.assets.filter((asset) => !!asset?.uri).slice(0, remaining);
       if (selected.length === 0) return;
       setPhotoUris((prev) => [...prev, ...selected.map((asset) => asset.uri)]);
-      setPhotoAssetIds((prev) => [...prev, ...selected.map((asset) => String(asset.assetId ?? ""))]);
+      setPhotoAssetIds((prev) => [...prev, ...selected.map(() => "")]);
     }
   }
 

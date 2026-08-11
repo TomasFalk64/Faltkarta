@@ -3,7 +3,6 @@ import { File as ExpoFile } from "expo-file-system";
 import * as FileSystem from "expo-file-system/legacy";
 import * as ImageManipulator from "expo-image-manipulator";
 import * as MailComposer from "expo-mail-composer";
-import * as MediaLibrary from "expo-media-library";
 import * as Sharing from "expo-sharing";
 import * as WebBrowser from "expo-web-browser";
 import JSZip from "jszip";
@@ -733,9 +732,8 @@ async function optimizePhotoForZip(
   const originalBase64 = shouldCopyExif
     ? await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 })
     : "";
-  const assetDateISO = await resolveAssetDateISO(assetId);
   const exifDateISO = shouldCopyExif ? extractExifDateISO(originalBase64) : null;
-  const dateISO = assetDateISO ?? exifDateISO ?? fallbackDateISO;
+  const dateISO = exifDateISO ?? fallbackDateISO;
   const maxBytes = Math.max(0.2, maxImageSizeMB) * 1024 * 1024;
   const info = await FileSystem.getInfoAsync(uri, { size: true } as any);
   const originalBytes =
@@ -776,19 +774,6 @@ function copyExifIntoJpeg(originalBase64: string, resizedBase64: string): string
     return merged.replace(/^data:image\/jpeg;base64,/, "");
   } catch {
     return resizedBase64;
-  }
-}
-
-async function resolveAssetDateISO(assetId?: string): Promise<string | null> {
-  if (!assetId) return null;
-  try {
-    const info = await MediaLibrary.getAssetInfoAsync(assetId);
-    const ts = info.creationTime ?? info.modificationTime;
-    if (!ts) return null;
-    const ms = ts > 1e12 ? ts : ts * 1000;
-    return new Date(ms).toISOString();
-  } catch {
-    return null;
   }
 }
 

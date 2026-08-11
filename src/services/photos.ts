@@ -1,63 +1,16 @@
 import * as FileSystem from "expo-file-system/legacy";
 import * as ImageManipulator from "expo-image-manipulator";
-import * as MediaLibrary from "expo-media-library";
 import { Image } from "react-native";
 import { ObservationPhoto } from "../types/models";
 import { makeId } from "../utils/id";
 import {
-  buildPointPhotoFileName,
   maxPhotoSideForSetting,
   sanitizeForFileName,
 } from "./photoUtils";
 
-export { buildPointPhotoFileName, sanitizeForFileName } from "./photoUtils";
+export { sanitizeForFileName } from "./photoUtils";
 
 const TEMP_PREFIX = "faltkarta_pending_";
-
-type SavePhotosOptions = {
-  sourceUris: string[];
-  pointNumber: string;
-  species: string;
-  dateISO: string;
-  startIndex: number;
-};
-
-export async function savePointPhotosToGallery(
-  options: SavePhotosOptions
-): Promise<{ photoNames: string[]; photoAssetIds: string[] }> {
-  if (!options.sourceUris.length) {
-    return { photoNames: [], photoAssetIds: [] };
-  }
-  const permission = await MediaLibrary.requestPermissionsAsync();
-  if (!permission.granted) {
-    throw new Error("Bildbehorighet kravs for att spara foton i galleriet.");
-  }
-
-  const photoNames: string[] = [];
-  const photoAssetIds: string[] = [];
-  for (let i = 0; i < options.sourceUris.length; i++) {
-    const sourceUri = options.sourceUris[i];
-    const sequence = options.startIndex + i;
-    const extension = guessImageExtension(sourceUri);
-    const fileName = buildPointPhotoFileName(
-      options.pointNumber,
-      options.species,
-      options.dateISO,
-      sequence,
-      extension
-    );
-    const tempUri = `${FileSystem.cacheDirectory}${TEMP_PREFIX}${makeId("img")}_${fileName}`;
-    await FileSystem.copyAsync({ from: sourceUri, to: tempUri });
-    try {
-      const asset = await MediaLibrary.createAssetAsync(tempUri);
-      photoNames.push(fileName);
-      photoAssetIds.push(asset.id);
-    } finally {
-      await deleteIfExists(tempUri);
-    }
-  }
-  return { photoNames, photoAssetIds };
-}
 
 export async function resolvePointPhotoUri(
   photoName: string,
@@ -67,16 +20,7 @@ export async function resolvePointPhotoUri(
     if (!photoName.startsWith("file://")) return photoName;
     if (await getFileSize(photoName) !== null) return photoName;
   }
-  if (photoAssetId) {
-    try {
-      const info = await MediaLibrary.getAssetInfoAsync(photoAssetId);
-      if (info?.localUri) return info.localUri;
-      if (info?.uri) return info.uri;
-    } catch {
-      // Fall back to filename search.
-    }
-  }
-  return await findAssetUriByFilename(photoName);
+  return null;
 }
 
 export function photoFileNameFromRef(value: string): string {
@@ -209,27 +153,6 @@ export async function compressPhotoToAppFile(options: {
     await deleteIfExists(result.uri);
   }
   return options.targetUri;
-}
-
-async function findAssetUriByFilename(fileName: string): Promise<string | null> {
-  const target = fileName.toLowerCase();
-  let after: string | undefined;
-  for (let page = 0; page < 20; page++) {
-    const pageResult = await MediaLibrary.getAssetsAsync({
-      first: 200,
-      after,
-      mediaType: [MediaLibrary.MediaType.photo],
-      sortBy: [MediaLibrary.SortBy.creationTime],
-    });
-    const found = pageResult.assets.find((asset) => asset.filename.toLowerCase() === target);
-    if (found) {
-      const info = await MediaLibrary.getAssetInfoAsync(found.id);
-      return info.localUri ?? info.uri ?? null;
-    }
-    if (!pageResult.hasNextPage) break;
-    after = pageResult.endCursor;
-  }
-  return null;
 }
 
 async function ensureParentDir(uri: string): Promise<void> {
