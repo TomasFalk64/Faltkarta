@@ -654,6 +654,8 @@ export async function loadSettings(): Promise<AppSettings> {
         quantity: false,
         unit: false,
         hostSpecies: false,
+        privateComment: false,
+        biotopeDescription: false,
         activity: false,
         substrate: false,
         stage: false,
@@ -671,14 +673,17 @@ export async function loadSettings(): Promise<AppSettings> {
   const parsed = JSON.parse(raw) as Partial<AppSettings>;
   return {
     gpsPingSeconds: parsed.gpsPingSeconds ?? 3,
-    visibleFields: parsed.visibleFields ?? {
+    visibleFields: {
       quantity: false,
       unit: false,
       hostSpecies: false,
+      privateComment: false,
+      biotopeDescription: false,
       activity: false,
       substrate: false,
       stage: false,
       gender: false,
+      ...parsed.visibleFields,
     },
     maxImageSizeMB: clampMaxImageSizeSetting(parsed.maxImageSizeMB ?? 2),
     backgroundGPS: parsed.backgroundGPS ?? false,

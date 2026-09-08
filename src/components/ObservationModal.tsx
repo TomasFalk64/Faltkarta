@@ -11,6 +11,8 @@ import {
   KeyboardAvoidingView,
   Keyboard,
   Platform,
+  Alert,
+  Share,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Circle, Path } from "react-native-svg";
@@ -27,7 +29,9 @@ import {
   removeUserSpeciesGroup,
   saveUserSpeciesGroup,
 } from "../storage/storage";
-import { VisibleFields } from "../types/models";
+import biotopeData from "../data/biotop_artportalen.json";
+import { BiotopePicker } from "./BiotopePicker";
+import { Biotope, LatLon, VisibleFields } from "../types/models";
 
 type ModalPayload = {
   species?: string;
@@ -39,6 +43,9 @@ type ModalPayload = {
   quantity?: number;
   unit?: string;
   hostSpecies?: string;
+  privateComment?: string;
+  biotopeDescription?: string;
+  biotope?: Biotope | null;
   activity?: string;
   substrate?: string;
   stage?: string;
@@ -51,6 +58,8 @@ const defaultVisibleFields: VisibleFields = {
   quantity: false,
   unit: false,
   hostSpecies: false,
+  privateComment: false,
+  biotopeDescription: false,
   activity: false,
   substrate: false,
   stage: false,
@@ -85,6 +94,8 @@ const hostSpeciesEnabledGroups = new Set([
 type Props = {
   visible: boolean;
   title: string;
+  position?: LatLon;
+  dateISO?: string;
   onClose: () => void;
   onSave: (payload: ModalPayload) => Promise<boolean | void> | boolean | void;
   initialValues?: ModalPayload;
@@ -101,6 +112,8 @@ type Props = {
 export function ObservationModal({
   visible,
   title,
+  position,
+  dateISO,
   onClose,
   onSave,
   initialValues,
@@ -120,6 +133,10 @@ export function ObservationModal({
   const [localName, setLocalName] = useState("");
   const [quantity, setQuantity] = useState("");
   const [unit, setUnit] = useState("");
+  const [privateComment, setPrivateComment] = useState("");
+  const [biotope, setBiotope] = useState<Biotope | null>(null);
+  const [showBiotopePicker, setShowBiotopePicker] = useState(false);
+  const [biotopeDescription, setBiotopeDescription] = useState("");
   const [hostSpecies, setHostSpecies] = useState("");
   const [activity, setActivity] = useState("");
   const [substrate, setSubstrate] = useState("");
@@ -166,6 +183,10 @@ export function ObservationModal({
         setQuantity(initialValues?.quantity !== undefined ? String(initialValues.quantity) : "");
         setUnit(initialValues?.unit ?? "");
         setHostSpecies(initialValues?.hostSpecies ?? "");
+        setPrivateComment(initialValues?.privateComment ?? "");
+        setBiotopeDescription(initialValues?.biotopeDescription ?? "");
+        setBiotope(initialValues?.biotope ?? null);
+        setShowBiotopePicker(false);
         setActivity(initialValues?.activity ?? "");
         setSubstrate(initialValues?.substrate ?? "");
         setStage(initialValues?.stage ?? "");
@@ -202,6 +223,10 @@ export function ObservationModal({
       setQuantity(initialValues?.quantity !== undefined ? String(initialValues.quantity) : "");
       setUnit(initialValues?.unit ?? "");
       setHostSpecies(initialValues?.hostSpecies ?? "");
+      setPrivateComment(initialValues?.privateComment ?? "");
+      setBiotopeDescription(initialValues?.biotopeDescription ?? "");
+      setBiotope(initialValues?.biotope ?? null);
+      setShowBiotopePicker(false);
       setActivity(initialValues?.activity ?? "");
       setSubstrate(initialValues?.substrate ?? "");
       setStage(initialValues?.stage ?? "");
@@ -486,6 +511,10 @@ export function ObservationModal({
     setQuantity("");
     setUnit("");
     setHostSpecies("");
+    setPrivateComment("");
+    setBiotopeDescription("");
+    setBiotope(null);
+    setShowBiotopePicker(false);
     setActivity("");
     setSubstrate("");
     setStage("");
@@ -671,6 +700,9 @@ export function ObservationModal({
         quantity: quantityAsNumber, // Hanteras separat som nummer/null
         unit: fallbackToEmptyString(unit),
         hostSpecies: fallbackToEmptyString(hostSpecies),
+        privateComment: fallbackToEmptyString(privateComment),
+        biotopeDescription: fallbackToEmptyString(biotopeDescription),
+        biotope,
         activity: fallbackToEmptyString(activity),
         substrate: fallbackToEmptyString(fallbackToEmptyString(substrate)),
         stage: fallbackToEmptyString(stage),
@@ -688,7 +720,7 @@ export function ObservationModal({
   }
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={() => void resetAndClose()}>
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={() => showBiotopePicker ? setShowBiotopePicker(false) : void resetAndClose()}>
       <View style={[styles.backdrop, Platform.OS === "android" ? styles.backdropAndroid : undefined]}>
         <SafeAreaView style={[styles.safeArea, Platform.OS === "android" ? styles.safeAreaAndroid : undefined]} edges={["top", "bottom"]}>
           <View style={styles.card}>
@@ -724,6 +756,36 @@ export function ObservationModal({
               </Svg>
             </Pressable>
             </View>
+            {!isPolygon && position && (
+              <View style={styles.pointMetaRow}>
+                <Pressable
+                  style={styles.positionBox}
+                  accessibilityRole="button"
+                  accessibilityLabel="Dela position"
+                  hitSlop={6}
+                  onPress={async () => {
+                    try {
+                      const { lat, lon } = position;
+                      const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`;
+                      const message = `Fältkarta\n ${species.trim()}\n\nSe platsen på kartan:\n${mapsUrl}`;
+
+                      await Share.share({
+                        message,
+                      });
+                    } catch {
+                      Alert.alert("Kunde inte dela", "Ett fel uppstod när delningsmenyn skulle öppnas.");
+                    }
+                  }}
+                >
+                  <Text style={styles.positionText}>{position.lat.toFixed(5)}, {position.lon.toFixed(5)}</Text>
+                </Pressable>
+                <Text style={styles.observationTime} accessibilityLabel="Observationstid">
+                  {dateISO && Number.isFinite(new Date(dateISO).getTime())
+                    ? `${String(new Date(dateISO).getHours()).padStart(2, "0")}:${String(new Date(dateISO).getMinutes()).padStart(2, "0")}`
+                    : "–"}
+                </Text>
+              </View>
+            )}
             <KeyboardAvoidingView
               behavior={Platform.OS === "ios" ? "padding" : undefined}
               keyboardVerticalOffset={Platform.OS === "ios" ? 40 : 0}
@@ -921,6 +983,45 @@ export function ObservationModal({
                 )}
               </>
             )}
+            {!isPolygon && visibleFields.privateComment && (
+              <View onLayout={(event) => rememberFieldLayout("privateComment", event.nativeEvent.layout.y)}>
+                <Text style={styles.fieldLabel}>Privat kommentar</Text>
+                <TextInput
+                  accessibilityLabel="Privat kommentar"
+                  value={privateComment}
+                  onChangeText={setPrivateComment}
+                  onFocus={() => scrollToField("privateComment")}
+                  style={styles.input}
+                />
+              </View>
+            )}
+            {!isPolygon && visibleFields.biotopeDescription && (
+              <View>
+                <Text style={styles.fieldLabel}>Biotop</Text>
+                <Pressable
+                  style={styles.input}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Biotop: ${biotope?.label ?? "Välj biotop"}`}
+                  onPress={() => { Keyboard.dismiss(); closeSuggestionPopovers(); setShowBiotopePicker(true); }}
+                >
+                  <Text style={{ fontSize: 16, color: biotope ? "#172121" : "#626568" }}>
+                    {biotope?.label ?? "Välj biotop"}
+                  </Text>
+                </Pressable>
+              </View>
+            )}
+            {!isPolygon && visibleFields.biotopeDescription && (
+              <View onLayout={(event) => rememberFieldLayout("biotopeDescription", event.nativeEvent.layout.y)}>
+                <Text style={styles.fieldLabel}>Biotop-beskrivning</Text>
+                <TextInput
+                  accessibilityLabel="Biotop-beskrivning"
+                  value={biotopeDescription}
+                  onChangeText={setBiotopeDescription}
+                  onFocus={() => scrollToField("biotopeDescription")}
+                  style={styles.input}
+                />
+              </View>
+            )}
             {showPointMetaFields && (
               <View style={styles.metaRow}>
                 <View style={[styles.formColumn, styles.wideColumn]}>
@@ -974,6 +1075,15 @@ export function ObservationModal({
             </View>
               </ScrollView>
             </KeyboardAvoidingView>
+            {showBiotopePicker && !isPolygon && (
+              <BiotopePicker
+                nodes={biotopeData}
+                selected={biotope}
+                onClear={() => setBiotope(null)}
+                onClose={() => { Keyboard.dismiss(); setShowBiotopePicker(false); }}
+                onSelect={value => { Keyboard.dismiss(); setBiotope(value); setShowBiotopePicker(false); }}
+              />
+            )}
             {!isPolygon && pendingSpeciesGroupSpecies ? (
               <View style={styles.speciesPromptOverlay} pointerEvents="auto">
                 <View style={styles.speciesPromptCard}>
@@ -1091,6 +1201,10 @@ function normalizeRedlistCategory(value: string | null | undefined): string {
 }
 
 const styles = StyleSheet.create({
+  pointMetaRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 12, marginHorizontal: 12, marginTop: -10, marginBottom: 10, zIndex: 10 },
+  observationTime: { textAlign: "right", fontWeight: "700" },
+  positionBox: { backgroundColor: "#e0eff2", borderRadius: 14, paddingVertical: 3, paddingHorizontal: 12 },
+  positionText: { color: "#005f73", fontSize: 12 },
   backdrop: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.35)",

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Modal, Pressable, ScrollView, Share, StyleSheet, Text, View } from "react-native";
+import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { Ionicons } from "@expo/vector-icons";
 import Svg, { Circle, Polygon } from "react-native-svg";
@@ -20,7 +20,7 @@ import {
   ObservationSizeWarning,
 } from "../storage/storage";
 import { speciesGroups } from "../data/speciesGroups";
-import { LatLon, MapItem, Observation, ObservationPhoto, PolygonObservation, PointObservation, VisibleFields } from "../types/models";
+import { Biotope, LatLon, MapItem, Observation, ObservationPhoto, PolygonObservation, PointObservation, VisibleFields } from "../types/models";
 import { makeId } from "../utils/id";
 import { ensureMapGeorefBounds } from "../services/files";
 import { resolvePointPhotoUri } from "../services/photos";
@@ -35,6 +35,8 @@ const defaultVisibleFields: VisibleFields = {
   quantity: false,
   unit: false,
   hostSpecies: false,
+  privateComment: false,
+  biotopeDescription: false,
   activity: false,
   substrate: false,
   stage: false,
@@ -62,6 +64,9 @@ export function MapScreen({ route, navigation }: Props) {
     quantity?: number;
     unit?: string;
     hostSpecies?: string;
+    privateComment?: string;
+    biotopeDescription?: string;
+    biotope?: Biotope | null;
     activity?: string;
     substrate?: string;
     stage?: string;
@@ -89,6 +94,7 @@ export function MapScreen({ route, navigation }: Props) {
   const [backgroundGPS, setBackgroundGPS] = useState(false);
   const [showScaleBar, setShowScaleBar] = useState(true);
   const [showAccuracyHelp, setShowAccuracyHelp] = useState(false);
+  const [pointDateISO, setPointDateISO] = useState("");
   const [frozenPointCoord, setFrozenPointCoord] = useState<LatLon | null>(null);
   const [frozenAccuracyMeters, setFrozenAccuracyMeters] = useState<number | null>(null);
   const [pendingSizeWarning, setPendingSizeWarning] = useState<ObservationSizeWarning | null>(null);
@@ -393,6 +399,9 @@ export function MapScreen({ route, navigation }: Props) {
     quantity?: number;
     unit?: string;
     hostSpecies?: string;
+    privateComment?: string;
+    biotopeDescription?: string;
+    biotope?: Biotope | null;
     activity?: string;
     substrate?: string;
     stage?: string;
@@ -407,7 +416,7 @@ export function MapScreen({ route, navigation }: Props) {
         return false;
       }
       const pointId = editingPoint?.id ?? makeId("obs");
-      const dateISO = editingPoint?.dateISO ?? new Date().toISOString();
+      const dateISO = editingPoint?.dateISO ?? pointDateISO;
       const pointNumber = editingPoint?.pointNumber ?? derivePointNumberFromExisting(pointId);
       const currentLookup = editingPhotoLookupRef.current;
       const missingExisting = editingMissingPhotosRef.current;
@@ -457,6 +466,9 @@ export function MapScreen({ route, navigation }: Props) {
               : editingPoint.accuracyMeters,
             quantity: payload.quantity !== undefined ? payload.quantity : editingPoint.quantity ?? 0,
             unit: payload.unit !== undefined ? payload.unit : editingPoint.unit ?? "",
+            privateComment: payload.privateComment !== undefined ? payload.privateComment.trim() : editingPoint.privateComment,
+            biotopeDescription: payload.biotopeDescription !== undefined ? payload.biotopeDescription.trim() : editingPoint.biotopeDescription,
+            biotope: payload.biotope !== undefined ? payload.biotope : editingPoint.biotope,
             hostSpecies:
               payload.hostSpecies !== undefined
                 ? payload.hostSpecies.trim() || undefined
@@ -495,6 +507,9 @@ export function MapScreen({ route, navigation }: Props) {
             quantity: payload.quantity ?? 0,
             unit: payload.unit ?? "",
             hostSpecies: payload.hostSpecies?.trim() || undefined,
+            privateComment: payload.privateComment?.trim() || undefined,
+            biotopeDescription: payload.biotopeDescription?.trim() || undefined,
+            biotope: payload.biotope ?? null,
             activity: payload.activity?.trim() || undefined,
             substrate: payload.substrate?.trim() || undefined,
             stage: payload.stage?.trim() || undefined,
@@ -662,6 +677,7 @@ export function MapScreen({ route, navigation }: Props) {
     setEditingPointPhotoPreviewAssetIds(previewAssetIds);
     setEditingPoint(obs);
     setFrozenPointCoord(obs.wgs84);
+    setPointDateISO(obs.dateISO);
     setFrozenAccuracyMeters(obs.accuracyMeters);
     setPointModalInitialValues({
       species: obs.species,
@@ -673,6 +689,9 @@ export function MapScreen({ route, navigation }: Props) {
       quantity: obs.quantity,
       unit: obs.unit,
       hostSpecies: obs.hostSpecies,
+      privateComment: obs.privateComment,
+      biotopeDescription: obs.biotopeDescription,
+      biotope: obs.biotope,
       activity: obs.activity,
       substrate: obs.substrate,
       stage: obs.stage,
@@ -691,6 +710,7 @@ export function MapScreen({ route, navigation }: Props) {
       editingPhotoLookupRef.current = {};
       editingMissingPhotosRef.current = [];
       setFrozenPointCoord(crosshairPos);
+      setPointDateISO(new Date().toISOString());
       setFrozenAccuracyMeters(displayAccuracyMeters ?? rawAccuracyMeters ?? null);
       setPointModalInitialValues({
         species: "",
@@ -712,6 +732,7 @@ export function MapScreen({ route, navigation }: Props) {
       editingPhotoLookupRef.current = {};
       editingMissingPhotosRef.current = [];
       setFrozenPointCoord(coord);
+      setPointDateISO(new Date().toISOString());
       setFrozenAccuracyMeters(displayAccuracyMeters ?? rawAccuracyMeters ?? null);
       setPointModalInitialValues({
         species: "",
@@ -758,6 +779,7 @@ export function MapScreen({ route, navigation }: Props) {
       editingPhotoLookupRef.current = {};
       editingMissingPhotosRef.current = [];
       setFrozenPointCoord(crosshairPos);
+      setPointDateISO(new Date().toISOString());
       setFrozenAccuracyMeters(displayAccuracyMeters ?? rawAccuracyMeters ?? null);
       setPointModalInitialValues({
         species: obs.species,
@@ -769,6 +791,9 @@ export function MapScreen({ route, navigation }: Props) {
         quantity: obs.quantity,
         unit: obs.unit,
         hostSpecies: obs.hostSpecies,
+        privateComment: "",
+        biotopeDescription: "",
+        biotope: null,
         activity: obs.activity,
         substrate: obs.substrate,
         stage: obs.stage,
@@ -778,30 +803,6 @@ export function MapScreen({ route, navigation }: Props) {
       setPointModalSession((v) => v + 1);
       setShowPointModal(true);
     }, 120);
-  }
-
-  function handleSharePoint(obs: PointObservation) {
-    //console.log("Hela observationen:", JSON.stringify(obs, null, 2));
-    // Stäng listan först
-    setShowPointList(false);
-
-    // Vänta ut animationen och dela sedan
-    setTimeout(async () => {
-      try {
-        const lat = obs.wgs84.lat;
-        const lon = obs.wgs84.lon;
-        console.log("Hela observationen:", lat, "  ", lon);
-        const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`;
-        const message = `Fältkarta\n ${obs.species}\n\nSe platsen på kartan:\n${mapsUrl}`;
-
-        await Share.share({
-          message: message,
-        });
-      } catch (error) {
-        Alert.alert("Kunde inte dela", "Ett fel uppstod när delningsmenyn skulle öppnas.");
-        console.error("Dela-fel:", error);
-      }
-    }, 150);
   }
 
   function openPolygonEditor(obs: PolygonObservation) {
@@ -988,17 +989,9 @@ export function MapScreen({ route, navigation }: Props) {
                       )}
                     </Pressable>
                     {obs.kind === "point" ? (
-                      <>
-                        {/* Vänster: Kopiera */}
-                        <Pressable style={styles.copySpeciesBtn} onPress={() => openCopiedPointModal(obs)}>
-                          <Ionicons name="copy-outline" size={16} color="#fff" />
-                        </Pressable>
-
-                        {/* Höger: Dela */}
-                        <Pressable style={styles.shareSpeciesBtn} onPress={() => handleSharePoint(obs)}>
-                          <Ionicons name="share-social-outline" size={16} color="#fff" />
-                        </Pressable>
-                      </>
+                      <Pressable style={styles.copySpeciesBtn} onPress={() => openCopiedPointModal(obs)}>
+                        <Ionicons name="copy-outline" size={16} color="#fff" />
+                      </Pressable>
                     ) : null}
                   </View>
                 ))
@@ -1050,11 +1043,16 @@ export function MapScreen({ route, navigation }: Props) {
           quantity: editingPoint.quantity,
           unit: editingPoint.unit,
           hostSpecies: editingPoint.hostSpecies,
+          privateComment: editingPoint.privateComment,
+          biotopeDescription: editingPoint.biotopeDescription,
+          biotope: editingPoint.biotope,
           activity: editingPoint.activity,
           substrate: editingPoint.substrate,
           stage: editingPoint.stage,
           gender: editingPoint.gender,
         } : pointModalInitialValues}
+        position={editingPoint?.wgs84 ?? frozenPointCoord ?? undefined}
+        dateISO={editingPoint?.dateISO ?? pointDateISO}
         title={editingPoint ? "Redigera punkt" : "Ny punktobservation"}
         sessionToken={pointModalSession}
         visibleFields={visibleFields}
@@ -1312,16 +1310,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
-  },
-  shareSpeciesBtn: {
-    width: 26,
-    height: 26,
-    borderRadius: 7,
-    backgroundColor: "rgba(255,255,255,0.12)",
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
-    marginLeft: 1, // Mellanrum mellan ikonerna!
   },
 });
 

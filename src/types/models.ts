@@ -58,6 +58,8 @@ export type ObservationPhoto = {
   fileName: string;
 };
 
+export type Biotope = { id: number; label: string };
+
 export type PointObservation = ObservationBase & {
   kind: "point";
   species: string;
@@ -68,6 +70,9 @@ export type PointObservation = ObservationBase & {
   quantity: number;
   unit: string;
   hostSpecies?: string;
+  privateComment?: string;
+  biotopeDescription?: string;
+  biotope?: Biotope | null;
   activity?: string;
   substrate?: string;
   stage?: string;
@@ -87,6 +92,8 @@ export type VisibleFieldKey =
   | "quantity"
   | "unit"
   | "hostSpecies"
+  | "privateComment"
+  | "biotopeDescription"
   | "activity"
   | "substrate"
   | "stage"

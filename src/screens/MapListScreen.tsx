@@ -58,6 +58,8 @@ export function MapListScreen({ navigation }: Props) {
     quantity: false,
     unit: false,
     hostSpecies: false,
+    privateComment: false,
+    biotopeDescription: false,
     activity: false,
     substrate: false,
     stage: false,
@@ -70,6 +72,8 @@ export function MapListScreen({ navigation }: Props) {
     { key: "substrate", label: "Substrat (t.ex. Död gren, Gnejs)" },
     { key: "stage", label: "Ålder-Stadium" },
     { key: "gender", label: "Kön" },
+    { key: "privateComment", label: "Privat kommentar" },
+    { key: "biotopeDescription", label: "Biotop" },
   ];
   const [maxImageSizeMB, setMaxImageSizeMB] = useState("3");
   const [maxSide, setMaxSide] = useState("1400");
@@ -197,6 +201,8 @@ export function MapListScreen({ navigation }: Props) {
       quantity: false,
       unit: false,
       hostSpecies: false,
+      privateComment: false,
+      biotopeDescription: false,
       activity: false,
       substrate: false,
       stage: false,
@@ -1421,7 +1427,6 @@ export function MapListScreen({ navigation }: Props) {
 
                     <View style={{ marginVertical: 10, borderTopWidth: 1, borderColor: '#ccc', paddingTop: 15 }}>
                       <Text style={[styles.settingsTitle, { fontWeight: 'bold', marginBottom: 10 }]}>Valbara fält i inmatningsfönstret</Text>
-                      <Text style={[styles.settingsTitle, { fontSize: 12, fontStyle: 'italic', fontWeight: '400', marginBottom: 10 }]}>Använd med försiktighet</Text>
                       {visibleFieldOptions.map((item) => {
                         const isSelected =
                           item.key === "quantityUnit"
