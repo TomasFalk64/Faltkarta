@@ -13,6 +13,7 @@ import {
 } from "../services/mapProjection";
 import { distanceMeters } from "../services/coords";
 import { LatLon, MapItem, Observation } from "../types/models";
+import { pointColorOption } from "../types/pointColors";
 
 type Props = {
   map: MapItem;
@@ -430,6 +431,7 @@ export function MapCanvas({
                     {
                       width: pointDotSize,
                       height: pointDotSize,
+                      backgroundColor: pointColorOption(obs.pointColor).hex,
                       borderRadius: pointDotSize / 2,
                       borderWidth: gpsBorderWidth,
                     },

@@ -28,6 +28,7 @@ import {
   loadSettings,
   prependObservationsForMap,
   removeMap,
+  clearMapObservations,
   renameMapAndSyncPointLocalNames,
   saveAreaDescription,
   saveMaxSideSetting,
@@ -35,9 +36,8 @@ import {
   upsertMap,
 } from "../storage/storage";
 import { useGpsContext } from "../contexts/GpsContext";
-import { createBlankGeoTiffMap, deleteIfExists, ensureMapGeorefBounds, pickAndImportGeoTiff } from "../services/files";
+import { createBlankGeoTiffMap, ensureMapGeorefBounds, pickAndImportGeoTiff } from "../services/files";
 import { distanceMeters, meters3857ToWgs84, sweref99tmToWgs84 } from "../services/coords";
-import { cleanupAllPendingPhotoCopies } from "../services/photos";
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from "expo-location";
 import * as DocumentPicker from "expo-document-picker";
@@ -45,6 +45,7 @@ import * as FileSystem from "expo-file-system/legacy";
 import { makeId } from "../utils/id";
 import { PolygonObservation } from "../types/models";
 import { getSafeUri } from "../services/mapPaths";
+import { checkDatabaseStorage, storageErrorMessage } from "../services/storageHealth";
 
 type Props = NativeStackScreenProps<RootStackParamList, "MapList">;
 
@@ -86,6 +87,9 @@ export function MapListScreen({ navigation }: Props) {
   const [showGuide, setShowGuide] = useState(false);
   const [menuMap, setMenuMap] = useState<MapItem | null>(null);
   const [deleteMap, setDeleteMap] = useState<MapItem | null>(null);
+  const [deleteOnlyObservations, setDeleteOnlyObservations] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const deletingRef = useRef(false);
   const [showImportMenu, setShowImportMenu] = useState(false);
   const [showMapBuildLoading, setShowMapBuildLoading] = useState(false);
   // When true we intend to open the rename modal once the loading modal is fully dismissed.
@@ -237,7 +241,9 @@ export function MapListScreen({ navigation }: Props) {
 
   useFocusEffect(
     useCallback(() => {      
-      refresh();
+      void refresh().then(() => checkDatabaseStorage()).catch((error) =>
+        Alert.alert("Kunde inte läsa kartorna", storageErrorMessage(error) + "\n\nEn avbruten radering kan återupptas nästa gång kartlistan öppnas.")
+      );
     }, [refresh])
   );
 
@@ -477,12 +483,34 @@ export function MapListScreen({ navigation }: Props) {
     setRenameMode(null);
 
     if (mode === "import" && current) {
-      await deleteIfExists(getSafeUri(current.fileName, "map"));
-      if (current.previewFileName) {
-        await deleteIfExists(getSafeUri(current.previewFileName, "preview"));
+      try {
+        const next = await removeMap(current.id);
+        setMaps(sortMaps(next, mapSortMode, mapSortAnchor));
+      } catch (error) {
+        Alert.alert("Raderingen kunde inte slutföras", storageErrorMessage(error));
       }
-      const next = await removeMap(current.id);
-      setMaps(sortMaps(next, mapSortMode, mapSortAnchor));
+    }
+  }
+
+  async function confirmDeletion() {
+    if (!deleteMap || deletingRef.current) return;
+    deletingRef.current = true;
+    setDeleting(true);
+    try {
+      if (deleteOnlyObservations) {
+        await clearMapObservations(deleteMap.id);
+      } else {
+        await removeMap(deleteMap.id);
+      }
+      await refresh();
+      setDeleteMap(null);
+      void checkDatabaseStorage();
+    } catch (error) {
+      Alert.alert("Raderingen kunde inte slutföras",
+        "Delar kan redan vara borttagna. Försök igen för att slutföra raderingen. Den återupptas också när kartlistan öppnas igen.\n\n" + storageErrorMessage(error));
+    } finally {
+      deletingRef.current = false;
+      setDeleting(false);
     }
   }
 
@@ -727,7 +755,9 @@ export function MapListScreen({ navigation }: Props) {
       const next = await prependObservationsForMap(map.id, nextPolygons);
       setObservationCounts((prev) => ({ ...prev, [map.id]: next.length }));
 
-      Alert.alert("Import klar", `Tillagda polygoner: ${nextPolygons.length}`);
+      Alert.alert("Import klar", `Tillagda polygoner: ${nextPolygons.length}`, [
+        { text: "OK", onPress: () => { void checkDatabaseStorage(); } },
+      ]);
     } catch (error) {
       Alert.alert("Importfel", String(error));
     }
@@ -1173,6 +1203,20 @@ export function MapListScreen({ navigation }: Props) {
                 if (!menuMap) return;
                 const selected = menuMap;
                 setMenuMap(null);
+                setDeleteOnlyObservations(true);
+                setDeleteMap(selected);
+              }}
+            >
+              <Text style={styles.menuActionText}>Radera observationer</Text>
+            </Pressable>
+
+            <Pressable
+              style={[styles.menuActionBtn, styles.menuDangerBtn]}
+              onPress={() => {
+                if (!menuMap) return;
+                const selected = menuMap;
+                setMenuMap(null);
+                setDeleteOnlyObservations(false);
                 setDeleteMap(selected);
               }}
             >
@@ -1603,33 +1647,24 @@ export function MapListScreen({ navigation }: Props) {
         </View>
       </Modal>
 
-      <Modal transparent visible={!!deleteMap} onRequestClose={() => setDeleteMap(null)} animationType="fade">
+      <Modal transparent visible={!!deleteMap} onRequestClose={() => { if (!deleting) setDeleteMap(null); }} animationType="fade">
         <View style={styles.modalBackdrop}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={() => setDeleteMap(null)} />
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => { if (!deleting) setDeleteMap(null); }} />
           <View style={styles.menuModalCard}>
-            <Text style={styles.modalTitle}>Vill du ta bort kartan?</Text>
+            <Text style={styles.modalTitle}>{deleteOnlyObservations ? "Radera alla observationer?" : "Vill du ta bort kartan?"}</Text>
             <Text style={styles.helpText}>
-              Detta kan inte ångras. Du kan spara din data genom att först exportera kartan,
-              observationer och bilder.
+              {deleteOnlyObservations
+                ? `Alla observationer och tillhörande foton i appen på ”${deleteMap?.title ?? ""}” tas bort. Kartan och dess inställningar behålls.`
+                : `Kartan ”${deleteMap?.title ?? ""}”, dess observationer och tillhörande foton i appen tas bort.`}
+              {"\n\nKontrollera att du har exporterat det du vill spara. Exporterade filer och originalbilder utanför appen behålls. Åtgärden kan inte ångras."}
             </Text>
             <View style={styles.modalActions}>
-              <Pressable onPress={() => setDeleteMap(null)} style={[styles.modalBtn, styles.cancelBtn, styles.modalBtnShort]}>
+              <Pressable disabled={deleting} onPress={() => setDeleteMap(null)} style={[styles.modalBtn, styles.cancelBtn, styles.modalBtnShort]}>
                 <Text style={styles.modalBtnText}>Avbryt</Text>
               </Pressable>
-              <Pressable
-                onPress={async () => {
-                  if (!deleteMap) return;
-                  const selected = deleteMap;
-                  setDeleteMap(null);
-                  await cleanupAllPendingPhotoCopies();
-                  await deleteIfExists(getSafeUri(selected.fileName, "map"));
-                  if (selected.previewFileName) await deleteIfExists(getSafeUri(selected.previewFileName, "preview"));
-                  const next = await removeMap(selected.id);
-                  setMaps(sortMaps(next, mapSortMode, mapSortAnchor));
-                }}
-                style={[styles.modalBtn, styles.menuDangerBtn, styles.modalBtnLong]}
-              >
-                <Text style={styles.modalBtnText}>Radera permanent</Text>
+              <Pressable disabled={deleting} onPress={() => { void confirmDeletion(); }}
+                style={[styles.modalBtn, styles.menuDangerBtn, styles.modalBtnLong]}>
+                <Text style={styles.modalBtnText}>{deleting ? "Raderar…" : deleteOnlyObservations ? "Radera observationer" : "Radera permanent"}</Text>
               </Pressable>
             </View>
           </View>

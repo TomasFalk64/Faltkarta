@@ -1,3 +1,4 @@
+import { checkDatabaseStorage, storageErrorMessage } from "../services/storageHealth";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -28,6 +29,7 @@ import { distanceMeters } from "../services/coords";
 import { getSafeUri } from "../services/mapPaths";
 import { buildPhotoFileName } from "../services/photoUtils";
 import { queuePendingPhotoProcessing, queuePendingPhotoProcessingForMap } from "../services/photoProcessing";
+import { PointColor, normalizePointColor } from "../types/pointColors";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Map">;
 
@@ -56,6 +58,7 @@ export function MapScreen({ route, navigation }: Props) {
   const [showPointList, setShowPointList] = useState(false);
   const [pointModalSession, setPointModalSession] = useState(0);
   const [pointModalInitialValues, setPointModalInitialValues] = useState<{
+    pointColor?: PointColor;
     species: string;
     notes: string;
     photoUris: string[];
@@ -222,6 +225,7 @@ export function MapScreen({ route, navigation }: Props) {
   }
 
   async function queueSizeWarningIfNeeded(next: Observation[]) {
+    if (await checkDatabaseStorage()) return;
     if (!map) return;
     try {
       const warning = await consumeObservationSizeWarning(map.id, next);
@@ -390,6 +394,7 @@ export function MapScreen({ route, navigation }: Props) {
   }
 
   async function onAddPoint(payload: {
+    pointColor?: PointColor;
     species?: string;
     notes: string;
     photoUris: string[];
@@ -455,6 +460,7 @@ export function MapScreen({ route, navigation }: Props) {
       const obs: PointObservation = editingPoint
         ? {
             ...editingPoint,
+            pointColor: normalizePointColor(payload.pointColor ?? editingPoint.pointColor),
             species,
             notes: payload.notes,
             photos,
@@ -494,6 +500,7 @@ export function MapScreen({ route, navigation }: Props) {
             id: pointId,
             mapId: map.id,
             kind: "point",
+            pointColor: normalizePointColor(payload.pointColor),
             species,
             count: 1,
             notes: payload.notes,
@@ -533,7 +540,7 @@ export function MapScreen({ route, navigation }: Props) {
       showToast(editingPoint ? "Punkt uppdaterad" : "Punkt sparad");
       return true;
     } catch (error) {
-      Alert.alert("Foto", String(error));
+      Alert.alert("Observationen kunde inte sparas", storageErrorMessage(error));
       return false;
     }
   }
@@ -681,6 +688,7 @@ export function MapScreen({ route, navigation }: Props) {
     setFrozenAccuracyMeters(obs.accuracyMeters);
     setPointModalInitialValues({
       species: obs.species,
+      pointColor: normalizePointColor(obs.pointColor),
       notes: obs.notes,
       photoUris: previewUris,
       photoAssetIds: previewAssetIds,
@@ -783,6 +791,7 @@ export function MapScreen({ route, navigation }: Props) {
       setFrozenAccuracyMeters(displayAccuracyMeters ?? rawAccuracyMeters ?? null);
       setPointModalInitialValues({
         species: obs.species,
+        pointColor: normalizePointColor(obs.pointColor),
         notes: obs.notes,
         photoUris: [],
         photoAssetIds: [],
@@ -1032,8 +1041,12 @@ export function MapScreen({ route, navigation }: Props) {
           triggerFollowCountdown();
         }}
         onSave={onAddPoint}
-        onDelete={editingPoint ? onDeletePoint : undefined}
+        onDelete={editingPoint ? async () => {
+          try { await onDeletePoint(); }
+          catch (error) { Alert.alert("Observationen kunde inte raderas", storageErrorMessage(error)); return false; }
+        } : undefined}
         initialValues={editingPoint ? {
+          pointColor: normalizePointColor(editingPoint.pointColor),
           species: editingPoint.species,
           notes: editingPoint.notes,
           photoUris: editingPointPhotoPreviewUris,
@@ -1066,8 +1079,18 @@ export function MapScreen({ route, navigation }: Props) {
           setShowPolygonModal(false);
           setEditingPolygon(null);
         }}
-        onSave={onAddPolygon}
-        onDelete={editingPolygon ? onDeletePolygon : undefined}
+        onSave={async (payload) => {
+          try {
+            await onAddPolygon(payload);
+          } catch (error) {
+            Alert.alert("Observationen kunde inte sparas", storageErrorMessage(error));
+            return false;
+          }
+        }}
+        onDelete={editingPolygon ? async () => {
+          try { await onDeletePolygon(); }
+          catch (error) { Alert.alert("Observationen kunde inte raderas", storageErrorMessage(error)); return false; }
+        } : undefined}
         initialValues={
           editingPolygon
             ? {

@@ -83,7 +83,8 @@
           }
         }
       ],
-      "./withAndroidAllowBackupFix.js"
+      "./withAndroidAllowBackupFix.js",
+      "./withAndroidStorageLimit.js"
     ],
     "extra": {
       "eas": {

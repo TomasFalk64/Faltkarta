@@ -1,3 +1,5 @@
+import { PointColor } from "./pointColors";
+
 export type LatLon = {
   lat: number;
   lon: number;
@@ -62,6 +64,7 @@ export type Biotope = { id: number; label: string };
 
 export type PointObservation = ObservationBase & {
   kind: "point";
+  pointColor?: PointColor;
   species: string;
   wgs84: LatLon;
   pointNumber?: number;

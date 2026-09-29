@@ -1,4 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as FileSystem from "expo-file-system/legacy";
 import { AppSettings, MapItem, Observation, ObservationPhoto } from "../types/models";
 import { getSafeUri, toStoredMapPath } from "../services/mapPaths";
 import { buildPhotoFileName, buildPointPhotoFileName } from "../services/photoUtils";
@@ -9,7 +10,6 @@ import {
   isMapPhotoUri,
   mapPhotosDir,
   photoFileNameFromRef,
-  removeMapPhotosDir,
   resolvePointPhotoUri,
 } from "../services/photos";
 
@@ -37,6 +37,7 @@ export type ObservationSizeWarning = {
 let observationMigrationPromise: Promise<void> | null = null;
 
 export async function loadMaps(): Promise<MapItem[]> {
+  await resumePendingDeletions();
   const raw = await AsyncStorage.getItem(MAPS_KEY);
   if (!raw) {
     return [];
@@ -92,12 +93,70 @@ export async function renameMapAndSyncPointLocalNames(
 
 export async function removeMap(mapId: string): Promise<MapItem[]> {
   const all = await loadMaps();
-  const next = all.filter((m) => m.id !== mapId);
-  await saveMaps(next);
-  await removeObservationsForMap(mapId);
-  await removeAreaDescription(mapId);
-  await removeMapPhotosDir(mapId);
-  return next;
+  const map = all.find((item) => item.id === mapId);
+  if (map) await startDeletion({ mapId, map });
+  return await loadMaps();
+}
+
+type DeletionJob = { mapId: string; map?: MapItem };
+const DELETIONS_DIR = `${FileSystem.documentDirectory}pending-deletions/`;
+let deletionChain: Promise<void> = Promise.resolve();
+
+function serializeDeletion(work: () => Promise<void>): Promise<void> {
+  const result = deletionChain.then(work);
+  deletionChain = result.catch(() => {});
+  return result;
+}
+
+export async function clearMapObservations(mapId: string): Promise<void> {
+  await startDeletion({ mapId });
+}
+
+async function startDeletion(job: DeletionJob): Promise<void> {
+  await resumePendingDeletions();
+  return serializeDeletion(async () => {
+    await FileSystem.makeDirectoryAsync(DELETIONS_DIR, { intermediates: true });
+    const path = `${DELETIONS_DIR}${encodeURIComponent(job.mapId)}.json`;
+    // Journal outside AsyncStorage: retry after a crash without needing database space.
+    await FileSystem.writeAsStringAsync(`${path}.tmp`, JSON.stringify(job));
+    await FileSystem.moveAsync({ from: `${path}.tmp`, to: path });
+    await completeDeletion(job);
+    await FileSystem.deleteAsync(path, { idempotent: true });
+  });
+}
+
+async function resumePendingDeletions(): Promise<void> {
+  return serializeDeletion(async () => {
+    if (!(await FileSystem.getInfoAsync(DELETIONS_DIR)).exists) return;
+    const files = await FileSystem.readDirectoryAsync(DELETIONS_DIR);
+    for (const file of files.filter((name) => name.endsWith(".json"))) {
+      const path = `${DELETIONS_DIR}${file}`;
+      const job = JSON.parse(await FileSystem.readAsStringAsync(path)) as DeletionJob;
+      await completeDeletion(job);
+      await FileSystem.deleteAsync(path, { idempotent: true });
+    }
+  });
+}
+
+async function completeDeletion(job: DeletionJob): Promise<void> {
+  const { waitForPhotoProcessing } = await import("../services/photoProcessing");
+  await waitForPhotoProcessing();
+  // Remove the observations key before writes to counts or the map list.
+  await removeObservationsForMap(job.mapId);
+  if (job.map) {
+    await removeAreaDescription(job.mapId);
+    const raw = await AsyncStorage.getItem(MAPS_KEY);
+    const maps: MapItem[] = raw ? JSON.parse(raw) : [];
+    await saveMaps(maps.filter((map) => map.id !== job.mapId));
+  }
+  // Delete only app-owned photos. Original images and exported files are untouched.
+  await FileSystem.deleteAsync(mapPhotosDir(job.mapId), { idempotent: true });
+  if (job.map) {
+    await FileSystem.deleteAsync(getSafeUri(job.map.fileName, "map"), { idempotent: true });
+    if (job.map.previewFileName) {
+      await FileSystem.deleteAsync(getSafeUri(job.map.previewFileName, "preview"), { idempotent: true });
+    }
+  }
 }
 
 export async function loadAreaDescriptions(): Promise<Record<string, string>> {
@@ -328,7 +387,11 @@ async function ensureObservationStorageMigrated(): Promise<void> {
 
 async function migrateObservationStorageIfNeeded(): Promise<void> {
   const migrated = await AsyncStorage.getItem(OBS_MIGRATION_KEY);
-  if (migrated === "true") return;
+  if (migrated === "true") {
+    // Older releases left a duplicate legacy snapshot after successful migration.
+    await AsyncStorage.removeItem(OBS_KEY);
+    return;
+  }
 
   const raw = await AsyncStorage.getItem(OBS_KEY);
   if (!raw) {
@@ -368,6 +431,7 @@ async function migrateObservationStorageIfNeeded(): Promise<void> {
     [OBS_COUNTS_KEY, JSON.stringify(countsFromObservationsByMap(byMap))],
     [OBS_MIGRATION_KEY, "true"],
   ]);
+  await AsyncStorage.removeItem(OBS_KEY);
 }
 
 async function observationMapKeys(): Promise<string[]> {

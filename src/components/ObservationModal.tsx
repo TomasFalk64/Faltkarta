@@ -32,8 +32,10 @@ import {
 import biotopeData from "../data/biotop_artportalen.json";
 import { BiotopePicker } from "./BiotopePicker";
 import { Biotope, LatLon, VisibleFields } from "../types/models";
+import { POINT_COLORS, PointColor, normalizePointColor, pointColorOption } from "../types/pointColors";
 
 type ModalPayload = {
+  pointColor?: PointColor;
   species?: string;
   polygonName?: string;
   notes: string;
@@ -99,7 +101,7 @@ type Props = {
   onClose: () => void;
   onSave: (payload: ModalPayload) => Promise<boolean | void> | boolean | void;
   initialValues?: ModalPayload;
-  onDelete?: () => Promise<void> | void;
+  onDelete?: () => Promise<boolean | void> | boolean | void;
   sessionToken?: number;
   showPointMetaFields?: boolean;
   visibleFields?: VisibleFields;
@@ -127,6 +129,8 @@ export function ObservationModal({
   autoFocusSpecies = false,
 }: Props) {
   const [species, setSpecies] = useState("");
+  const [pointColor, setPointColor] = useState<PointColor>("red");
+  const [showColorPicker, setShowColorPicker] = useState(false);
   const [notes, setNotes] = useState("");
   const [photoUris, setPhotoUris] = useState<string[]>([]);
   const [photoAssetIds, setPhotoAssetIds] = useState<string[]>([]);
@@ -173,6 +177,8 @@ export function ObservationModal({
   useEffect(() => {
     if (sessionToken !== undefined) {
       if (lastSessionTokenRef.current !== sessionToken) {
+        setPointColor(normalizePointColor(initialValues?.pointColor));
+        setShowColorPicker(false);
         setSpecies(
           isPolygon ? initialValues?.polygonName ?? "" : initialValues?.species ?? ""
         );
@@ -213,6 +219,8 @@ export function ObservationModal({
     
     const openedNow = visible && !wasVisibleRef.current;
     if (openedNow) {
+      setPointColor(normalizePointColor(initialValues?.pointColor));
+      setShowColorPicker(false);
       setSpecies(
         isPolygon ? initialValues?.polygonName ?? "" : initialValues?.species ?? ""
       );
@@ -503,6 +511,8 @@ export function ObservationModal({
   }
 
   async function resetAndClose() {
+    setPointColor("red");
+    setShowColorPicker(false);
     setSpecies("");
     setNotes("");
     setPhotoUris([]);
@@ -661,7 +671,7 @@ export function ObservationModal({
   async function handleConfirmedDelete() {
     if (!onDelete) return;
     setShowDeleteConfirm(false);
-    await onDelete();
+    if (await onDelete() === false) return;
     await resetAndClose();
   }
 
@@ -691,6 +701,7 @@ export function ObservationModal({
       }
       const fallbackToEmptyString = (val: string) => val ? val.trim() : "";
       const shouldClose = await onSave({
+        ...(!isPolygon ? { pointColor } : {}),
         species: isPolygon ? "" : trimmedSpecies,
         polygonName: isPolygon ? trimmedSpecies : "",
         notes: fallbackToEmptyString(notes),
@@ -720,9 +731,9 @@ export function ObservationModal({
   }
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={() => showBiotopePicker ? setShowBiotopePicker(false) : void resetAndClose()}>
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={() => showColorPicker ? setShowColorPicker(false) : showBiotopePicker ? setShowBiotopePicker(false) : void resetAndClose()}>
       <View style={[styles.backdrop, Platform.OS === "android" ? styles.backdropAndroid : undefined]}>
-        <SafeAreaView style={[styles.safeArea, Platform.OS === "android" ? styles.safeAreaAndroid : undefined]} edges={["top", "bottom"]}>
+        <SafeAreaView accessibilityElementsHidden={showColorPicker} importantForAccessibility={showColorPicker ? "no-hide-descendants" : "auto"} style={[styles.safeArea, Platform.OS === "android" ? styles.safeAreaAndroid : undefined]} edges={["top", "bottom"]}>
           <View style={styles.card}>
             <View style={styles.header}>
             <Pressable 
@@ -759,6 +770,19 @@ export function ObservationModal({
             {!isPolygon && position && (
               <View style={styles.pointMetaRow}>
                 <Pressable
+                  style={styles.colorButton}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Punktfärg: ${pointColorOption(pointColor).label}. Välj färg`}
+                  accessibilityState={{ expanded: showColorPicker }}
+                  onPress={() => {
+                    Keyboard.dismiss();
+                    closeSuggestionPopovers();
+                    setShowColorPicker(true);
+                  }}
+                >
+                  <View style={[styles.colorDot, { backgroundColor: pointColorOption(pointColor).hex }]} />
+                </Pressable>
+                <Pressable
                   style={styles.positionBox}
                   accessibilityRole="button"
                   accessibilityLabel="Dela position"
@@ -777,7 +801,7 @@ export function ObservationModal({
                     }
                   }}
                 >
-                  <Text style={styles.positionText}>{position.lat.toFixed(5)}, {position.lon.toFixed(5)}</Text>
+                  <Text style={styles.positionText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{position.lat.toFixed(5)}, {position.lon.toFixed(5)}</Text>
                 </Pressable>
                 <Text style={styles.observationTime} accessibilityLabel="Observationstid">
                   {dateISO && Number.isFinite(new Date(dateISO).getTime())
@@ -1181,6 +1205,37 @@ export function ObservationModal({
           </View>
         </Modal>
         </SafeAreaView>
+        {showColorPicker && !isPolygon && (
+          <View style={styles.colorPickerOverlay} accessibilityViewIsModal>
+            <Pressable
+              style={StyleSheet.absoluteFill}
+              accessibilityRole="button"
+              accessibilityLabel="Stäng färgväljaren utan att ändra färg"
+              onPress={() => setShowColorPicker(false)}
+            />
+            <View style={styles.colorPickerCard} onStartShouldSetResponder={() => true}>
+              <Text style={styles.colorPickerTitle}>Punktfärg</Text>
+              <View style={styles.colorOptions}>
+                {POINT_COLORS.map((color) => (
+                  <Pressable
+                    key={color.id}
+                    style={[styles.colorOption, pointColor === color.id && styles.colorOptionSelected]}
+                    accessibilityRole="button"
+                    accessibilityLabel={color.label}
+                    accessibilityState={{ selected: pointColor === color.id }}
+                    onPress={() => {
+                      setPointColor(color.id);
+                      setShowColorPicker(false);
+                    }}
+                  >
+                    <View style={[styles.colorSwatch, { backgroundColor: color.hex }]} />
+                    <Text style={styles.colorLabel}>{pointColor === color.id ? "✓ " : ""}{color.label}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+          </View>
+        )}
       </View>
     </Modal>
   );
@@ -1201,9 +1256,19 @@ function normalizeRedlistCategory(value: string | null | undefined): string {
 }
 
 const styles = StyleSheet.create({
-  pointMetaRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 12, marginHorizontal: 12, marginTop: -10, marginBottom: 10, zIndex: 10 },
+  pointMetaRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, marginHorizontal: 0, marginTop: -10, marginBottom: 10, zIndex: 10 },
+  colorButton: { width: 44, height: 44, alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  colorDot: { width: 22, height: 22, borderRadius: 11, borderWidth: 1.5, borderColor: "#fff" },
+  colorPickerOverlay: { ...StyleSheet.absoluteFillObject, zIndex: 100, backgroundColor: "rgba(0,0,0,0.25)", alignItems: "center", justifyContent: "center", padding: 16 },
+  colorPickerCard: { width: "100%", maxWidth: 280, backgroundColor: "#fff", borderRadius: 12, padding: 12 },
+  colorPickerTitle: { fontSize: 16, fontWeight: "700", color: "#172121", marginBottom: 8 },
+  colorOptions: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 6 },
+  colorOption: { width: 76, minHeight: 62, paddingVertical: 6, alignItems: "center", justifyContent: "center", borderRadius: 8, borderWidth: 2, borderColor: "transparent" },
+  colorOptionSelected: { borderColor: "#005f73", backgroundColor: "#e0eff2" },
+  colorSwatch: { width: 24, height: 24, borderRadius: 12 },
+  colorLabel: { color: "#172121", fontSize: 13, marginTop: 4 },
   observationTime: { textAlign: "right", fontWeight: "700" },
-  positionBox: { backgroundColor: "#e0eff2", borderRadius: 14, paddingVertical: 3, paddingHorizontal: 12 },
+  positionBox: { backgroundColor: "#e0eff2", borderRadius: 14, paddingVertical: 3, paddingHorizontal: 8, flexShrink: 1 },
   positionText: { color: "#005f73", fontSize: 12 },
   backdrop: {
     flex: 1,

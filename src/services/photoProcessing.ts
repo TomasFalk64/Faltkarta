@@ -10,6 +10,10 @@ import {
 const activeJobs = new Set<string>();
 let processingChain = Promise.resolve();
 
+export async function waitForPhotoProcessing(): Promise<void> {
+  await processingChain;
+}
+
 export function photoSignature(photos: ObservationPhoto[]): string {
   return photos
     .map((photo) => [photo.fileName, photo.originalUri ?? "", photo.assetId ?? ""].join("|"))
