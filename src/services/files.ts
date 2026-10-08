@@ -1,7 +1,7 @@
 import * as FileSystem from "expo-file-system/legacy";
 import { File as ExpoFile } from "expo-file-system";
 import * as DocumentPicker from "expo-document-picker";
-import { requireOptionalNativeModule } from "expo-modules-core";
+import { requireOptionalNativeModule } from "expo";
 import { Alert, Platform } from "react-native";
 import { fromByteArray } from "base64-js";
 import * as UTIF from "utif";

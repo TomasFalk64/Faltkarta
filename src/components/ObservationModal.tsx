@@ -1259,7 +1259,7 @@ const styles = StyleSheet.create({
   pointMetaRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, marginHorizontal: 0, marginTop: -10, marginBottom: 10, zIndex: 10 },
   colorButton: { width: 44, height: 44, alignItems: "center", justifyContent: "center", flexShrink: 0 },
   colorDot: { width: 22, height: 22, borderRadius: 11, borderWidth: 1.5, borderColor: "#fff" },
-  colorPickerOverlay: { ...StyleSheet.absoluteFillObject, zIndex: 100, backgroundColor: "rgba(0,0,0,0.25)", alignItems: "center", justifyContent: "center", padding: 16 },
+  colorPickerOverlay: { ...StyleSheet.absoluteFill, zIndex: 100, backgroundColor: "rgba(0,0,0,0.25)", alignItems: "center", justifyContent: "center", padding: 16 },
   colorPickerCard: { width: "100%", maxWidth: 280, backgroundColor: "#fff", borderRadius: 12, padding: 12 },
   colorPickerTitle: { fontSize: 16, fontWeight: "700", color: "#172121", marginBottom: 8 },
   colorOptions: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 6 },
@@ -1529,7 +1529,7 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   speciesPromptOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     zIndex: 999,
     elevation: 999,
     backgroundColor: "rgba(0,0,0,0.55)",

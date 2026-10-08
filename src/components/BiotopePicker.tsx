@@ -114,7 +114,7 @@ export function BiotopePicker({ nodes, selected, onSelect, onClear, onClose }: P
 }
 
 const styles = StyleSheet.create({
-  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: "#fff", borderRadius: 12, padding: 14, zIndex: 30 },
+  overlay: { ...StyleSheet.absoluteFill, backgroundColor: "#fff", borderRadius: 12, padding: 14, zIndex: 30 },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 },
   title: { fontSize: 20, fontWeight: "700", color: "#172121" },
   close: { padding: 10 },

@@ -11,7 +11,7 @@ Pod::Spec.new do |s|
   s.author         = 'TF64'
   s.homepage       = 'https://example.invalid'
   s.platforms      = {
-    :ios => '15.1'
+    :ios => '16.4'
   }
   s.swift_version  = '5.9'
   s.source         = { git: 'https://example.invalid/faltkarta-geotiff-preview.git' }
