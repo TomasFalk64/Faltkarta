@@ -51,8 +51,11 @@ export default function App() {
             <Stack.Screen
               name="Map"
               component={MapScreen}
-              options={{ title: "Karta" }}
-              //options={{ headerShown: false }}
+              options={{
+                title: "Karta",
+                // Reserve horizontal swipes for map panning, not iOS back navigation.
+                gestureEnabled: false,
+              }}
             />
             <Stack.Screen
               name="Export"

@@ -1,5 +1,5 @@
 import { Alert, Platform } from "react-native";
-import { requireOptionalNativeModule } from "expo-modules-core";
+import { requireOptionalNativeModule } from "expo";
 
 let warnedLevel = 0;
 let checking = false;

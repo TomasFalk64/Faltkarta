@@ -2,13 +2,8 @@
   "expo": {
     "name": "Fältkarta",
     "slug": "faltkarta",
-    "version": "3.10",
+    "version": "3.11",
     "icon": "./assets/icon.png",
-    "splash": {
-      "image": "./assets/splash.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
-    },
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "assetBundlePatterns": [
@@ -16,7 +11,7 @@
     ],
     "ios": {
       "bundleIdentifier": "com.tf64.faltkarta",
-      "buildNumber": "17",
+      "buildNumber": "18",
       "supportsTablet": true,
       "usesIcloudStorage": true,
       "infoPlist": {
@@ -64,7 +59,18 @@
       "bundler": "metro"
     },
     "plugins": [
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#ffffff",
+          "enableFullScreenImage_legacy": true
+        }
+      ],
       "expo-document-picker",
+      "expo-mail-composer",
+      "expo-sharing",
       [
         "expo-location",
         {
