@@ -17,7 +17,10 @@ import {
   Linking,
 } from "react-native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect, useIsFocused } from "@react-navigation/native";
+import { WoodpeckerIntro, type Size, type TargetRect } from "../features/woodpecker";
+import { lowerScreenLayout } from "../features/woodpecker/layout";
+import { loadAnimationPending, saveAnimationPending } from "../storage/animationPreference";
 import { RootStackParamList } from "../navigation/types";
 import { AppSettings, LatLon, MapItem, VisibleFields, VisibleFieldKey } from "../types/models";
 import {
@@ -48,8 +51,41 @@ import { getSafeUri } from "../services/mapPaths";
 import { checkDatabaseStorage, storageErrorMessage } from "../services/storageHealth";
 
 type Props = NativeStackScreenProps<RootStackParamList, "MapList">;
+const INTRO_CONFIG = { birdSize: 76 };
 
 export function MapListScreen({ navigation }: Props) {
+  const isFocused = useIsFocused();
+  const [animationPending, setAnimationPending] = useState<boolean | null>(null);
+  const [animationDraft, setAnimationDraft] = useState(true);
+  const [animationSignal, setAnimationSignal] = useState(1);
+  const [manualAnimationPlayback, setManualAnimationPlayback] = useState(false);
+  const manualAnimationRequested = useRef(false);
+  const [animationSize, setAnimationSize] = useState<Size>({ width: 0, height: 0 });
+  const [gpsRect, setGpsRect] = useState<TargetRect | null>(null);
+  const [plusRect, setPlusRect] = useState<TargetRect | null>(null);
+  const [screenReady, setScreenReady] = useState(false);
+  const savingSettings = useRef(false);
+
+  useEffect(() => {
+    let mounted = true;
+    void loadAnimationPending().then(pending => {
+      if (mounted) {
+        setAnimationPending(pending);
+        setAnimationDraft(pending);
+      }
+    }).catch(error => console.error('Kunde inte läsa animationsinställningen:', error));
+    return () => { mounted = false; };
+  }, []);
+
+  const completeAnimation = useCallback(() => {
+    setManualAnimationPlayback(false);
+    setAnimationPending(false);
+    setAnimationDraft(false);
+    void saveAnimationPending(false).catch(error => {
+      console.error('Kunde inte spara animationsinställningen:', error);
+      Alert.alert('Kunde inte spara', 'Animeringen kan visas igen nästa gång appen startas.');
+    });
+  }, []);
   const [maps, setMaps] = useState<MapItem[]>([]);
   const [autoFollow, setAutoFollow] = useState(true);
   const [artportalenTimeEnabled, setArtportalenTimeEnabled] = useState(true);
@@ -108,6 +144,14 @@ export function MapListScreen({ navigation }: Props) {
   const [mapSortMode, setMapSortMode] = useState<"LATEST" | "ALPHA" | "NEAREST">("ALPHA");
   const [mapSortAnchor, setMapSortAnchor] = useState<LatLon | undefined>(undefined);
   const [observationCounts, setObservationCounts] = useState<Record<string, number>>({});
+  const introLayout = gpsRect && plusRect
+    ? lowerScreenLayout(animationSize, { gps: gpsRect, plus: plusRect }) : null;
+  const introEnabled = isFocused && screenReady && animationPending === true
+    && foregroundPermissionKnown && (foregroundPermissionGranted || startDisclosureDismissed)
+    && !showSettings && !showGuide && !renameMap && !menuMap && !deleteMap
+    && !showImportMenu && !showMapBuildLoading && !openRenameAfterLoading
+    && !pendingRenameMap && !importPolygonMap && !showBackgroundDisclosure
+    && !descriptionModalMap && !changeDateMap && !showStartDisclosure;
 
   const SKOGSMONITOR_URL = "https://karta.skogsmonitor.se/?background=Lantm%C3%A4terietTopowebb&lat=60.55728&layers=17-26-21-14&lng=16.88599&zoom=7";
   const sortLabel = mapSortMode === "NEAREST" ? "Närmast" : mapSortMode === "ALPHA" ? "A - Ö" : "Senast";
@@ -241,9 +285,15 @@ export function MapListScreen({ navigation }: Props) {
 
   useFocusEffect(
     useCallback(() => {      
-      void refresh().then(() => checkDatabaseStorage()).catch((error) =>
+      let active = true;
+      setScreenReady(false);
+      void refresh().then(() => checkDatabaseStorage()).then(warningShown => {
+        // A native storage alert must not consume the intro behind the dialog.
+        if (active) setScreenReady(!warningShown);
+      }).catch((error) =>
         Alert.alert("Kunde inte läsa kartorna", storageErrorMessage(error) + "\n\nEn avbruten radering kan återupptas nästa gång kartlistan öppnas.")
       );
+      return () => { active = false; };
     }, [refresh])
   );
 
@@ -515,6 +565,8 @@ export function MapListScreen({ navigation }: Props) {
   }
 
   const onSaveSettings = async () => {
+    if (savingSettings.current) return;
+    savingSettings.current = true;
     try {
       //const parsedPing = Number.parseInt(gpsPingSeconds, 10);
       //const rawPing = Number.isFinite(parsedPing) ? parsedPing : 3;
@@ -537,6 +589,13 @@ export function MapListScreen({ navigation }: Props) {
       
       await saveSettings(newSettings);
       await saveMaxSideSetting(maxSideValue);
+      if (animationPending !== null) {
+        await saveAnimationPending(animationDraft);
+        setAnimationPending(animationDraft);
+        if (!animationDraft) setManualAnimationPlayback(false);
+        else if (manualAnimationRequested.current) setManualAnimationPlayback(true);
+        if (animationDraft) setAnimationSignal(signal => signal + 1);
+      }
       setGpsOptions({ pingSeconds: pingValue, backgroundGPS: gpsOptions.backgroundGPS });
       
       
@@ -548,6 +607,8 @@ export function MapListScreen({ navigation }: Props) {
     } catch (error) {
       console.error("Kunde inte spara inställningar:", error);
       Alert.alert("Fel", "Kunde inte spara inställningarna.");
+    } finally {
+      savingSettings.current = false;
     }
   };
 
@@ -820,7 +881,8 @@ export function MapListScreen({ navigation }: Props) {
   }
 
   return (
-    <View style={styles.container}>
+    <View style={styles.container} onLayout={({ nativeEvent: { layout } }) =>
+      setAnimationSize({ width: layout.width, height: layout.height })}>
       <FlatList
         data={maps}
         keyExtractor={(item) => item.id}
@@ -891,11 +953,16 @@ export function MapListScreen({ navigation }: Props) {
         )}
       />
 
-      <Pressable style={styles.fab} onPress={() => setShowImportMenu(true)}>
+      <Pressable style={styles.fab} onPress={() => setShowImportMenu(true)}
+        onLayout={({ nativeEvent: { layout } }) => setPlusRect(layout)}>
         <Text style={styles.fabText}>+</Text>
       </Pressable>
 
-     <Pressable style={styles.infoFab} onPress={() => setShowSettings(true)}>
+     <Pressable style={styles.infoFab} onPress={() => {
+       manualAnimationRequested.current = false;
+       setAnimationDraft(animationPending ?? true);
+       setShowSettings(true);
+     }}>
         {Platform.select({
           ios: (
             <Text style={styles.iosGearEmoji}>
@@ -915,12 +982,26 @@ export function MapListScreen({ navigation }: Props) {
           styles.exitFab, 
           gpsOptions.backgroundGPS
             ? { backgroundColor: "#3b9640" }
-            : { backgroundColor: "#9b9b9b", borderWidth: 2, borderColor: "#ca6702" }
+            : { backgroundColor: "#9b9b9b", borderWidth: 2, borderColor: "#287381" }
         ]} 
         onPress={toggleBackgroundGPS}
+        onLayout={({ nativeEvent: { layout } }) => setGpsRect(layout)}
       >
         <Text style={styles.exitFabText}>BakgrundsGPS</Text> 
       </Pressable>
+
+      {introLayout && animationPending === true && (
+        <View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
+          style={[StyleSheet.absoluteFill, { overflow: 'hidden', zIndex: 1001, elevation: 11 }]}>
+          <View pointerEvents="none" style={{ position: 'absolute', top: introLayout.top, left: 0,
+            width: introLayout.size.width, height: introLayout.size.height }}>
+            <WoodpeckerIntro size={introLayout.size} targets={introLayout.targets}
+              config={INTRO_CONFIG} enabled={introEnabled} startSignal={animationSignal}
+              manualPlayback={manualAnimationPlayback}
+              onComplete={completeAnimation} />
+          </View>
+        </View>
+      )}
 
       <Modal
         transparent
@@ -1412,6 +1493,21 @@ export function MapListScreen({ navigation }: Props) {
 
                       </View>
                     </View>
+
+                    <Pressable
+                      style={[styles.settingsRow, { marginVertical: 3, alignItems: "center" }]}
+                      accessibilityRole="checkbox"
+                      accessibilityState={{ checked: animationDraft, disabled: animationPending === null }}
+                      disabled={animationPending === null}
+                      onPress={() => {
+                        manualAnimationRequested.current = !animationDraft;
+                        setAnimationDraft(!animationDraft);
+                      }}
+                    >
+                      <Text style={styles.settingsTitle}>Visa animering</Text>
+                      <Ionicons name={animationDraft ? checkboxName : squareOutlineName}
+                        size={24} color={animationDraft ? "#0a9396" : "#767577"} />
+                    </Pressable>
 
                     <Pressable
                       style={[styles.settingsRow, { marginVertical: 3, alignItems: "center" }]}
