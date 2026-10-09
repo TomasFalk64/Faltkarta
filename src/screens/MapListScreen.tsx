@@ -913,7 +913,9 @@ export function MapListScreen({ navigation }: Props) {
       <Pressable 
         style={[
           styles.exitFab, 
-          gpsOptions.backgroundGPS ? { backgroundColor: "#3b9640" } : { backgroundColor: "#9b9b9b" }
+          gpsOptions.backgroundGPS
+            ? { backgroundColor: "#3b9640" }
+            : { backgroundColor: "#9b9b9b", borderWidth: 2, borderColor: "#ca6702" }
         ]} 
         onPress={toggleBackgroundGPS}
       >
