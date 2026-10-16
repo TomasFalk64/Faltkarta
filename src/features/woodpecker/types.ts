@@ -3,6 +3,7 @@ export type Size = { width: number; height: number };
 /** All values are logical pixels in the overlay's local coordinate system. */
 export type TargetRect = Point & Size;
 export type Targets = { gps: TargetRect; plus: TargetRect };
+export type IntroTargets = Targets | { artfynd: TargetRect };
 export type Facing = 1 | -1;
 export type SpriteKind = 'flight' | 'turn' | 'peck';
 export type SpriteFrame = {

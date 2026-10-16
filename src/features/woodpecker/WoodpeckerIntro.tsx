@@ -4,7 +4,7 @@ import Animated, { cancelAnimation, Easing, ReduceMotion, runOnJS, useAnimatedSt
   useDerivedValue, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
 import { resolveConfig } from './config';
 import { createRoute, samplePose, totalDuration, validLayout, type Pose } from './motion';
-import type { Size, SpriteFrame, SpriteKind, Targets, WoodpeckerConfig } from './types';
+import type { Size, SpriteFrame, SpriteKind, IntroTargets, WoodpeckerConfig } from './types';
 
 const sheets: Record<SpriteKind, { source: ImageSourcePropType; width: number; height: number }> = {
   flight: { source: require('./assets/flight.png'), width: 2172, height: 724 },
@@ -14,7 +14,7 @@ const sheets: Record<SpriteKind, { source: ImageSourcePropType; width: number; h
 
 export type WoodpeckerIntroProps = {
   size: Size;
-  targets: Targets;
+  targets: IntroTargets;
   enabled: boolean;
   /** 0 = idle. Increment to start/restart, including after completion. */
   startSignal: number;
@@ -59,10 +59,9 @@ export function WoodpeckerIntro({ size, targets, enabled, startSignal, onComplet
   manualPlayback = false, config: overrides }: WoodpeckerIntroProps) {
   const config = useMemo(() => resolveConfig(overrides), [overrides]);
   const layoutValid = validLayout(size, targets);
-  const route = useMemo(() => createRoute(size, targets, config), [
-    size.width, size.height, targets.gps.x, targets.gps.y, targets.gps.width, targets.gps.height,
-    targets.plus.x, targets.plus.y, targets.plus.width, targets.plus.height, config,
-  ]);
+  // Parent rerenders must not restart an unchanged measured route.
+  const targetKey = JSON.stringify(targets);
+  const route = useMemo(() => createRoute(size, JSON.parse(targetKey), config), [size.width, size.height, targetKey, config]);
   const elapsed = useSharedValue(0);
   const visible = useSharedValue(0);
   const pose = useDerivedValue(() => samplePose(elapsed.value, route, config));
@@ -102,8 +101,8 @@ export function WoodpeckerIntro({ size, targets, enabled, startSignal, onComplet
       || startSignal <= 0 || completed.current === startSignal) return;
     elapsed.value = 0;
     visible.value = 1;
-    elapsed.value = withTiming(totalDuration(config), {
-      duration: totalDuration(config), easing: Easing.linear,
+    elapsed.value = withTiming(totalDuration(config, route.singleTarget), {
+      duration: totalDuration(config, route.singleTarget), easing: Easing.linear,
       reduceMotion: manualPlayback ? ReduceMotion.Never : ReduceMotion.System,
     }, finished => {
       if (finished) {

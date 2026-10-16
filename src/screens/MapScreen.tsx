@@ -1,6 +1,9 @@
 import { checkDatabaseStorage, storageErrorMessage } from "../services/storageHealth";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect, useIsFocused } from "@react-navigation/native";
+import { WoodpeckerIntro, type Size, type TargetRect } from "../features/woodpecker";
+import { useAnimationProgress } from "../hooks/useAnimationProgress";
+import { shouldShowAnimation, completeAnimationStage } from "../storage/animationPreference";
 import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { Ionicons } from "@expo/vector-icons";
@@ -36,6 +39,7 @@ import { queuePendingPhotoProcessing, queuePendingPhotoProcessingForMap } from "
 import { PointColor, normalizePointColor } from "../types/pointColors";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Map">;
+const ARTFYND_INTRO_CONFIG = { birdSize: 76 };
 
 const defaultVisibleFields: VisibleFields = {
   quantity: false,
@@ -51,6 +55,20 @@ const defaultVisibleFields: VisibleFields = {
 
 export function MapScreen({ route, navigation }: Props) {
   const { mapId } = route.params;
+  const isFocused = useIsFocused();
+  const animationProgress = useAnimationProgress();
+  const [introSize, setIntroSize] = useState<Size>({ width: 0, height: 0 });
+  const [controlsRect, setControlsRect] = useState<TargetRect | null>(null);
+  const [artButtonRect, setArtButtonRect] = useState<TargetRect | null>(null);
+  const artTarget = controlsRect && artButtonRect ? {
+    ...artButtonRect, x: controlsRect.x + artButtonRect.x, y: controlsRect.y + artButtonRect.y,
+  } : null;
+  const completeArtIntro = () => {
+    if (!animationProgress) return;
+    void completeAnimationStage('artfynd', animationProgress.run).catch(() => {
+      Alert.alert('Kunde inte spara', 'Animeringen kan visas igen nästa gång kartan öppnas.');
+    });
+  };
   const mapCanvasRef = useRef<MapCanvasHandle>(null);
   const artfynd = useArtfynd();
   const clearArtfynd = artfynd.clear;
@@ -844,7 +862,7 @@ export function MapScreen({ route, navigation }: Props) {
   }
 
   return (
-    <View style={styles.container}>
+    <View style={styles.container} onLayout={({ nativeEvent: { layout } }) => setIntroSize({ width: layout.width, height: layout.height })}>
       <MapCanvas
         ref={mapCanvasRef}
         artfynd={artfynd.activeObservations}
@@ -896,8 +914,9 @@ export function MapScreen({ route, navigation }: Props) {
         <Text style={styles.accuracyPillText}>{accuracyText}</Text>
       </Pressable>
 
-      <View style={styles.controls}>
+      <View style={styles.controls} onLayout={({ nativeEvent: { layout } }) => setControlsRect(layout)}>
         <Pressable style={styles.mainBtn} accessibilityRole="button" accessibilityLabel="Artfynd från Artportalen"
+          onLayout={({ nativeEvent: { layout } }) => setArtButtonRect(layout)}
           onPress={() => { artfynd.setPopup(null); setShowPointList(false); setShowArtfynd(true); }}>
           <Ionicons name="leaf-outline" size={24} color="#fff" />
         </Pressable>
@@ -965,6 +984,17 @@ export function MapScreen({ route, navigation }: Props) {
           </>
         )}
       </View>
+
+      {artTarget && animationProgress && shouldShowAnimation(animationProgress, 'artfynd') && (
+        <View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
+          style={[StyleSheet.absoluteFill, { overflow: 'hidden', zIndex: 1001, elevation: 11 }]}>
+          <WoodpeckerIntro size={introSize} targets={{ artfynd: artTarget }} config={ARTFYND_INTRO_CONFIG}
+            enabled={isFocused && !showArtfynd && !showPointModal && !showPolygonModal && !showPointList
+              && !showAccuracyHelp && !artfynd.popup && !pendingSizeWarning && !polygonMode}
+            startSignal={animationProgress.run} manualPlayback={animationProgress.manualPlayback}
+            onComplete={completeArtIntro} />
+        </View>
+      )}
 
       {toast && (
         <View style={styles.toast}>

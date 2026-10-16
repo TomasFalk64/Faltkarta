@@ -99,15 +99,23 @@ test('1500m limit uses EPSG:3006 and supports rotated georeferencing', () => {
 
 const response = (records, total = records.length) => ({ ok: true, status: 200, json: async () => ({ records, totalCount: total }) });
 function apiWith(fetch, extra = {}) {
-  return loader({}, { fetch, process: { env: { EXPO_PUBLIC_SLU_SUBSCRIPTION_KEY: 'test-only' } }, ...extra })('src/services/artdataApi.ts');
+  return loader({}, { fetch, process: { env: { EXPO_PUBLIC_ARTFYND_PROXY_URL: 'https://proxy.example/search' } }, ...extra })('src/services/artdataApi.ts');
 }
-test('API uses direct SOS, Artportalen only, two taxon searches and real query pagination', async () => {
+test('missing proxy configuration fails before making a request', async () => {
+  const api = apiWith(async () => assert.fail('unexpected request'), { process: { env: {} } });
+  await assert.rejects(api.searchArtfynd(polygon, new AbortController().signal), /Proxyadress saknas/);
+});
+
+test('API uses the proxy without credentials, Artportalen only, two taxon searches and real query pagination', async () => {
   const calls = [];
   const api = apiWith(async (url, options) => {
     const u = new URL(url), body = JSON.parse(options.body); calls.push({ u, body });
-    assert.equal(u.hostname, 'api.artdatabanken.se');
+    assert.equal(u.hostname, 'proxy.example');
+    assert.equal(u.searchParams.get('translationCultureCode'), 'sv-SE');
+    assert.equal(options.headers['X-Api-Version'], '1.5');
+    assert.equal(options.headers['X-Requesting-System'], 'Faltkarta');
     assert.deepEqual(body.dataProvider.ids, [1]); assert.equal(body.geographics.maxAccuracy, 100);
-    assert.equal(options.headers['Ocp-Apim-Subscription-Key'], 'test-only');
+    assert.equal(options.headers['Ocp-Apim-Subscription-Key'], undefined);
     if (body.taxon.redListCategories) return response([raw(1)]);
     const skip = Number(u.searchParams.get('skip'));
     return skip === 0 ? response(Array.from({ length: 100 }, (_, i) => raw(i + 1)), 101) : response([raw(101)], 101);

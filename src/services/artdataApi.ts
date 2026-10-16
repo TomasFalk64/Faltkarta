@@ -1,7 +1,7 @@
 import { Artfynd, ArtfyndSearchResult, SearchPolygon, SosSearchFilter, SosSearchResponse } from "../types/artfynd";
 import { normalizeObservation } from "./artdataProcessor";
 
-const ENDPOINT = "https://api.artdatabanken.se/species-observation-system/v1/observations/search";
+const ENDPOINT = process.env.EXPO_PUBLIC_ARTFYND_PROXY_URL?.trim();
 export const SEARCH_LIMIT = 500;
 const PAGE_SIZE = 100;
 const REQUEST_TIMEOUT_MS = 30000;
@@ -33,7 +33,7 @@ export function buildSearchFilters(polygon: SearchPolygon, now = new Date()): So
 
 function abortError(): Error { const error = new Error("Hämtningen avbröts."); error.name = "AbortError"; return error; }
 
-async function searchPage(filter: SosSearchFilter, skip: number, key: string, signal: AbortSignal): Promise<SosSearchResponse> {
+async function searchPage(filter: SosSearchFilter, skip: number, signal: AbortSignal): Promise<SosSearchResponse> {
   const controller = new AbortController();
   const abort = () => controller.abort();
   signal.addEventListener("abort", abort);
@@ -42,16 +42,20 @@ async function searchPage(filter: SosSearchFilter, skip: number, key: string, si
   const timer = setTimeout(() => { timedOut = true; controller.abort(); }, REQUEST_TIMEOUT_MS);
   try {
     if (signal.aborted) throw abortError();
-    const response = await fetch(`${ENDPOINT}?skip=${skip}&take=${PAGE_SIZE}&translationCultureCode=sv-SE`, {
+    const url = new URL(ENDPOINT!);
+    url.searchParams.set("skip", String(skip));
+    url.searchParams.set("take", String(PAGE_SIZE));
+    url.searchParams.set("translationCultureCode", "sv-SE");
+    const response = await fetch(url.toString(), {
       method: "POST", signal: controller.signal,
-      headers: { "Content-Type": "application/json", "Ocp-Apim-Subscription-Key": key, "X-Api-Version": "1.5", "X-Requesting-System": "Faltkarta" },
+      headers: { "Content-Type": "application/json", "X-Api-Version": "1.5", "X-Requesting-System": "Faltkarta" },
       body: JSON.stringify(filter),
     });
     if (response.status === 429) {
       const seconds = retryAfterSeconds(response.headers.get("Retry-After"));
       throw new ArtdataError(`Artportalen är upptagen. Försök igen om ${seconds} sekunder.`, seconds);
     }
-    if (response.status === 401 || response.status === 403) throw new ArtdataError("Åtkomst nekades. Kontrollera SLU-nyckeln och din SOS-prenumeration.");
+    if (response.status === 401 || response.status === 403) throw new ArtdataError("Åtkomst nekades. Kontakta artfyndstjänstens administratör.");
     if (!response.ok) throw new ArtdataError(`Artportalen kunde inte svara (HTTP ${response.status}). Försök igen senare.`);
     const data = await response.json();
     if (!data || !Array.isArray(data.records) || !Number.isInteger(data.totalCount) || data.totalCount < 0
@@ -67,11 +71,11 @@ async function searchPage(filter: SosSearchFilter, skip: number, key: string, si
   } finally { clearTimeout(timer); signal.removeEventListener("abort", abort); }
 }
 
-async function searchPart(filter: SosSearchFilter, key: string, signal: AbortSignal) {
+async function searchPart(filter: SosSearchFilter, signal: AbortSignal) {
   const records: SosSearchResponse["records"] = [];
   let total = 0;
   while (records.length < SEARCH_LIMIT) {
-    const page = await searchPage(filter, records.length, key, signal);
+    const page = await searchPage(filter, records.length, signal);
     total = page.totalCount;
     if (page.records.length === 0) {
       if (records.length < total) throw new ArtdataError("Artportalen returnerade ett ofullständigt svar. Försök igen.");
@@ -84,8 +88,7 @@ async function searchPart(filter: SosSearchFilter, key: string, signal: AbortSig
 }
 
 export async function searchArtfynd(polygon: SearchPolygon, signal: AbortSignal): Promise<ArtfyndSearchResult> {
-  const key = process.env.EXPO_PUBLIC_SLU_SUBSCRIPTION_KEY?.trim();
-  if (!key) throw new ArtdataError("SLU-nyckel saknas. Fyll i EXPO_PUBLIC_SLU_SUBSCRIPTION_KEY i .env och starta om appen.");
+  if (!ENDPOINT) throw new ArtdataError("Proxyadress saknas. Fyll i EXPO_PUBLIC_ARTFYND_PROXY_URL i .env och starta om appen.");
   if (signal.aborted) throw abortError();
   const controller = new AbortController();
   const abort = () => controller.abort();
@@ -93,7 +96,7 @@ export async function searchArtfynd(polygon: SearchPolygon, signal: AbortSignal)
   let timedOut = false;
   const timer = setTimeout(() => { timedOut = true; controller.abort(); }, SEARCH_TIMEOUT_MS);
   try {
-    const results = await Promise.all(buildSearchFilters(polygon).map(filter => searchPart(filter, key, controller.signal)));
+    const results = await Promise.all(buildSearchFilters(polygon).map(filter => searchPart(filter, controller.signal)));
     if (signal.aborted) throw abortError();
     const unique = new Map<string, Artfynd>();
     // Alternate sources as in the reference, so neither search monopolizes the cap.

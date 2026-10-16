@@ -20,7 +20,8 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 import { WoodpeckerIntro, type Size, type TargetRect } from "../features/woodpecker";
 import { lowerScreenLayout } from "../features/woodpecker/layout";
-import { loadAnimationPending, saveAnimationPending } from "../storage/animationPreference";
+import { animationCheckboxChecked, shouldShowAnimation, completeAnimationStage, saveAnimationPending } from "../storage/animationPreference";
+import { useAnimationProgress } from "../hooks/useAnimationProgress";
 import { RootStackParamList } from "../navigation/types";
 import { AppSettings, LatLon, MapItem, VisibleFields, VisibleFieldKey } from "../types/models";
 import {
@@ -55,11 +56,12 @@ const INTRO_CONFIG = { birdSize: 76 };
 
 export function MapListScreen({ navigation }: Props) {
   const isFocused = useIsFocused();
-  const [animationPending, setAnimationPending] = useState<boolean | null>(null);
+  const animationProgress = useAnimationProgress();
+  const animationPending = animationProgress ? animationCheckboxChecked(animationProgress) : null;
   const [animationDraft, setAnimationDraft] = useState(true);
-  const [animationSignal, setAnimationSignal] = useState(1);
-  const [manualAnimationPlayback, setManualAnimationPlayback] = useState(false);
-  const manualAnimationRequested = useRef(false);
+  const animationSignal = animationProgress?.run ?? 0;
+  const manualAnimationPlayback = animationProgress?.manualPlayback ?? false;
+  const animationPreferenceChanged = useRef(false);
   const [animationSize, setAnimationSize] = useState<Size>({ width: 0, height: 0 });
   const [gpsRect, setGpsRect] = useState<TargetRect | null>(null);
   const [plusRect, setPlusRect] = useState<TargetRect | null>(null);
@@ -67,25 +69,15 @@ export function MapListScreen({ navigation }: Props) {
   const savingSettings = useRef(false);
 
   useEffect(() => {
-    let mounted = true;
-    void loadAnimationPending().then(pending => {
-      if (mounted) {
-        setAnimationPending(pending);
-        setAnimationDraft(pending);
-      }
-    }).catch(error => console.error('Kunde inte läsa animationsinställningen:', error));
-    return () => { mounted = false; };
-  }, []);
+    if (animationPending !== null) setAnimationDraft(animationPending);
+  }, [animationPending]);
 
   const completeAnimation = useCallback(() => {
-    setManualAnimationPlayback(false);
-    setAnimationPending(false);
-    setAnimationDraft(false);
-    void saveAnimationPending(false).catch(error => {
+    void completeAnimationStage('mapList', animationSignal).catch(error => {
       console.error('Kunde inte spara animationsinställningen:', error);
       Alert.alert('Kunde inte spara', 'Animeringen kan visas igen nästa gång appen startas.');
     });
-  }, []);
+  }, [animationSignal]);
   const [maps, setMaps] = useState<MapItem[]>([]);
   const [autoFollow, setAutoFollow] = useState(true);
   const [artportalenTimeEnabled, setArtportalenTimeEnabled] = useState(true);
@@ -146,7 +138,7 @@ export function MapListScreen({ navigation }: Props) {
   const [observationCounts, setObservationCounts] = useState<Record<string, number>>({});
   const introLayout = gpsRect && plusRect
     ? lowerScreenLayout(animationSize, { gps: gpsRect, plus: plusRect }) : null;
-  const introEnabled = isFocused && screenReady && animationPending === true
+  const introEnabled = isFocused && screenReady && shouldShowAnimation(animationProgress, 'mapList')
     && foregroundPermissionKnown && (foregroundPermissionGranted || startDisclosureDismissed)
     && !showSettings && !showGuide && !renameMap && !menuMap && !deleteMap
     && !showImportMenu && !showMapBuildLoading && !openRenameAfterLoading
@@ -589,12 +581,9 @@ export function MapListScreen({ navigation }: Props) {
       
       await saveSettings(newSettings);
       await saveMaxSideSetting(maxSideValue);
-      if (animationPending !== null) {
-        await saveAnimationPending(animationDraft);
-        setAnimationPending(animationDraft);
-        if (!animationDraft) setManualAnimationPlayback(false);
-        else if (manualAnimationRequested.current) setManualAnimationPlayback(true);
-        if (animationDraft) setAnimationSignal(signal => signal + 1);
+      if (animationPending !== null && animationPreferenceChanged.current) {
+        await saveAnimationPending(animationDraft, animationDraft);
+        animationPreferenceChanged.current = false;
       }
       setGpsOptions({ pingSeconds: pingValue, backgroundGPS: gpsOptions.backgroundGPS });
       
@@ -959,7 +948,7 @@ export function MapListScreen({ navigation }: Props) {
       </Pressable>
 
      <Pressable style={styles.infoFab} onPress={() => {
-       manualAnimationRequested.current = false;
+       animationPreferenceChanged.current = false;
        setAnimationDraft(animationPending ?? true);
        setShowSettings(true);
      }}>
@@ -982,7 +971,7 @@ export function MapListScreen({ navigation }: Props) {
           styles.exitFab, 
           gpsOptions.backgroundGPS
             ? { backgroundColor: "#3b9640" }
-            : { backgroundColor: "#9b9b9b", borderWidth: 2, borderColor: "#287381" }
+            : { backgroundColor: "#b4804b", borderWidth: 2, borderColor: "#ca6702" }
         ]} 
         onPress={toggleBackgroundGPS}
         onLayout={({ nativeEvent: { layout } }) => setGpsRect(layout)}
@@ -990,7 +979,7 @@ export function MapListScreen({ navigation }: Props) {
         <Text style={styles.exitFabText}>BakgrundsGPS</Text> 
       </Pressable>
 
-      {introLayout && animationPending === true && (
+      {introLayout && shouldShowAnimation(animationProgress, 'mapList') && (
         <View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
           style={[StyleSheet.absoluteFill, { overflow: 'hidden', zIndex: 1001, elevation: 11 }]}>
           <View pointerEvents="none" style={{ position: 'absolute', top: introLayout.top, left: 0,
@@ -1500,7 +1489,7 @@ export function MapListScreen({ navigation }: Props) {
                       accessibilityState={{ checked: animationDraft, disabled: animationPending === null }}
                       disabled={animationPending === null}
                       onPress={() => {
-                        manualAnimationRequested.current = !animationDraft;
+                        animationPreferenceChanged.current = true;
                         setAnimationDraft(!animationDraft);
                       }}
                     >
@@ -2051,8 +2040,8 @@ descriptionInputIOS: {
     height: 42,
     borderRadius: 21,
     borderWidth: 2,
-    borderColor: "#005f73",
-    backgroundColor: "#fff",
+    borderColor: "#f8bb9c",
+    backgroundColor: "#fffdfc",
     justifyContent: "center",
     alignItems: "center",
     zIndex: 1000,
@@ -2301,14 +2290,14 @@ listNoteIcon: {
   
 },
 androidGearEmoji: {
-  fontSize: 18,         
+  fontSize: 22,
   textAlign: "center",
   color: "#010708",           
   includeFontPadding: false,  
   transform: [{ translateY: -1 }], 
 },
 iosGearEmoji: {
-  fontSize: 22,               
+  fontSize: 26,
   textAlign: "center",
   color: "#010708",           
   includeFontPadding: false,  

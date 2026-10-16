@@ -1,16 +1,31 @@
-import type { Facing, Point, Size, SpriteKind, Targets, WoodpeckerConfig } from './types';
+import type { Facing, Point, Size, SpriteKind, Targets, IntroTargets, WoodpeckerConfig } from './types';
 
 export type Pose = Point & { kind: SpriteKind; frame: number; facing: Facing; angle: number };
 export type Route = { start: Point; turnStart: Point; turnEnd: Point; gps: Point;
-  plus: Point; end: Point; gpsFacing: Facing; plusFacing: Facing; bend: number };
+  plus: Point; end: Point; gpsFacing: Facing; plusFacing: Facing; bend: number; singleTarget?: boolean };
 
-export function validLayout(size: Size, targets: Targets): boolean {
+export function validLayout(size: Size, targets: IntroTargets): boolean {
+  if ('artfynd' in targets) {
+    const r = targets.artfynd;
+    return [size.width, size.height, r.width, r.height].every(n => Number.isFinite(n) && n > 0)
+      && [r.x, r.y].every(Number.isFinite);
+  }
   return [size.width, size.height, targets.gps.width, targets.gps.height,
     targets.plus.width, targets.plus.height].every(n => Number.isFinite(n) && n > 0)
     && [targets.gps.x, targets.gps.y, targets.plus.x, targets.plus.y].every(Number.isFinite);
 }
 
-export function createRoute(size: Size, targets: Targets, c: WoodpeckerConfig): Route {
+export function createRoute(size: Size, targets: IntroTargets, c: WoodpeckerConfig): Route {
+  if ('artfynd' in targets) {
+    const r = targets.artfynd;
+    // Feet sit below the lower-left corner; the raised beak reaches the button.
+    const contact = { x: r.x - 3, y: r.y + r.height + 12 };
+    const margin = c.birdSize * 1.8;
+    return { singleTarget: true, start: { x: -margin, y: contact.y + 35 },
+      gps: contact, plus: contact, turnStart: contact, turnEnd: contact,
+      end: { x: size.width + margin, y: Math.max(0, r.y - 40) },
+      gpsFacing: 1, plusFacing: 1, bend: Math.min(size.width, size.height) * 0.12 };
+  }
   const sidePoint = (key: keyof Targets, facing: Facing): Point => {
     const r = targets[key];
     const offset = key === 'gps' ? c.gpsOffset : c.plusOffset;
@@ -41,7 +56,8 @@ export function createRoute(size: Size, targets: Targets, c: WoodpeckerConfig): 
   };
 }
 
-export function totalDuration(c: WoodpeckerConfig): number {
+export function totalDuration(c: WoodpeckerConfig, singleTarget = false): number {
+  if (singleTarget) return (c.durations.entry + c.durations.gpsPeck + c.durations.exit) / c.tempo;
   return Object.values(c.durations).reduce((a, b) => a + b, 0) / c.tempo;
 }
 
@@ -74,6 +90,13 @@ export function samplePose(ms: number, r: Route, c: WoodpeckerConfig): Pose {
     return { ...p, kind: 'peck', facing, angle: 0,
       frame: c.peckOrder[Math.min(c.peckOrder.length - 1, Math.floor(cycle * c.peckOrder.length))] };
   };
+  if (r.singleTarget) {
+    if (t < d.entry) return flight(fly(r.start, r.gps, t / d.entry, r.bend), 1);
+    t -= d.entry;
+    if (t < d.gpsPeck) return peck(r.gps, 1, t, d.gpsPeck);
+    t -= d.gpsPeck;
+    return flight(fly(r.gps, r.end, Math.min(1, t / d.exit), r.bend * 0.6), 1);
+  }
   if (t < d.entry) return flight(fly(r.start, r.turnStart, t / d.entry, r.bend * 0.15), 1);
   t -= d.entry;
   if (t < d.turn) {

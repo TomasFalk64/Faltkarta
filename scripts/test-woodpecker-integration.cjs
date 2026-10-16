@@ -31,11 +31,50 @@ async function main() {
     '@react-native-async-storage/async-storage': storage,
   });
   const p = preference();
+  let notifications = 0;
+  const unsubscribe = p.subscribeAnimationProgress(() => notifications++);
   assert.equal(await p.loadAnimationPending(), true);
+  let progress = await p.loadAnimationProgress();
+  assert.equal(p.shouldShowAnimation(progress, 'mapList'), true);
+  assert.equal(p.shouldShowAnimation(progress, 'artfynd'), true, 'Second animation does not depend on first');
+  await p.completeAnimationStage('mapList', progress.run);
+  assert.equal(p.shouldShowAnimation(await preference().loadAnimationProgress(), 'artfynd'), true, 'Second step survives restart');
+  assert.equal(await p.loadAnimationPending(), false, 'First completed animation clears checkbox');
+  await p.completeAnimationStage('mapList', progress.run);
+  assert.equal((await p.loadAnimationProgress()).artfyndShown, false, 'Duplicate completion cannot skip second step');
+  await p.completeAnimationStage('artfynd', progress.run);
+  assert.equal(await p.loadAnimationPending(), false);
+  assert.equal((await p.loadAnimationProgress()).artfyndShown, true);
+  await p.saveAnimationPending(true, true);
+  const replay = await p.loadAnimationProgress();
+  await p.completeAnimationStage('mapList', progress.run);
+  assert.equal((await p.loadAnimationProgress()).mapListShown, false, 'Old callbacks cannot finish a new replay');
+  assert.equal(replay.artfyndShown, false, 'Replay resets both flags');
+  // Open a map while the first animation is interrupted: only the second completes.
+  await p.completeAnimationStage('artfynd', replay.run);
+  const secondFirst = await preference().loadAnimationProgress();
+  assert.equal(secondFirst.artfyndShown, true);
+  assert.equal(secondFirst.mapListShown, false);
+  assert.equal(p.animationCheckboxChecked(secondFirst), false);
+  assert.equal(p.shouldShowAnimation(secondFirst, 'mapList'), true, 'Automatic uncheck allows unfinished animation on return');
+  assert.equal((await preference().loadAnimationProgress()).manualPlayback, true, 'Explicit replay applies to both steps');
+  await p.saveAnimationPending(false);
+  await p.completeAnimationStage('mapList', replay.run);
+  assert.equal(await p.loadAnimationPending(), false, 'Disabling cannot be undone by late completion');
+  const disabled = await p.loadAnimationProgress();
+  assert.equal(disabled.mapListShown, false, 'Stopping does not pretend an animation was shown');
+  assert.equal(p.shouldShowAnimation(disabled, 'mapList'), false, 'Manual uncheck stops remaining animation');
+  assert.equal(p.shouldShowAnimation(disabled, 'artfynd'), false);
+  assert.ok(notifications > 0);
+  unsubscribe();
   await p.saveAnimationPending(false);
   assert.equal(await preference().loadAnimationPending(), false, 'Completion survives remount/restart');
   await Promise.all([p.saveAnimationPending(false), p.saveAnimationPending(true)]);
   assert.equal(await p.loadAnimationPending(), true, 'Rearm follows completion in write order');
+  const concurrent = await p.loadAnimationProgress();
+  await Promise.all([p.completeAnimationStage('mapList', concurrent.run), p.completeAnimationStage('artfynd', concurrent.run)]);
+  const both = await p.loadAnimationProgress();
+  assert.equal(both.mapListShown && both.artfyndShown, true, 'Serialized completions preserve both flags');
   fail = true;
   await assert.rejects(p.saveAnimationPending(false));
   fail = false;
@@ -43,6 +82,19 @@ async function main() {
   assert.equal(await p.loadAnimationPending(), false, 'A failed write does not poison later writes');
   assert.equal(db.get('settings:v1'), originalSettings);
   assert.equal(db.get('observations:v1'), 'keep');
+  db.delete('woodpeckerIntroProgress:v3');
+  db.set('woodpeckerIntroPending:v1', 'false');
+  assert.equal((await preference().loadAnimationProgress()).enabled, false, 'Previously disabled intros stay disabled');
+  db.set('woodpeckerIntroPending:v1', 'true');
+  assert.equal((await preference().loadAnimationProgress()).enabled, true);
+  for (const stage of ['mapList', 'artfynd', 'done']) {
+    db.set('woodpeckerIntroProgress:v2', JSON.stringify({ stage, run: 4, manualPlayback: true }));
+    const migrated = await preference().loadAnimationProgress();
+    assert.equal(migrated.mapListShown, stage !== 'mapList');
+    assert.equal(migrated.artfyndShown, stage === 'done');
+    assert.equal(migrated.enabled, stage !== 'done');
+    assert.equal(migrated.run, 4);
+  }
 
   const { lowerScreenLayout } = load('src/features/woodpecker/layout.ts');
   const { resolveConfig } = load('src/features/woodpecker/config.ts');

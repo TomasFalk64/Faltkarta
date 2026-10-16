@@ -68,3 +68,34 @@ for (const layout of [size, { width: 844, height: 250 }, { width: 320, height: 2
   }
 }
 console.log('Motion checks passed: timing, two impacts, fixed contacts, continuity, direction, tempo and layouts.');
+
+for (const size of [{ width: 320, height: 568 }, { width: 390, height: 760 }, { width: 844, height: 320 }]) {
+  const target = { x: size.width - 68, y: 78, width: 58, height: 50 };
+  const config = resolveConfig({ birdSize: 76 });
+  const targets = { artfynd: target };
+  assert.equal(validLayout(size, targets), true);
+  const route = createRoute(size, targets, config);
+  assert.equal(route.singleTarget, true);
+  assert.ok(route.gps.y > target.y + target.height, 'Feet below the button');
+  assert.ok(route.gps.x < target.x, 'Body to the left of the button');
+  const duration = totalDuration(config, true);
+  assert.equal(duration, 2550);
+  assert.ok(samplePose(0, route, config).x < 0);
+  assert.ok(samplePose(duration, route, config).x > size.width);
+  let impacts = 0, previous = -1;
+  for (let t = config.durations.entry; t < config.durations.entry + config.durations.gpsPeck; t++) {
+    const pose = samplePose(t, route, config);
+    assert.equal(pose.kind, 'peck');
+    assert.equal(pose.facing, 1);
+    assert.equal(pose.x, route.gps.x);
+    assert.equal(pose.y, route.gps.y);
+    if (pose.frame === 3 && previous !== 3) impacts++;
+    previous = pose.frame;
+  }
+  assert.equal(impacts, 2);
+  for (const t of [1100, 1750]) {
+    const a = samplePose(t - 0.001, route, config), b = samplePose(t, route, config);
+    assert.ok(Math.hypot(a.x - b.x, a.y - b.y) < 0.01);
+  }
+}
+console.log('Artfynd route checks passed: left entry, lower landing, two pecks, continuity and exit.');

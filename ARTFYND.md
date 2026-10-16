@@ -6,22 +6,37 @@ dubbletter. Markeringar tillämpas först med Visa urval. Återställ visar alla
 Rensa tömmer sessionen. När kartskärmen lämnas avbryts hämtningen och fynden rensas.
 Egna sparade observationer, databas, säkerhetskopiering och export påverkas inte.
 
-## Privat konfiguration
+## Konfiguration via Cloudflare
 
 Fyll i följande variabel i den Git-ignorerade `.env` i projektroten:
 
 ```dotenv
-EXPO_PUBLIC_SLU_SUBSCRIPTION_KEY=din_slu_sos_prenumerationsnyckel
+EXPO_PUBLIC_ARTFYND_PROXY_URL=https://faltkarta-artfynd-proxy.klafsamot.workers.dev
 ```
 
 `.env.example` innehåller en tom mall. Starta om Expo efter ändringen och ladda om
 appen. För en fristående app behöver en ny build innehålla konfigurationen.
-Nyckeln byggs in i klienten; detta upplägg är avsett för privat användning.
-Ingen nyckel läses från backendprojektet. Ingen Fältkarta-backend anropas.
+Endast den publika proxyadressen byggs in i klienten. Lägg SLU:s prenumerationsnyckel
+som en hemlig variabel med namnet `ARTPORTALEN_API_KEY` i Cloudflare Workern.
+Publicera `workers/artfynd-proxy/index.js` som Workerns kod. Nyckeln ska inte finnas i appens
+`.env`, byggmiljö eller källkod. Ta även bort eventuell tidigare klientnyckel i
+EAS/CI och rotera den om den har distribuerats i gamla appbyggen.
+
+Workern gör ett SLU-anrop per appanrop och vidarebefordrar JSON-body oförändrad,
+`skip`, `take`, `translationCultureCode`, `X-Api-Version` och `X-Requesting-System`.
+Endast Workerns hemliga nyckel används mot den fasta SLU-adressen. SLU:s svarsbody,
+HTTP-status, Content-Type och Retry-After bevaras, även vid API-fel.
+CORS tillåter POST/OPTIONS samt appens headers och exponerar Retry-After.
+
+Ogiltig JSON eller sidindelning ger 400, saknad serverkonfiguration 500,
+anslutningsfel 502 och timeout efter 25 sekunder 504. `take` tillåts mellan 1 och
+500. Workern ändrar inga sökfilter; polygonens storlekskontroll finns i appen.
+Proxyn är publik och CORS är inte autentisering. Anropsbegränsning för publik
+drift konfigureras separat i Cloudflare.
 
 ## Sökning och kontrakt
 
-Klienten använder SOS `POST /observations/search` med geografiskt polygonfilter,
+Klienten anropar Cloudflare-proxyn som använder SOS `POST /observations/search` med geografiskt polygonfilter,
 `dataProvider.ids: [1]` (endast Artportalen), 25 år och högst 100 m osäkerhet.
 `skip` och `take` skickas som queryparametrar. Extended-fältuppsättningen innehåller
 bland annat `taxon.attributes.redlistCategory` och `organismGroup`.
@@ -45,11 +60,11 @@ Referenser:
 
 ```sh
 npm run typecheck
-node --test scripts/test-artfynd.cjs
+node --test scripts/test-artfynd.cjs scripts/test-artfynd-proxy.cjs
 ```
 
 Testerna använder simulerade API-svar och Reacts test-renderare, utan riktig nyckel.
-Manuell kontroll på Android/iOS med en riktig SOS-nyckel:
+Manuell kontroll på Android/iOS med publicerad Worker och servernyckel i Cloudflare:
 
 - Hämta, stäng modalen, panorera/zooma och hämta ett överlappande område.
 - Markera arter, verifiera oförändrad karta, tillämpa urval och återställ.
