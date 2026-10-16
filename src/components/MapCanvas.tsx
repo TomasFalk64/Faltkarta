@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { Image, PanResponder, Pressable, StyleSheet, Text, View } from "react-native";
 import Svg, { Circle, Polyline } from "react-native-svg";
 import {
@@ -10,12 +10,20 @@ import {
   meters3857ToSource,
   sourceCrsToImagePoint,
   meters3857ToImagePoint,
+  visibleSearchPolygon,
 } from "../services/mapProjection";
 import { distanceMeters } from "../services/coords";
 import { LatLon, MapItem, Observation } from "../types/models";
 import { pointColorOption } from "../types/pointColors";
+import { Artfynd, SearchPolygon } from "../types/artfynd";
+import { hasCoordinates, redlistColor, redlistDrawOrder, speciesName } from "../services/artdataProcessor";
+
+export type MapCanvasHandle = { getSearchPolygon: () => SearchPolygon };
 
 type Props = {
+  ref?: React.Ref<MapCanvasHandle>;
+  artfynd?: Artfynd[];
+  onPressArtfynd?: (observation: Artfynd) => void;
   map: MapItem;
   imageUri?: string;
   centerCoord: LatLon;
@@ -44,6 +52,9 @@ const GPS_TARGET_DOT_SCREEN_SIZE = TARGET_DOT_SCREEN_SIZE - SIZE_DIFF;
 const TARGET_TOUCH_SCREEN_SIZE = 28;
 
 export function MapCanvas({
+  ref,
+  artfynd,
+  onPressArtfynd,
   map,
   imageUri,
   centerCoord,
@@ -123,6 +134,22 @@ export function MapCanvas({
   );
   const committedShiftX = virtualSize.width / 2 - centerImagePoint.x;
   const committedShiftY = virtualSize.height / 2 - centerImagePoint.y;
+
+  useImperativeHandle(ref, () => ({
+    getSearchPolygon: () => visibleSearchPolygon(map, viewSize, virtualSize, centerImagePoint, scale, drag),
+  }), [map, viewSize, virtualSize, centerImagePoint, scale, drag]);
+
+  const projectedArtfynd = useMemo(() => (artfynd ?? [])
+    .filter(hasCoordinates)
+    .map(obs => {
+      const meters3857 = wgs84ToMeters3857({ lat: obs.latitude!, lon: obs.longitude! });
+      if (!meters3857) return null;
+      const sourceCrs = map.georef ? meters3857ToSource(map, meters3857) : null;
+      if (map.georef && !sourceCrs) return null;
+      return { obs, meters3857, sourceCrs };
+    })
+    .filter((point): point is { obs: Artfynd; meters3857: { x: number; y: number }; sourceCrs: { x: number; y: number } | null } => point !== null)
+    .sort((a, b) => redlistDrawOrder(a.obs.redlistStatus) - redlistDrawOrder(b.obs.redlistStatus)), [artfynd, map]);
 
   const toLocalPoint = useMemo(
     () =>
@@ -407,6 +434,16 @@ export function MapCanvas({
 
       {!displayBounds3857 ? null : (
         <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
+          {projectedArtfynd.map(({ obs, meters3857, sourceCrs }) => {
+            const pt = toOverlayPoint(toLocalPoint({ meters3857, sourceCrs }));
+            if (!Number.isFinite(pt.x) || !Number.isFinite(pt.y) || pt.x < -22 || pt.y < -22 || pt.x > viewSize.width + 22 || pt.y > viewSize.height + 22) return null;
+            return <Pressable key={`artfynd:${obs.id}`} accessibilityRole="button"
+              accessibilityLabel={`${speciesName(obs)}, ${obs.redlistStatus ?? "rödlistestatus saknas"}`}
+              onPress={() => onPressArtfynd?.(obs)}
+              style={{ position: "absolute", left: pt.x - 22, top: pt.y - 22, width: 44, height: 44, alignItems: "center", justifyContent: "center" }}>
+              <View style={{ width: 12, height: 12, borderRadius: 6, borderWidth: 2, borderColor: "#dc2626", backgroundColor: redlistColor(obs.redlistStatus) }} />
+            </Pressable>;
+          })}
           {projectedPoints.map(({ obs, meters3857, sourceCrs }) => {
             if (obs.kind !== "point") return null;
             const virtualPoint = toLocalPoint({ meters3857, sourceCrs });

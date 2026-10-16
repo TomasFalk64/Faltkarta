@@ -1,11 +1,15 @@
 import { checkDatabaseStorage, storageErrorMessage } from "../services/storageHealth";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useFocusEffect } from "@react-navigation/native";
 import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { Ionicons } from "@expo/vector-icons";
 import Svg, { Circle, Polygon } from "react-native-svg";
 import { RootStackParamList } from "../navigation/types";
-import { MapCanvas } from "../components/MapCanvas";
+import { MapCanvas, MapCanvasHandle } from "../components/MapCanvas";
+import { ArtfyndModal } from "../components/ArtfyndModal";
+import { ArtfyndPopup } from "../components/ArtfyndPopup";
+import { useArtfynd } from "../hooks/useArtfynd";
 import { ObservationModal } from "../components/ObservationModal";
 import { useGpsContext } from "../contexts/GpsContext";
 import {
@@ -47,6 +51,13 @@ const defaultVisibleFields: VisibleFields = {
 
 export function MapScreen({ route, navigation }: Props) {
   const { mapId } = route.params;
+  const mapCanvasRef = useRef<MapCanvasHandle>(null);
+  const artfynd = useArtfynd();
+  const clearArtfynd = artfynd.clear;
+  const [showArtfynd, setShowArtfynd] = useState(false);
+  useFocusEffect(useCallback(() => {
+    return () => { clearArtfynd(); setShowArtfynd(false); };
+  }, [mapId, clearArtfynd]));
   const [autoFollow, setAutoFollow] = useState(false);
   const [isFollowing, setIsFollowing] = useState(false);
   const [map, setMap] = useState<MapItem | null>(null);
@@ -835,6 +846,9 @@ export function MapScreen({ route, navigation }: Props) {
   return (
     <View style={styles.container}>
       <MapCanvas
+        ref={mapCanvasRef}
+        artfynd={artfynd.activeObservations}
+        onPressArtfynd={artfynd.setPopup}
         map={map}
         imageUri={getSafeUri(map.previewFileName, "preview")}
         centerCoord={centerCoord}
@@ -883,6 +897,10 @@ export function MapScreen({ route, navigation }: Props) {
       </Pressable>
 
       <View style={styles.controls}>
+        <Pressable style={styles.mainBtn} accessibilityRole="button" accessibilityLabel="Artfynd från Artportalen"
+          onPress={() => { artfynd.setPopup(null); setShowPointList(false); setShowArtfynd(true); }}>
+          <Ionicons name="leaf-outline" size={24} color="#fff" />
+        </Pressable>
         <Pressable
           style={[styles.mainBtn, polygonMode ? styles.polyOn : undefined]}
           onPress={() => {
@@ -1025,6 +1043,13 @@ export function MapScreen({ route, navigation }: Props) {
           </View>
         </View>
       </Modal>
+
+      <ArtfyndModal visible={showArtfynd} onClose={() => setShowArtfynd(false)} artfynd={artfynd}
+        onFetch={() => { void artfynd.fetchObservations(() => {
+          if (!mapCanvasRef.current) throw new Error("Vänta tills kartan visas och försök igen.");
+          return mapCanvasRef.current.getSearchPolygon();
+        }); }} />
+      <ArtfyndPopup observation={artfynd.popup} onClose={() => artfynd.setPopup(null)} />
 
       <ObservationModal
         visible={showPointModal}

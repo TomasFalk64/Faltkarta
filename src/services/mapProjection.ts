@@ -1,5 +1,6 @@
 import { LatLon, MapItem } from "../types/models";
 import proj4 from "proj4";
+import { SearchPolygon } from "../types/artfynd";
 
 const DEFAULT_BBOX = {
   minLat: 55.0,
@@ -194,6 +195,62 @@ function projectCoords(fromCrs: string, toCrs: string, x: number, y: number): { 
   } catch {
     return null;
   }
+}
+
+/** Inverse of MapCanvas's screen transform, with no fallback or silent clipping. */
+export function visibleSearchPolygon(
+  map: MapItem,
+  view: { width: number; height: number },
+  image: { width: number; height: number },
+  center: { x: number; y: number },
+  scale: number,
+  drag: { x: number; y: number },
+): SearchPolygon {
+  const fail = () => new Error("Kartans sökområde kunde inte beräknas. Vänta tills kartan visas.");
+  if (![view.width, view.height, image.width, image.height, scale].every(v => Number.isFinite(v) && v > 0)
+    || ![center.x, center.y, drag.x, drag.y].every(Number.isFinite)
+    || (!map.georef && !hasMapBounds(map))) throw fail();
+  const bounds = getDisplayBounds3857(map);
+  const corners = [[0, 0], [view.width, 0], [view.width, view.height], [0, view.height]];
+  const ring: [number, number][] = [];
+  for (let edge = 0; edge < 4; edge++) {
+    const a = corners[edge], b = corners[(edge + 1) % 4];
+    for (let step = 0; step < 8; step++) {
+      const fraction = step / 8;
+      const x = center.x + (a[0] + (b[0] - a[0]) * fraction - view.width / 2) / scale - drag.x;
+      const y = center.y + (a[1] + (b[1] - a[1]) * fraction - view.height / 2) / scale - drag.y;
+      let wgs: { x: number; y: number } | null = null;
+      if (map.georef) {
+        const g = map.georef;
+        if (!Number.isFinite(g.imageWidth) || !Number.isFinite(g.imageHeight) || g.imageWidth <= 0 || g.imageHeight <= 0
+          || Math.abs(g.pixelToSource.a * g.pixelToSource.e - g.pixelToSource.b * g.pixelToSource.d) < 1e-12) throw fail();
+        const source = pixelToSource(g.pixelToSource, x / image.width * g.imageWidth, y / image.height * g.imageHeight);
+        wgs = projectCoords(`EPSG:${g.sourceEpsg}`, "EPSG:4326", source.x, source.y);
+      } else if (bounds) {
+        wgs = projectCoords("EPSG:3857", "EPSG:4326", bounds.minX + x / image.width * (bounds.maxX - bounds.minX), bounds.maxY - y / image.height * (bounds.maxY - bounds.minY));
+      }
+      if (!wgs || !Number.isFinite(wgs.x) || !Number.isFinite(wgs.y) || Math.abs(wgs.x) > 180 || Math.abs(wgs.y) >= 90) throw fail();
+      ring.push([wgs.x, wgs.y]);
+    }
+  }
+  ring.push([...ring[0]]);
+  const polygon: SearchPolygon = { type: "Polygon", coordinates: [ring] };
+  validateSearchPolygon(polygon);
+  return polygon;
+}
+
+export function validateSearchPolygon(polygon: SearchPolygon): void {
+  const points = polygon.coordinates[0];
+  if (!points || points.length < 4) throw new Error("Kartans sökområde är ogiltigt.");
+  const meters = points.map(([lon, lat]) => {
+    if (!Number.isFinite(lon) || !Number.isFinite(lat) || Math.abs(lon) > 180 || Math.abs(lat) >= 90) return null;
+    return projectCoords("EPSG:4326", "EPSG:3006", lon, lat);
+  });
+  if (meters.some(p => !p)) throw new Error("Kartans koordinatsystem kunde inte omvandlas.");
+  const xs = meters.map(p => p!.x), ys = meters.map(p => p!.y);
+  const width = Math.max(...xs) - Math.min(...xs), height = Math.max(...ys) - Math.min(...ys);
+  if (width <= 0 || height <= 0) throw new Error("Kartans sökområde är tomt.");
+  if (width > 1500 || height > 1500) throw new Error("Sökområdet är för stort. Zooma in för att söka.");
 }
 
 export function getDisplayBounds3857(
