@@ -1,19 +1,34 @@
 import React from "react";
-import { ActivityIndicator, FlatList, Modal, Pressable, StyleSheet, Text, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { ActivityIndicator, FlatList, Modal, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
 import { useArtfynd } from "../hooks/useArtfynd";
 import { redlistColor } from "../services/artdataProcessor";
 
 type Props = { visible: boolean; onClose: () => void; onFetch: () => void; artfynd: ReturnType<typeof useArtfynd> };
 
-export function ArtfyndModal({ visible, onClose, onFetch, artfynd: a }: Props) {
-  const arrow = (field: "name" | "redlist" | "count") => a.sort.field === field ? (a.sort.direction === "asc" ? " ↑" : " ↓") : "";
+export function ArtfyndModal({ visible, onClose, ...contentProps }: Props) {
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <SafeAreaView style={styles.backdrop} edges={["top", "bottom"]}>
+      <SafeAreaProvider>
+        <ArtfyndModalContent {...contentProps} onClose={onClose} />
+      </SafeAreaProvider>
+    </Modal>
+  );
+}
+
+function ArtfyndModalContent({ onClose, onFetch, artfynd: a }: Omit<Props, "visible">) {
+  const insets = useSafeAreaInsets();
+  const { height } = useWindowDimensions();
+  const cardHeight = Math.max(0, height - insets.top - insets.bottom - 24) * 0.85;
+  const arrow = (field: "name" | "redlist" | "count") => a.sort.field === field ? (a.sort.direction === "asc" ? " ↑" : " ↓") : "";
+  return (
+      <View style={[styles.backdrop, {
+        paddingTop: insets.top + 12, paddingBottom: insets.bottom + 12,
+        paddingLeft: insets.left + 12, paddingRight: insets.right + 12,
+      }]}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityRole="button" accessibilityLabel="Stäng artfynd" />
-        <View style={styles.card} accessibilityViewIsModal>
+        <View style={[styles.card, { height: cardHeight }]} accessibilityViewIsModal>
           <View style={styles.header}>
             <Text style={styles.title}>Artfynd</Text>
             <Button label={a.loading ? "Hämtar…" : "Hämta"} onPress={onFetch} disabled={a.loading} />
@@ -36,7 +51,10 @@ export function ArtfyndModal({ visible, onClose, onFetch, artfynd: a }: Props) {
 
           <View style={styles.headers}>
             <Pressable accessibilityRole="button" style={styles.nameHeader} onPress={() => a.changeSort("name")}><Text style={styles.bold}>Namn{arrow("name")}</Text></Pressable>
-            <Pressable accessibilityRole="button" style={styles.statusHeader} onPress={() => a.changeSort("redlist")}><Text style={styles.bold}>Rödlista{arrow("redlist")}</Text></Pressable>
+            <Pressable accessibilityRole="button" style={styles.statusHeader} onPress={() => a.changeSort("redlist")}>
+              <Text numberOfLines={1} adjustsFontSizeToFit style={[styles.bold, styles.statusLabel]}>Rödlista</Text>
+              {a.sort.field === "redlist" && <Text style={styles.sortArrow}>{a.sort.direction === "asc" ? "↑" : "↓"}</Text>}
+            </Pressable>
             <Pressable accessibilityRole="button" style={styles.countHeader} onPress={() => a.changeSort("count")}><Text style={styles.bold}>#{arrow("count")}</Text></Pressable>
           </View>
             </View>}
@@ -61,8 +79,7 @@ export function ArtfyndModal({ visible, onClose, onFetch, artfynd: a }: Props) {
             <Button label="Återställ" onPress={a.reset} secondary disabled={a.selectedSpeciesKeys.size === 0 && a.activeSpeciesFilter === null} />
           </View>
         </View>
-      </SafeAreaView>
-    </Modal>
+      </View>
   );
 }
 
@@ -71,8 +88,8 @@ function Button({ label, onPress, disabled = false, secondary = false }: { label
     style={[styles.button, secondary && styles.secondary, disabled && styles.disabled]}><Text style={styles.buttonText}>{label}</Text></Pressable>;
 }
 const styles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", padding: 12, justifyContent: "center" },
-  card: { flex: 1, maxHeight: "96%", borderRadius: 14, overflow: "hidden", backgroundColor: "#e9e3d5" },
+  backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "center" },
+  card: { borderRadius: 14, overflow: "hidden", backgroundColor: "#e9e3d5" },
   header: { flexDirection: "row", alignItems: "center", gap: 6, paddingLeft: 14, paddingRight: 6, paddingVertical: 10, backgroundColor: "#e9e3d5" },
   closeButton: { minWidth: 44, minHeight: 44, alignItems: "center", justifyContent: "center", transform: [{ translateY: -6 }] },
   row: { flexDirection: "row", alignItems: "center", gap: 10, flexWrap: "wrap", paddingHorizontal: 14, paddingVertical: 10, backgroundColor: "#e9e3d5" },
@@ -82,12 +99,14 @@ const styles = StyleSheet.create({
   summary: { fontSize: 17, fontWeight: "700" }, help: { color: "#425158", fontSize: 12 },
   warning: { backgroundColor: "#fff0c2", padding: 8, borderRadius: 6, color: "#624400" },
   error: { color: "#9b2226", fontWeight: "600" },
-  headers: { flexDirection: "row", alignItems: "center", borderBottomWidth: 1, borderColor: "#c8b79f" },
-  nameHeader: { flex: 1, paddingVertical: 12 }, statusHeader: { width: 86, paddingVertical: 12 }, countHeader: { width: 40, paddingVertical: 12, alignItems: "flex-end" },
+  headers: { flexDirection: "row", alignItems: "center", gap: 6, borderBottomWidth: 1, borderColor: "#c8b79f" },
+  nameHeader: { flex: 1, paddingVertical: 12 }, statusHeader: { width: 72, paddingVertical: 12, flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 2 }, countHeader: { width: 32, paddingVertical: 12, alignItems: "flex-end" },
+  statusLabel: { flexShrink: 1, textAlign: "center" }, sortArrow: { flexShrink: 0, fontSize: 14, color: "#172121" },
   bold: { fontWeight: "600", color: "#172121" }, list: { flex: 1, backgroundColor: "#f4f0e7" }, listContent: { paddingHorizontal: 14, paddingVertical: 10 }, listHeader: { gap: 10 },
-  speciesRow: { flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: "#c8b79f", minHeight: 54 },
-  checked: { backgroundColor: "#dbecec" }, checkbox: { fontSize: 23, color: "#005f73" },
-  name: { flex: 1 }, scientific: { fontStyle: "italic", color: "#59666b", fontSize: 12, marginTop: 2 },
-  badge: { width: 80, flexDirection: "row", alignItems: "center", gap: 4 }, dot: { width: 9, height: 9, borderRadius: 5 },
-  count: { width: 40, textAlign: "right" }, empty: { paddingVertical: 20, color: "#59666b" },
+  speciesRow: { flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: 6, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: "#c8b79f" },
+  checked: { backgroundColor: "#dbecec" }, checkbox: { fontSize: 20, lineHeight: 24, color: "#005f73" },
+  name: { flex: 1, minWidth: 0, gap: 2 },
+  scientific: { fontStyle: "italic", color: "#59666b", fontSize: 12 },
+  badge: { width: 72, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4 }, dot: { width: 9, height: 9, borderRadius: 5 },
+  count: { width: 32, textAlign: "right", fontVariant: ["tabular-nums"] }, empty: { paddingVertical: 20, color: "#59666b" },
 });

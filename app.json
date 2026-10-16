@@ -2,7 +2,7 @@
   "expo": {
     "name": "Fältkarta",
     "slug": "faltkarta",
-    "version": "3.12",
+    "version": "3.13",
     "icon": "./assets/icon.png",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
@@ -11,7 +11,7 @@
     ],
     "ios": {
       "bundleIdentifier": "com.tf64.faltkarta",
-      "buildNumber": "20",
+      "buildNumber": "21",
       "supportsTablet": true,
       "usesIcloudStorage": true,
       "infoPlist": {
